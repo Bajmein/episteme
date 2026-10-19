@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 from test_startup import _start
@@ -94,6 +94,27 @@ def test_symlink_into_read_only_zone_is_read_only(vault: Path) -> None:
         Vault(vault).check_writable("plans/link.md")
     assert err.value.code == "read_only_zone"
     assert target in str(err.value)
+
+
+def test_temporary_files_are_never_notes(vault: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+    real_replace, real_link = os.replace, os.link
+
+    def replace(src: str, dst: str) -> None:
+        seen.append(str(src))
+        real_replace(src, dst)
+
+    def link(src: str, dst: str) -> None:
+        seen.append(str(src))
+        real_link(src, dst)
+
+    monkeypatch.setattr(os, "replace", replace)
+    monkeypatch.setattr(os, "link", link)
+    v = Vault(vault)
+    v.write_atomic("plans/a.md", "one\n")
+    v.create_exclusive("plans/b.md", "two\n")
+    assert len(seen) == 2
+    assert all(is_ignored(PurePosixPath(name).name) for name in seen)
 
 
 def test_atomic_write_and_exclusive_create(vault: Path) -> None:

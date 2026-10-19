@@ -188,7 +188,7 @@ class Vault:
         path.parent.mkdir(parents=True, exist_ok=True)
         # The parent may have been created through a symlink: check again.
         self.resolve(rel)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".md")
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
                 fh.write(text)
@@ -204,7 +204,7 @@ class Vault:
         path = self.resolve(rel)
         path.parent.mkdir(parents=True, exist_ok=True)
         self.resolve(rel)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".md")
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
                 fh.write(text)
