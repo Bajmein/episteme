@@ -82,8 +82,17 @@ def _json_default(value: Any) -> Any:
     return str(value)
 
 
+def _str_keys(value: Any) -> Any:
+    """Copy ``value`` with every mapping key as a string, which JSON requires."""
+    if isinstance(value, dict):
+        return {str(k): _str_keys(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_str_keys(v) for v in value]
+    return value
+
+
 def to_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, default=_json_default)
+    return json.dumps(_str_keys(value), ensure_ascii=False, default=_json_default)
 
 
 def jsonable(value: Any) -> Any:

@@ -27,6 +27,20 @@ def test_invalid_frontmatter_indexed(vault: Path) -> None:
     assert hits[0].path == "docs/claude-code/README.index.md"
 
 
+def test_unindexable_frontmatter_does_not_break_reindex(vault: Path) -> None:
+    (vault / "plans").mkdir()
+    (vault / "plans" / "bad-date.md").write_text("---\ncreated: 2026-02-30\n---\n# Bad date\n")
+    (vault / "plans" / "date-keys.md").write_text(
+        "---\nhistory:\n  2026-10-01: started\n---\n# Dated keys\n\nzorbulax\n"
+    )
+    ix = _index(vault)
+    bad = ix.note("plans/bad-date.md")
+    assert bad is not None and bad["fm_valid"] == 0
+    assert ix.props("plans/date-keys.md")["history"] == {"2026-10-01": "started"}
+    hits, _ = ix.search("zorbulax")
+    assert hits[0].path == "plans/date-keys.md"
+
+
 def test_backlinks_and_comment_links(vault: Path) -> None:
     ix = _index(vault)
     sources = {r["src"] for r in ix.backlinks("docs/claude-code/hooks-reference.md")}

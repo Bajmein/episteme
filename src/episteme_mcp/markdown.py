@@ -77,7 +77,7 @@ def load_frontmatter(raw: str | None) -> tuple[dict[str, Any], bool, str | None]
         return {}, True, None
     try:
         data = yaml.safe_load(raw) if raw.strip() else {}
-    except yaml.YAMLError as exc:
+    except Exception as exc:  # YAMLError, or a ValueError from an impossible date
         return {}, False, " ".join(str(exc).split())
     if data is None:
         return {}, True, None

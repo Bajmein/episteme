@@ -64,6 +64,13 @@ def test_invalid_frontmatter_is_tolerated() -> None:
     assert "body text" in note.search_text
 
 
+def test_impossible_date_is_invalid_not_fatal() -> None:
+    note = parse("---\ncreated: 2026-02-30\n---\n# T\n\nbody\n", "a.md")
+    assert not note.fm_valid
+    assert note.fm_error
+    assert "body" in note.search_text
+
+
 def test_non_mapping_frontmatter_is_invalid() -> None:
     note = parse("---\n- a\n- b\n---\ntext\n", "a.md")
     assert not note.fm_valid
