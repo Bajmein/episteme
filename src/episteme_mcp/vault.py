@@ -160,15 +160,21 @@ class Vault:
         return zone.mode if zone else READ_ONLY
 
     def check_writable(self, rel: str) -> str:
-        """Return the zone mode of ``rel`` or raise ``read_only_zone``."""
-        mode = self.mode_for(rel)
-        if mode == READ_ONLY:
-            where = "a read-only zone" if self.zone_for(rel) else "no zone, so it is read-only"
+        """Return the zone mode of ``rel`` or raise ``read_only_zone``.
+
+        Both ``rel`` and the path it resolves to must be writable: a symlink in a
+        writable zone must not reach a read-only one.
+        """
+        real = self.rel(self.resolve(rel))
+        for path in (rel, real):
+            if self.mode_for(path) != READ_ONLY:
+                continue
+            where = "a read-only zone" if self.zone_for(path) else "no zone, so it is read-only"
+            via = f"{rel} resolves to {real}, which is in " if path != rel else f"{rel} is in "
             raise EpistemeError(
-                READ_ONLY_ZONE,
-                f"{rel} is in {where}. Notes there are changed outside this server.",
+                READ_ONLY_ZONE, f"{via}{where}. Notes there are changed outside this server."
             )
-        return mode
+        return self.mode_for(real)
 
     @property
     def memory_zone(self) -> Zone | None:

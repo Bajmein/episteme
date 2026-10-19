@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -117,6 +118,18 @@ def test_append_under_heading(engine: Engine, vault: Path) -> None:
     with pytest.raises(EpistemeError) as err:
         memory.revise(engine, "plans/p.md", "archive")
     assert err.value.code == "invalid_argument"
+
+
+def test_revise_through_symlink_cannot_reach_read_only_zone(engine: Engine, vault: Path) -> None:
+    target = vault / "docs/claude-code/hooks-reference.md"
+    before = target.read_text()
+    (vault / "plans").mkdir()
+    os.symlink(target, vault / "plans/link.md")
+    engine.index.refresh()
+    with pytest.raises(EpistemeError) as err:
+        memory.revise(engine, "plans/link.md", "append", text="tampered")
+    assert err.value.code == "read_only_zone"
+    assert target.read_text() == before
 
 
 def test_feedback_and_set(engine: Engine, vault: Path) -> None:

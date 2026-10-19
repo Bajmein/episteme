@@ -86,6 +86,16 @@ def test_symlink_leaving_vault(vault: Path, tmp_path: Path) -> None:
     assert "plans/secret.md" not in {rel for rel, _ in v.iter_notes()}
 
 
+def test_symlink_into_read_only_zone_is_read_only(vault: Path) -> None:
+    target = "docs/claude-code/hooks-reference.md"
+    (vault / "plans").mkdir()
+    os.symlink(vault / target, vault / "plans/link.md")
+    with pytest.raises(EpistemeError) as err:
+        Vault(vault).check_writable("plans/link.md")
+    assert err.value.code == "read_only_zone"
+    assert target in str(err.value)
+
+
 def test_atomic_write_and_exclusive_create(vault: Path) -> None:
     v = Vault(vault)
     v.write_atomic("plans/a.md", "one\n")
