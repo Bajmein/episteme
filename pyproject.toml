@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp>=2.3,<3",
+    "pydantic>=2,<3",
     "pyyaml>=6.0.3",
 ]
 
@@ -35,3 +36,14 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.1",
 ]
+
+[tool.deptry]
+known_first_party = ["episteme_mcp"]
+
+[tool.deptry.package_module_name_map]
+pyyaml = "yaml"
+
+[tool.vulture]
+paths = ["src", "scripts", "tests"]
+# sqlite3.Connection.row_factory is set, not read; anyio_backend and pytestmark are pytest hooks.
+ignore_names = ["row_factory", "anyio_backend", "pytestmark"]

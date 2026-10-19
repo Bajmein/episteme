@@ -21,6 +21,7 @@ def _index(vault: Path) -> Index:
 def test_invalid_frontmatter_indexed(vault: Path) -> None:
     ix = _index(vault)
     row = ix.note("docs/claude-code/README.index.md")
+    assert row is not None
     assert row["fm_valid"] == 0 and row["fm_error"]
     hits, _ = ix.search("Mapa Rápido por Objetivos")
     assert hits[0].path == "docs/claude-code/README.index.md"

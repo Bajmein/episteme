@@ -10,7 +10,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from episteme_mcp.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invalid
-from episteme_mcp.index import as_date
+from episteme_mcp.index import as_date, as_int
 from episteme_mcp.markdown import (
     body_without_title,
     clip,
@@ -420,7 +420,8 @@ def revise(
     elif action == "feedback":
         if value not in ("helpful", "unhelpful", "outdated"):
             raise invalid('feedback value must be "helpful", "unhelpful" or "outdated".')
-        helpful = nf.fm.get("helpful") if isinstance(nf.fm.get("helpful"), int) else 0
+        current = nf.fm.get("helpful")
+        helpful = as_int(current) or 0
         if value == "helpful":
             result["changed"] = nf.set_fields({"helpful": helpful + 1})
         elif value == "unhelpful":
@@ -696,7 +697,8 @@ def task_context(
         status="active",
         limit=200,
     )
-    rows = {h.path: engine.index.note(h.path) for h in hits}
+    rows = {h.path: row for h in hits if (row := engine.index.note(h.path)) is not None}
+    hits = [h for h in hits if h.path in rows]
     raw = [h.score for h in hits]
     lo, hi = (min(raw), max(raw)) if raw else (0.0, 0.0)
     scored = []

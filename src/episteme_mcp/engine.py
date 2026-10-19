@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -33,7 +33,7 @@ class Engine:
         return self._index
 
     @contextmanager
-    def session(self) -> Iterator[Engine]:
+    def session(self) -> Generator[Engine]:
         """Serialize tool calls and reindex what changed on disk first."""
         with self._lock:
             self.index.refresh()

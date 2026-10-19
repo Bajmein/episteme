@@ -82,7 +82,8 @@ def test_section_and_helpers() -> None:
     section = section_text(note, "heading ONE")
     assert section is not None
     assert section.startswith("# Heading one") and "## Sub section" in section
-    assert section_text(note, "sub section").startswith("## Sub section")
+    sub = section_text(note, "sub section")
+    assert sub is not None and sub.startswith("## Sub section")
     assert section_text(note, "missing") is None
     assert first_sentence("# T\n\nFirst one. Second one.") == "First one."
     assert slugify("Serena usa ty 0.0.89 ¡ya!") == "serena-usa-ty-0-0-89-ya"

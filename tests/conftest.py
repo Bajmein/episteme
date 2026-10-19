@@ -6,7 +6,7 @@ import json
 import os
 import shutil
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -62,7 +62,7 @@ class Client:
 @asynccontextmanager
 async def mcp_client(
     vault: Path, project: str | None = "fabrik", today: str = TODAY
-) -> AsyncIterator[Client]:
+) -> AsyncGenerator[Client]:
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 

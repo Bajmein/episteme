@@ -267,7 +267,7 @@ class Index:
         self.conn.execute("delete from fts where rowid = ?", (row["id"],))
         self.conn.execute("delete from notes where id = ?", (row["id"],))
         for table in ("tags", "props", "headings", "aliases"):
-            self.conn.execute(f"delete from {table} where path = ?", (rel,))
+            self.conn.execute(f"delete from {table} where path = ?", (rel,))  # nosec B608
         self.conn.execute("delete from links where src = ?", (rel,))
 
     def _insert(self, rel: str, sig: tuple[int, int], note: ParsedNote) -> None:
@@ -297,7 +297,7 @@ class Index:
                 as_date(fm.get("valid_until")),
                 as_int(fm.get("helpful")) or 0,
                 int(flagged is True),
-                hashlib.sha1(note.body.encode()).hexdigest(),
+                hashlib.sha1(note.body.encode(), usedforsecurity=False).hexdigest(),
                 note.body,
                 note.search_text,
             ),
@@ -371,12 +371,11 @@ class Index:
             for r in self.conn.execute("select key, value from props where path = ?", (rel,))
         }
 
-    def tags_of(self, rel: str) -> list[str]:
-        return [r[0] for r in self.conn.execute("select tag from tags where path = ?", (rel,))]
-
     def memories(self, where: str = "1", params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+        """Memory rows. ``where`` is a literal SQL fragment from this package; values go in
+        ``params``, never into ``where``."""
         return self.conn.execute(
-            f"select * from notes where mode = ? and ({where}) order by path",
+            f"select * from notes where mode = ? and ({where}) order by path",  # nosec B608
             (MEMORY, *params),
         ).fetchall()
 
@@ -447,12 +446,13 @@ class Index:
         for tag in tags or []:
             where.append("n.path in (select path from tags where tag = ?)")
             params.append(tag.strip().lstrip("#").lower())
-        sql = f"""
-            select n.path, n.title, n.search_text, bm25(fts, 5.0, 1.0, 1.0) as rank
-            from fts join notes n on n.id = fts.rowid
-            where {" and ".join(where)}
-            order by rank, coalesce(n.priority, 0) desc, n.path
-        """
+        # Every clause in ``where`` is a literal; user values are bound parameters.
+        sql = (
+            "select n.path, n.title, n.search_text, bm25(fts, 5.0, 1.0, 1.0) as rank "
+            "from fts join notes n on n.id = fts.rowid "
+            f"where {' and '.join(where)} "  # nosec B608
+            "order by rank, coalesce(n.priority, 0) desc, n.path"
+        )
         rows = self.conn.execute(sql, params).fetchall()
         hits = []
         for r in rows[:limit]:
