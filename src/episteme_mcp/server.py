@@ -320,11 +320,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         hookmode.check(hook_event)
         with engine.session():
             if mode == "welcome":
-                if session and not engine.index.mark_welcomed(session):
-                    text, entries, sent = "", [], True
-                else:
-                    text, entries = memory.welcome(engine, project)
-                    sent = False
+                text, entries = memory.welcome(engine, project)
+                sent = bool(session) and not engine.index.mark_welcomed(session)
+                if sent:
+                    text, entries = "", []
                 if hook_event:
                     return hookmode.render(hook_event, text)
                 return dump({"text": text, "entries": entries, "already_sent": sent})
