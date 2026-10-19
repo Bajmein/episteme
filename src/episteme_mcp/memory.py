@@ -255,7 +255,12 @@ def remember(
     valid_until: str | None = None,
     status: str = "active",
     force: bool = False,
+    *,
+    created: dt.date | None = None,
+    helpful: int = 0,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
+    """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration."""
     project = engine.need_project(project)
     zone = engine.vault.memory_zone
     if zone is None:
@@ -279,7 +284,7 @@ def remember(
         old_note.set_fields({"status": "superseded"})
         validate(old_note.fm)
 
-    created = today()
+    created = created or today()
     fm = ordered(
         {
             "type": type,
@@ -294,7 +299,7 @@ def remember(
             "supersedes": wikilink(engine, old_rel) if old_rel else None,
             "related": related_links,
             "source": source,
-            "helpful": 0,
+            "helpful": helpful,
             "due": _date_arg("due", due),
         }
     )
@@ -326,6 +331,11 @@ def remember(
     base = f"{created.isoformat()}-{slugify(title)}"
     engine.vault.check_writable(f"{folder}/{base}.md")
     n = 1
+    if dry_run:
+        while engine.vault.resolve(f"{folder}/{base}{'' if n == 1 else f'-{n}'}.md").exists():
+            n += 1
+        path = f"{folder}/{base}{'' if n == 1 else f'-{n}'}.md"
+        return {"created": True, "path": path, "similar": similar, "dry_run": True}
     while True:
         rel = f"{folder}/{base}.md" if n == 1 else f"{folder}/{base}-{n}.md"
         if not engine.vault.resolve(rel).exists() and engine.vault.create_exclusive(rel, content):
