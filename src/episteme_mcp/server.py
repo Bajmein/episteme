@@ -11,6 +11,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field, ValidationError
 
+from episteme_mcp import memory
 from episteme_mcp.engine import Engine
 from episteme_mcp.errors import INVALID_ARGUMENT, EpistemeError
 
@@ -139,5 +140,122 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         with engine.session():
             return dump(engine.links(note, direction, depth))
+
+    @server.tool(structured_output=False)
+    def remember(
+        type: Annotated[
+            str,
+            Field(
+                description="decision | lesson | error | constraint | preference | session | "
+                "reminder | insight"
+            ),
+        ],
+        title: Annotated[str, Field(description="Short title; also names the file.")],
+        body: Annotated[
+            str,
+            Field(
+                description="The memory. Name the files, tools or commands involved: "
+                "that is what is searched later."
+            ),
+        ],
+        project: Annotated[
+            str | None,
+            Field(description='Project; defaults to --project. "_shared" for all projects.'),
+        ] = None,
+        priority: Annotated[
+            int | None,
+            Field(
+                description="1-5. 5 = rule every session must know; 4 = technical decision "
+                "(default for decision/constraint); 3 = record (default); 1-2 = minor."
+            ),
+        ] = None,
+        tags: Annotated[
+            list[str], Field(description='Nested with "/", e.g. dominio/auth; no ":".')
+        ] = [],  # noqa: B006
+        files: Annotated[
+            list[str],
+            Field(description="Project-relative files this memory is about (globs allowed)."),
+        ] = [],  # noqa: B006
+        related: Annotated[list[str], Field(description="Related notes (paths or names).")] = [],  # noqa: B006
+        supersedes: Annotated[
+            str | None, Field(description="Memory this one replaces; it becomes superseded.")
+        ] = None,
+        source: Annotated[str | None, Field(description="Commit sha or PR.")] = None,
+        due: Annotated[
+            str | None, Field(description="YYYY-MM-DD; required for reminders.")
+        ] = None,
+        valid_until: Annotated[
+            str | None, Field(description="YYYY-MM-DD after which the memory no longer holds.")
+        ] = None,
+        status: Annotated[
+            str, Field(description="active | speculative | superseded | archived.")
+        ] = "active",
+        force: Annotated[
+            bool, Field(description="Create it even if a near-duplicate exists.")
+        ] = False,
+    ) -> str:
+        """Store a memory as memory/<project>/<type folder>/YYYY-MM-DD-<slug>.md.
+
+        Validates the schema and looks for near-duplicates of the same project and type: at
+        similarity >= 0.8 nothing is created (created: false) unless force=true.
+        Returns JSON {"created", "path", "similar": [{"path", "title", "similarity"}]}.
+        """
+        with engine.session():
+            return dump(
+                memory.remember(
+                    engine,
+                    type,
+                    title,
+                    body,
+                    project,
+                    priority,
+                    tags,
+                    files,
+                    related,
+                    supersedes,
+                    source,
+                    due,
+                    valid_until,
+                    status,
+                    force,
+                )
+            )
+
+    @server.tool(structured_output=False)
+    def revise(
+        note: NoteArg,
+        action: Annotated[
+            str,
+            Field(
+                description="edit (old, new) | append (text, heading?) | set (fields) | "
+                "supersede (by) | feedback (value) | archive"
+            ),
+        ],
+        old: Annotated[str | None, Field(description="edit: text that appears once.")] = None,
+        new: Annotated[str | None, Field(description="edit: replacement text.")] = None,
+        text: Annotated[str | None, Field(description="append: text to add.")] = None,
+        heading: Annotated[
+            str | None, Field(description="append: add at the end of this section.")
+        ] = None,
+        fields: Annotated[
+            dict[str, Any] | None,
+            Field(description="set: frontmatter keys to merge; null deletes a key."),
+        ] = None,
+        by: Annotated[
+            str | None, Field(description="supersede: the memory that replaces this one.")
+        ] = None,
+        value: Annotated[
+            str | None, Field(description="feedback: helpful | unhelpful | outdated.")
+        ] = None,
+    ) -> str:
+        """Change a note in a read-write or memory zone. Read-only zones are refused.
+
+        supersede, feedback and archive only apply to memories. Memories are validated against
+        the schema before anything is written. Returns JSON {"path", "action", "changed"}.
+        """
+        with engine.session():
+            return dump(
+                memory.revise(engine, note, action, old, new, text, heading, fields, by, value)
+            )
 
     return server
