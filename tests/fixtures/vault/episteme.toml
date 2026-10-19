@@ -1,0 +1,13 @@
+# Vault de prueba de episteme-mcp. Mismas zonas que el vault real.
+
+[zones."docs/claude-code"]
+mode = "read-only"
+
+[zones."memory"]
+mode = "memory"        # escritura solo vía remember/revise, con validación del esquema
+
+[zones."plans"]
+mode = "read-write"
+
+[checkpoint]
+state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir
