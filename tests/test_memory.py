@@ -138,3 +138,15 @@ def test_feedback_and_set(engine: Engine, vault: Path) -> None:
     assert "valid_until" not in _fm(vault / rel)
     memory.revise(engine, rel, "archive")
     assert _fm(vault / rel)["status"] == "archived"
+
+
+def test_welcome_caps(engine: Engine) -> None:
+    for i in range(15):
+        memory.remember(
+            engine, "insight", f"Insight número {i} sobre {'x' * i}", f"Cuerpo {i}. " * 40,
+            force=True,
+        )  # fmt: skip
+    text, entries = memory.welcome(engine, "fabrik")
+    assert len(entries) == 10
+    assert len(text) <= 4000
+    assert all(len(line) < 400 for line in text.splitlines())

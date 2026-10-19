@@ -667,7 +667,187 @@ def constraints(
     return text, {"file": rel, "constraints": items}
 
 
+# -- task context --------------------------------------------------------
+
+
 def task_context(
     engine: Engine, task: str, project: str | None, budget_tokens: int
 ) -> tuple[str, list[dict[str, Any]]]:
-    raise invalid('mode "task" is not available yet.')
+    """A context pack for ``task``: matching memories by score, then related notes."""
+    if budget_tokens < 1:
+        raise invalid(f"budget_tokens must be positive, got {budget_tokens}.")
+    project = engine.need_project(project)
+    now = today()
+    hits, _ = engine.index.search(
+        task,
+        any_term=True,
+        mode=MEMORY,
+        project=[project, "_shared"],
+        status="active",
+        limit=200,
+    )
+    rows = {h.path: engine.index.note(h.path) for h in hits}
+    raw = [h.score for h in hits]
+    lo, hi = (min(raw), max(raw)) if raw else (0.0, 0.0)
+    scored = []
+    for h in hits:
+        row = rows[h.path]
+        relevance = 1.0 if hi == lo else (h.score - lo) / (hi - lo)
+        score = (
+            0.5 * relevance
+            + 0.3 * ((row["priority"] or 1) - 1) / 4
+            + 0.2 * recency(row["created"], now)
+        )
+        pinned = row["type"] == "constraint" and bool(_files_of(engine, h.path))
+        scored.append((pinned, score, row))
+    scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
+
+    budget = budget_tokens * 4
+    header = f"episteme · contexto para: {' '.join(task.split())}"
+    parts = [header]
+    used = len(header)
+    entries: list[dict[str, Any]] = []
+    for _, score, row in scored:
+        excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), 300)
+        block = f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']})\n  {excerpt}"
+        if used + len(block) + 1 > budget:
+            continue
+        parts.append(block)
+        used += len(block) + 1
+        entries.append({"path": row["path"], "score": round(score, 4), "kind": "memory"})
+
+    notes, _ = engine.index.search(task, any_term=True, limit=50)
+    notes = [n for n in notes if engine.vault.mode_for(n.path) != MEMORY][:5]
+    first = True
+    for n in notes:
+        line = f"- {n.path} — {n.title}"
+        extra = len(line) + 1 + (len("Notas relacionadas:") + 1 if first else 0)
+        if used + extra > budget:
+            break
+        if first:
+            parts.append("Notas relacionadas:")
+            first = False
+        parts.append(line)
+        used += extra
+        entries.append({"path": n.path, "score": n.score, "kind": "note"})
+    if not entries:
+        return "", []
+    return "\n".join(parts), entries
+
+
+# -- review --------------------------------------------------------------
+
+STALE_DAYS = 90
+
+
+def review(
+    engine: Engine, path: str | None, project: str | None, limit: int
+) -> dict[str, Any]:
+    if limit < 1:
+        raise invalid(f"limit must be positive, got {limit}.")
+    prefix = None
+    if path:
+        engine.check_path(path.strip().rstrip("/") or "/")
+        prefix = path.strip().strip("/")
+    project = project or engine.project
+
+    def in_scope(rel: str) -> bool:
+        return prefix is None or rel == prefix or rel.startswith(prefix + "/")
+
+    now = today()
+    mems = [
+        r
+        for r in engine.index.memories()
+        if in_scope(r["path"]) and (project is None or r["project"] in (project, "_shared"))
+    ]
+    props = {r["path"]: engine.index.props(r["path"]) for r in mems}
+    active = [r for r in mems if r["status"] == "active"]
+
+    stale = []
+    for r in active:
+        days = days_since(r["created"], now)
+        if (
+            r["created"]
+            and days > STALE_DAYS
+            and not r["helpful"]
+            and r["type"] not in ("preference", "constraint")
+        ):
+            stale.append({"path": r["path"], "title": r["title"], "days": days})
+
+    linked: set[tuple[str, str]] = set()
+    for row in engine.index.conn.execute(
+        "select src, dst_path from links where kind in ('supersedes', 'contradicts') "
+        "and dst_path is not null"
+    ):
+        linked.add((row["src"], row["dst_path"]))
+        linked.add((row["dst_path"], row["src"]))
+    contradictions = []
+    decisions = [r for r in active if r["type"] in ("decision", "constraint")]
+    for i, a in enumerate(decisions):
+        for b in decisions[i + 1 :]:
+            if a["project"] != b["project"] or (a["path"], b["path"]) in linked:
+                continue
+            files_a = set(_list_prop(props[a["path"]], "files"))
+            files_b = set(_list_prop(props[b["path"]], "files"))
+            tags_a = set(_list_prop(props[a["path"]], "tags"))
+            tags_b = set(_list_prop(props[b["path"]], "tags"))
+            reason = None
+            if files_a & files_b:
+                reason = f"both cover files: {', '.join(sorted(files_a & files_b))}"
+            elif len(tags_a & tags_b) >= 2:
+                reason = f"share tags: {', '.join(sorted(tags_a & tags_b))}"
+            if reason:
+                contradictions.append({"a": a["path"], "b": b["path"], "reason": reason})
+
+    orphans = []
+    for r in mems:
+        out = [
+            x for x in engine.index.outgoing(r["path"]) if x["dst_path"] not in (None, r["path"])
+        ]
+        if not out and not engine.index.backlinks(r["path"]):
+            orphans.append(r["path"])
+
+    broken = [
+        {"path": r["src"], "target": _target(r), "line": r["line"]}
+        for r in engine.index.conn.execute(
+            "select * from links where dst_path is null or heading_missing = 1 "
+            "order by src, line"
+        )
+        if in_scope(r["src"])
+    ]
+
+    invalid_fm = []
+    for r in engine.index.conn.execute("select path, mode, fm_valid, fm_error from notes"):
+        if not in_scope(r["path"]):
+            continue
+        if not r["fm_valid"]:
+            invalid_fm.append({"path": r["path"], "error": r["fm_error"]})
+        elif r["mode"] == MEMORY and r["path"] in props:
+            try:
+                validate(props[r["path"]])
+            except EpistemeError as exc:
+                invalid_fm.append({"path": r["path"], "error": exc.message})
+
+    flagged = [r["path"] for r in mems if r["flagged"]]
+    return {
+        "stale": stale[:limit],
+        "contradictions": contradictions[:limit],
+        "orphans": orphans[:limit],
+        "broken_links": broken[:limit],
+        "invalid_frontmatter": invalid_fm[:limit],
+        "flagged": flagged[:limit],
+    }
+
+
+def _list_prop(props: dict[str, Any], key: str) -> list[str]:
+    value = props.get(key)
+    if isinstance(value, str):
+        return [value]
+    return [str(v) for v in value if v is not None] if isinstance(value, list) else []
+
+
+def _target(row: Any) -> str:
+    target = row["dst_raw"] or ""
+    if row["heading"]:
+        target += f"#{row['heading']}"
+    return target

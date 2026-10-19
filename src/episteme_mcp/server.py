@@ -275,6 +275,24 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             )
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
+    def review(
+        path: Annotated[str | None, Field(description="Path prefix to limit the review.")] = None,
+        project: Annotated[
+            str | None,
+            Field(description="Limit memory checks to this project (and _shared)."),
+        ] = None,
+        limit: Annotated[int, Field(description="Maximum items per category.")] = 50,
+    ) -> str:
+        """Vault health: stale memories, possible contradictions, orphans, broken links,
+        invalid frontmatter and memories flagged as outdated.
+
+        Returns JSON {"stale", "contradictions", "orphans", "broken_links",
+        "invalid_frontmatter", "flagged"}.
+        """
+        with engine.session():
+            return dump(memory.review(engine, path, project, limit))
+
+    @server.tool(annotations=READ_ONLY, structured_output=False)
     def context(
         mode: Annotated[
             str, Field(description='"welcome" (session start) or "task" (needs task).')
