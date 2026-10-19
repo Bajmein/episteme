@@ -41,6 +41,16 @@ def test_unindexable_frontmatter_does_not_break_reindex(vault: Path) -> None:
     assert hits[0].path == "plans/date-keys.md"
 
 
+def test_resolver_sees_notes_indexed_by_another_process(vault: Path) -> None:
+    a, b = _index(vault), _index(vault)
+    assert b.resolver().resolve_quiet("nota-nueva") is None
+    (vault / "plans").mkdir()
+    (vault / "plans" / "nota-nueva.md").write_text("# Nueva\n")
+    a.refresh()
+    b.refresh()
+    assert b.resolver().resolve_quiet("nota-nueva") == "plans/nota-nueva.md"
+
+
 def test_backlinks_and_comment_links(vault: Path) -> None:
     ix = _index(vault)
     sources = {r["src"] for r in ix.backlinks("docs/claude-code/hooks-reference.md")}

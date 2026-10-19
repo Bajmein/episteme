@@ -116,7 +116,7 @@ class Index:
         self.dir = vault.root / INDEX_DIR
         self.db_path = self.dir / "index.db"
         self.generation = 0
-        self._resolver: tuple[int, Resolver] | None = None
+        self._resolver: tuple[tuple[int, int], Resolver] | None = None
         self.conn = self._open()
 
     # -- connection --------------------------------------------------------
@@ -365,8 +365,10 @@ class Index:
         return Resolver((p, aliases.get(p, [])) for p in paths)
 
     def resolver(self) -> Resolver:
-        if self._resolver is None or self._resolver[0] != self.generation:
-            self._resolver = (self.generation, self._build_resolver())
+        # data_version moves when another connection commits; our own commits bump generation.
+        version = (self.generation, self.conn.execute("pragma data_version").fetchone()[0])
+        if self._resolver is None or self._resolver[0] != version:
+            self._resolver = (version, self._build_resolver())
         return self._resolver[1]
 
     # -- queries -----------------------------------------------------------
