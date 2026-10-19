@@ -11,9 +11,10 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field, ValidationError
 
-from episteme_mcp import memory
+from episteme_mcp import checkpoint as checkpoints
+from episteme_mcp import hookmode, memory
 from episteme_mcp.engine import Engine
-from episteme_mcp.errors import INVALID_ARGUMENT, EpistemeError
+from episteme_mcp.errors import INVALID_ARGUMENT, EpistemeError, invalid
 
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.
@@ -28,6 +29,21 @@ READ_ONLY = ToolAnnotations(read_only_hint=True)
 NoteArg = Annotated[
     str,
     Field(description="Vault-relative path (with or without .md) or a note name / alias."),
+]
+
+HookEvent = Annotated[
+    str | None,
+    Field(description="Only for Claude Code hooks: ${hook_event_name}. Omit otherwise."),
+]
+ProjectArg = Annotated[str | None, Field(description="Project; defaults to --project.")]
+ProjectDir = Annotated[
+    str | None,
+    Field(
+        description="Absolute project directory (hooks pass ${cwd}); used to relativize file."
+    ),
+]
+FileArg = Annotated[
+    str, Field(description="File being edited: absolute or relative to the project.")
 ]
 
 
@@ -257,5 +273,110 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             return dump(
                 memory.revise(engine, note, action, old, new, text, heading, fields, by, value)
             )
+
+    @server.tool(annotations=READ_ONLY, structured_output=False)
+    def context(
+        mode: Annotated[
+            str, Field(description='"welcome" (session start) or "task" (needs task).')
+        ] = "welcome",
+        session: Annotated[
+            str | None,
+            Field(description="welcome: session id; the welcome is sent once per session."),
+        ] = None,
+        project: ProjectArg = None,
+        task: Annotated[
+            str | None, Field(description="task: what you are about to do, in a few words.")
+        ] = None,
+        budget_tokens: Annotated[
+            int, Field(description="task: size of the context pack (1 token ~ 4 chars).")
+        ] = 2000,
+        hook_event: HookEvent = None,
+    ) -> str:
+        """Load project memory: the session welcome, or a context pack for a task.
+
+        welcome: overdue reminders, then the highest-scoring active memories.
+        task: decisions, constraints and lessons matching the task, within budget_tokens,
+        plus up to 5 related notes to open with read.
+        Returns JSON {"text", "entries": [...]} (welcome adds "already_sent").
+        """
+        hookmode.check(hook_event)
+        with engine.session():
+            if mode == "welcome":
+                if session and not engine.index.mark_welcomed(session):
+                    text, entries, sent = "", [], True
+                else:
+                    text, entries = memory.welcome(engine, project)
+                    sent = False
+                if hook_event:
+                    return hookmode.render(hook_event, text)
+                return dump({"text": text, "entries": entries, "already_sent": sent})
+            if mode == "task":
+                if not task or not task.strip():
+                    raise invalid('mode "task" needs task.')
+                text, entries = memory.task_context(engine, task, project, budget_tokens)
+                if hook_event:
+                    return hookmode.render(hook_event, text)
+                return dump({"text": text, "entries": entries})
+            raise invalid(f'mode must be "welcome" or "task", got "{mode}".')
+
+    @server.tool(annotations=READ_ONLY, structured_output=False)
+    def surface(
+        file: FileArg,
+        project_dir: ProjectDir = None,
+        project: ProjectArg = None,
+        limit: Annotated[int, Field(description="Maximum memories, 1-50.")] = 5,
+        hook_event: HookEvent = None,
+    ) -> str:
+        """Memories (not constraints) about a file: listed in its files, or mentioned in the body.
+
+        Returns JSON {"file", "memories": [{"path", "title", "type", "priority", "match"}]}.
+        """
+        hookmode.check(hook_event)
+        with engine.session():
+            text, data = memory.surface(engine, file, project_dir, project, limit)
+        return hookmode.render(hook_event, text) if hook_event else dump(data)
+
+    @server.tool(annotations=READ_ONLY, structured_output=False)
+    def constraints(
+        file: FileArg,
+        project_dir: ProjectDir = None,
+        project: ProjectArg = None,
+        hook_event: HookEvent = None,
+    ) -> str:
+        """Active constraints whose files match a file. Warns before editing; never blocks.
+
+        Returns JSON {"file", "constraints": [{"path", "title", "priority", "body"}]}.
+        """
+        hookmode.check(hook_event)
+        with engine.session():
+            text, data = memory.constraints(engine, file, project_dir, project)
+        return hookmode.render(hook_event, text) if hook_event else dump(data)
+
+    @server.tool(structured_output=False)
+    def checkpoint(
+        action: Annotated[str, Field(description='"save" or "restore".')],
+        project_dir: Annotated[
+            str | None,
+            Field(description="Absolute project directory (hooks pass ${cwd})."),
+        ] = None,
+        project: ProjectArg = None,
+        hook_event: HookEvent = None,
+    ) -> str:
+        """Save the active task state (estado.md) as a session memory, or restore the latest.
+
+        save: {"saved", "path", "task_title"}; saved is false when no state is active.
+        restore: {"found", "path", "task_title", "content"}. Never blocks compaction.
+        """
+        hookmode.check(hook_event)
+        with engine.session():
+            if action == "save":
+                data = checkpoints.save(engine, project_dir, project)
+                text = f"episteme · checkpoint saved: {data['path']}" if data["saved"] else ""
+            elif action == "restore":
+                data = checkpoints.restore(engine, project)
+                text = data["content"]
+            else:
+                raise invalid(f'action must be "save" or "restore", got "{action}".')
+        return hookmode.render(hook_event, text) if hook_event else dump(data)
 
     return server

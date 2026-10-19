@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import fnmatch
 import math
+import os
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -11,9 +13,11 @@ from episteme_mcp.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invali
 from episteme_mcp.index import as_date
 from episteme_mcp.markdown import (
     body_without_title,
+    clip,
     compose,
     dump_frontmatter,
     find_section,
+    first_sentence,
     load_frontmatter,
     parse,
     slugify,
@@ -465,3 +469,205 @@ def days_since(created: str | None, now: dt.date) -> int:
 
 def recency(created: str | None, now: dt.date) -> float:
     return math.exp(-days_since(created, now) / 30)
+
+
+def welcome_score(row: Any, now: dt.date) -> float:
+    priority = row["priority"] or 1
+    helpful = row["helpful"] or 0
+    return (
+        0.45 * (priority - 1) / 4
+        + 0.35 * recency(row["created"], now)
+        + 0.20 * min(helpful, 10) / 10
+    )
+
+
+def entry_line(row: Any) -> str:
+    sentence = first_sentence(row["body"] or "")
+    tail = f" — {sentence}" if sentence else ""
+    return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']}){tail}"
+
+
+def welcome(engine: Engine, project: str | None) -> tuple[str, list[dict[str, Any]]]:
+    """The welcome text: overdue reminders, then the best memories (10 entries, 4000 chars)."""
+    project = engine.need_project(project)
+    now = today()
+    iso = now.isoformat()
+    rows = engine.index.memories(
+        "project in (?, '_shared') and status = 'active'", (project,)
+    )
+    reminders = sorted(
+        (r for r in rows if r["type"] == "reminder" and r["due"] and r["due"] <= iso),
+        key=lambda r: (r["due"], r["path"]),
+    )
+    candidates = [
+        r
+        for r in rows
+        if r["type"] not in ("session", "reminder")
+        and not (r["valid_until"] and r["valid_until"] < iso)
+    ]
+    scored = sorted(
+        ((welcome_score(r, now), r) for r in candidates),
+        key=lambda x: (-x[0], _neg_date(x[1]["created"]), x[1]["path"]),
+    )
+    header = f"episteme · memoria de {project}"
+    lines = [header]
+    entries: list[dict[str, Any]] = []
+    budget = 4000 - len(header) - 1
+
+    def add(line: str, section: str | None) -> bool:
+        nonlocal budget
+        extra = len(line) + 1 + (len(section) + 1 if section else 0)
+        if len(entries) >= 10 or extra > budget:
+            return False
+        if section:
+            lines.append(section)
+        lines.append(line)
+        budget -= extra
+        return True
+
+    first = True
+    for r in reminders:
+        line = f"- [{r['due']}] {r['title']} ({r['path']})"
+        if not add(line, "Recordatorios vencidos:" if first else None):
+            break
+        first = False
+        entries.append({"path": r["path"], "score": None, "kind": "reminder"})
+    first = True
+    for score, r in scored:
+        if not add(entry_line(r), "Memorias:" if first else None):
+            break
+        first = False
+        entries.append({"path": r["path"], "score": round(score, 4), "kind": "memory"})
+    if not entries:
+        return "", []
+    return "\n".join(lines), entries
+
+
+def _neg_date(value: str | None) -> int:
+    """Sort key for 'most recent first'."""
+    try:
+        return -dt.date.fromisoformat(value or "").toordinal()
+    except ValueError:
+        return 0
+
+
+# -- files: surface and constraints -------------------------------------
+
+
+def project_relative(file: str, project_dir: str | None) -> str:
+    """The project-relative form of ``file`` when ``project_dir`` contains it."""
+    f = file.replace("\\", "/")
+    if project_dir and os.path.isabs(f):
+        for base, target in (
+            (os.path.normpath(project_dir), os.path.normpath(f)),
+            (os.path.realpath(project_dir), os.path.realpath(f)),
+        ):
+            if target.startswith(base.rstrip("/") + "/"):
+                return os.path.relpath(target, base).replace("\\", "/")
+    return f.removeprefix("./")
+
+
+def file_matches(file: str, rel: str, entry: str) -> bool:
+    """Match a ``files`` entry against a file (see «Casado de file con files»)."""
+    entry = entry.strip().replace("\\", "/").removeprefix("./")
+    if not entry:
+        return False
+    if any(c in entry for c in "*?["):
+        return fnmatch.fnmatchcase(rel, entry)
+    file = file.replace("\\", "/")
+    return rel == entry or file.endswith("/" + entry) or rel.endswith("/" + entry)
+
+
+def _files_of(engine: Engine, rel: str) -> list[str]:
+    files = engine.index.props(rel).get("files")
+    if isinstance(files, str):
+        return [files]
+    return [f for f in files if isinstance(f, str)] if isinstance(files, list) else []
+
+
+def _by_priority(rows: list[Any]) -> list[Any]:
+    return sorted(rows, key=lambda r: (-(r["priority"] or 0), _neg_date(r["created"]), r["path"]))
+
+
+def surface(
+    engine: Engine, file: str, project_dir: str | None, project: str | None, limit: int
+) -> tuple[str, dict[str, Any]]:
+    if not (1 <= limit <= 50):
+        raise invalid(f"limit must be 1-50, got {limit}.")
+    if not file or not file.strip():
+        raise invalid("file is empty. Pass the path of the file being edited.")
+    project = engine.need_project(project)
+    rel = project_relative(file, project_dir)
+    rows = engine.index.memories(
+        "project in (?, '_shared') and status = 'active' and type != 'constraint'", (project,)
+    )
+    by_files = _by_priority(
+        [r for r in rows if any(file_matches(file, rel, e) for e in _files_of(engine, r["path"]))]
+    )
+    seen = {r["path"] for r in by_files}
+    name = PurePosixPath(rel).name
+    query = f'"{rel}"' + (f' "{name}"' if name != rel else "")
+    hits, _ = engine.index.search(
+        query, any_term=True, mode=MEMORY, project=[project, "_shared"], limit=1000
+    )
+    hit_paths = {h.path for h in hits}
+    by_mention = _by_priority(
+        [r for r in rows if r["path"] in hit_paths and r["path"] not in seen]
+    )
+    chosen = [(r, "files") for r in by_files] + [(r, "mention") for r in by_mention]
+    chosen = chosen[:limit]
+    text = ""
+    if chosen:
+        text = "\n".join([f"Memories about {rel}:"] + [entry_line(r) for r, _ in chosen])
+    data = {
+        "file": rel,
+        "memories": [
+            {
+                "path": r["path"],
+                "title": r["title"],
+                "type": r["type"],
+                "priority": r["priority"],
+                "match": match,
+            }
+            for r, match in chosen
+        ],
+    }
+    return text, data
+
+
+def constraints(
+    engine: Engine, file: str, project_dir: str | None, project: str | None
+) -> tuple[str, dict[str, Any]]:
+    if not file or not file.strip():
+        raise invalid("file is empty. Pass the path of the file being edited.")
+    project = engine.need_project(project)
+    rel = project_relative(file, project_dir)
+    rows = engine.index.memories(
+        "project in (?, '_shared') and status = 'active' and type = 'constraint'", (project,)
+    )
+    found = _by_priority(
+        [r for r in rows if any(file_matches(file, rel, e) for e in _files_of(engine, r["path"]))]
+    )
+    items = [
+        {
+            "path": r["path"],
+            "title": r["title"],
+            "priority": r["priority"],
+            "body": clip(body_without_title(r["body"] or ""), 600),
+        }
+        for r in found
+    ]
+    text = ""
+    if items:
+        parts = [f"Constraints that apply to {rel}:"]
+        for item in items:
+            parts.append(f"- {item['title']} ({item['path']})")
+            parts.append(item["body"])
+        text = "\n".join(parts)
+    return text, {"file": rel, "constraints": items}
+
+
+def task_context(
+    engine: Engine, task: str, project: str | None, budget_tokens: int
+) -> tuple[str, list[dict[str, Any]]]:
+    raise invalid('mode "task" is not available yet.')
