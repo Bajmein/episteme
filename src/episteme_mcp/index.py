@@ -114,7 +114,9 @@ class Index:
 
     def _connect(self) -> sqlite3.Connection:
         self.dir.mkdir(exist_ok=True)
-        conn = sqlite3.connect(self.db_path, timeout=5.0, isolation_level=None)
+        conn = sqlite3.connect(
+            self.db_path, timeout=5.0, isolation_level=None, check_same_thread=False
+        )
         conn.row_factory = sqlite3.Row
         conn.execute("pragma busy_timeout = 5000")
         conn.execute("pragma journal_mode = wal")

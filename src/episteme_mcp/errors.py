@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 NOT_FOUND = "not_found"
 AMBIGUOUS = "ambiguous"
 READ_ONLY_ZONE = "read_only_zone"
@@ -10,8 +12,8 @@ INVALID_SCHEMA = "invalid_schema"
 INVALID_ARGUMENT = "invalid_argument"
 
 
-class EpistemeError(Exception):
-    """A tool failure the model can act on."""
+class EpistemeError(ToolError):
+    """A tool failure the model can act on (anticipated, so the SDK logs no traceback)."""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(f"{code}: {message}")
