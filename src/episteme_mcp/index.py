@@ -124,10 +124,14 @@ class Index:
         return conn
 
     def _open(self) -> sqlite3.Connection:
-        try:
-            conn = self._connect()
-            ok = conn.execute("pragma quick_check").fetchone()[0] == "ok"
-            if ok:
+        delay = 0.05
+        for _ in range(40):
+            conn = None
+            try:
+                conn = self._connect()
+                if conn.execute("pragma quick_check").fetchone()[0] != "ok":
+                    conn.close()
+                    break
                 have = {r[0] for r in conn.execute("select name from sqlite_master")}
                 version = None
                 if "meta" in have:
@@ -136,9 +140,16 @@ class Index:
                 if version != SCHEMA_VERSION:
                     self._create(conn)
                 return conn
-            conn.close()
-        except sqlite3.DatabaseError:
-            pass
+            except sqlite3.DatabaseError as exc:
+                if conn is not None:
+                    conn.close()
+                if not _is_lock(exc):
+                    break
+                # Another process holds the lock (e.g. it is creating the schema): wait.
+                time.sleep(delay)
+                delay = min(delay * 2, 0.5)
+        else:
+            raise sqlite3.OperationalError("database is locked")
         # Corrupt: the index is a cache, so throw it away and rebuild.
         for suffix in ("", "-wal", "-shm"):
             try:
@@ -173,7 +184,7 @@ class Index:
             try:
                 conn.execute("begin immediate")
             except sqlite3.OperationalError as exc:
-                if "locked" in str(exc) or "busy" in str(exc):
+                if _is_lock(exc):
                     time.sleep(delay)
                     delay = min(delay * 2, 0.5)
                     continue
@@ -184,7 +195,7 @@ class Index:
                 return result
             except sqlite3.OperationalError as exc:
                 conn.execute("rollback")
-                if ("locked" in str(exc) or "busy" in str(exc)) and attempt < 39:
+                if _is_lock(exc) and attempt < 39:
                     time.sleep(delay)
                     continue
                 raise
@@ -448,6 +459,13 @@ class Index:
             line, snippet = locate(r["search_text"], terms)
             hits.append(Hit(r["path"], r["title"], line, snippet, round(-r["rank"], 4)))
         return hits, len(rows)
+
+
+def _is_lock(exc: sqlite3.DatabaseError) -> bool:
+    """A busy/locked error from another process, as opposed to a corrupt file."""
+    return isinstance(exc, sqlite3.OperationalError) and (
+        "locked" in str(exc) or "busy" in str(exc)
+    )
 
 
 def _like_prefix(text: str) -> str:

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
+
+import pytest
 
 from episteme_mcp.index import Index, query_terms
 from episteme_mcp.vault import Vault
@@ -89,3 +92,25 @@ def test_missing_index_is_rebuilt(vault: Path) -> None:
         p.unlink()
     ix = _index(vault)
     assert ix.note("memory/_shared/perfil.md") is not None
+
+
+def test_lock_at_open_is_retried_not_treated_as_corruption(
+    vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ix = _index(vault)
+    assert ix.mark_welcomed("s1")
+    ix.close()
+    calls = {"n": 0}
+    real_connect = Index._connect
+
+    def flaky_connect(self: Index) -> sqlite3.Connection:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return real_connect(self)
+
+    monkeypatch.setattr(Index, "_connect", flaky_connect)
+    ix = Index(Vault(vault))
+    assert calls["n"] == 2
+    # the existing index (and what other processes wrote to it) survives
+    assert not ix.mark_welcomed("s1")
