@@ -8,9 +8,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-
-class StartupError(Exception):
-    """The server cannot start; the message is printed to stderr."""
+from episteme_mcp.errors import StartupError
 
 
 def _check_fts5() -> None:

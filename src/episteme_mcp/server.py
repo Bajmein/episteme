@@ -6,6 +6,8 @@ from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 
+from episteme_mcp.vault import Vault
+
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.
 - At the start of a task, call context(mode="task", task="<what you are about to do>") to load relevant decisions, constraints and lessons.
@@ -16,5 +18,6 @@ episteme is the project memory and documentation vault. Use only these tools; ne
 
 
 def build_server(vault: Path, project: str | None = None) -> MCPServer:
-    """Create the MCP server for ``vault``."""
+    """Create the MCP server for ``vault``; raises StartupError on a bad episteme.toml."""
+    Vault(vault)
     return MCPServer("episteme", instructions=INSTRUCTIONS)
