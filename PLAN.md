@@ -550,10 +550,50 @@ La sesión cloud clona **solo** `Bajmein/episteme-mcp`. No ve fabrik, ni el vaul
 
 ### Entorno
 
-- VM Ubuntu 24.04 x86_64 con Python 3, `uv`, `pytest` y `ruff` preinstalados. La red **Trusted** por defecto llega a PyPI.
-- **Sin setup script**: las dependencias se instalan con `uv sync` al empezar.
+- VM Ubuntu 24.04 x86_64 con Python 3, `uv`, `pytest` y `ruff` preinstalados.
 - El proxy de GitHub permite hacer push de **ramas**. No permite tags ni borrar ramas.
 - **Entrega**: rama `feat/initial-implementation` y PR contra `main`. No se mergea desde el cloud.
+- La persona crea un **entorno cloud propio** para este repo, distinto del de fabrik (no lleva `rg`, `fd`, `yq`, Serena ni variables `FABRIK_*`). Su configuración es la de abajo. Si el agente ve que falta algo de esto, lo anota en «Desvíos del plan».
+
+**Dominios permitidos** (red personalizada, con «Allow package managers» marcado). Bastan para `uv sync`, para que `uv` descargue un Python si hiciera falta y para clonar y subir ramas:
+
+```text
+github.com
+*.githubusercontent.com
+pypi.org
+files.pythonhosted.org
+```
+
+**Variables de entorno** (formato `.env`; no son secretos):
+
+```text
+UV_LINK_MODE=copy
+UV_NO_PROGRESS=1
+```
+
+`EPISTEME_TODAY` **no** va aquí: la fijan los tests en el entorno de cada subproceso.
+
+**Setup script** (corre al iniciar la sesión, antes de Claude Code; sin `set -e` para que lo opcional no tumbe la sesión):
+
+```bash
+#!/bin/bash
+# episteme-mcp en Claude cloud. Sin `set -e`: lo opcional no debe tumbar la sesión.
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+
+# uv (viene preinstalado; respaldo por si no)
+command -v uv >/dev/null || pip install --quiet uv || curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# El servidor exige SQLite con FTS5: avisa si falta
+python3 - <<'PY' || echo "AVISO: este Python no trae SQLite con FTS5"
+import sqlite3
+sqlite3.connect(":memory:").execute("create virtual table t using fts5(x)")
+PY
+
+# Precalienta las dependencias si el repo ya está clonado aquí
+[ -f pyproject.toml ] && uv sync --quiet || true
+
+exit 0
+```
 
 ### Estructura del repo
 
