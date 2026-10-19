@@ -766,12 +766,15 @@ def review(
     def in_scope(rel: str) -> bool:
         return prefix is None or rel == prefix or rel.startswith(prefix + "/")
 
+    def in_project(r: Any) -> bool:
+        # A memory with a missing or invalid project is matched by its folder, so that
+        # the schema validation below reports it instead of the filter hiding it.
+        if project is None or r["project"] in (project, "_shared"):
+            return True
+        return r["path"].startswith((f"{r['zone']}/{project}/", f"{r['zone']}/_shared/"))
+
     now = today()
-    mems = [
-        r
-        for r in engine.index.memories()
-        if in_scope(r["path"]) and (project is None or r["project"] in (project, "_shared"))
-    ]
+    mems = [r for r in engine.index.memories() if in_scope(r["path"]) and in_project(r)]
     props = {r["path"]: engine.index.props(r["path"]) for r in mems}
     active = [r for r in mems if r["status"] == "active"]
 

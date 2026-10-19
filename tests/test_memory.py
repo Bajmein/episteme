@@ -163,3 +163,13 @@ def test_welcome_caps(engine: Engine) -> None:
     assert len(entries) == 10
     assert len(text) <= 4000
     assert all(len(line) < 400 for line in text.splitlines())
+
+
+def test_review_reports_memory_without_project(engine: Engine, vault: Path) -> None:
+    rel = "memory/fabrik/decisions/no-project.md"
+    (vault / rel).write_text(
+        "---\ntype: decision\nstatus: active\ncreated: 2026-10-01\n---\n# No project\n"
+    )
+    engine.index.refresh()
+    out = memory.review(engine, None, None, 50)
+    assert rel in {x["path"] for x in out["invalid_frontmatter"]}
