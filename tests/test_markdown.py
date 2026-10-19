@@ -71,6 +71,18 @@ def test_impossible_date_is_invalid_not_fatal() -> None:
     assert "body" in note.search_text
 
 
+def test_percent_signs_in_inline_code_do_not_open_a_comment() -> None:
+    note = parse(
+        '# T\n\nUse `printf "%d%%"` here.\n\n## After\n\nlater words\n\n'
+        "%% hidden [[nav]] %% shown\n",
+        "a.md",
+    )
+    assert [h.text for h in note.headings] == ["T", "After"]
+    assert "later words" in note.search_text
+    assert "hidden" not in note.search_text and "shown" in note.search_text
+    assert "nav" in {lk.target for lk in note.links}
+
+
 def test_non_mapping_frontmatter_is_invalid() -> None:
     note = parse("---\n- a\n- b\n---\ntext\n", "a.md")
     assert not note.fm_valid

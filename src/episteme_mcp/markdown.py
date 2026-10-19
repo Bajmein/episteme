@@ -131,13 +131,21 @@ def frontmatter_tags(fm: dict[str, Any]) -> list[str]:
 
 
 def _split_comments(line: str, in_comment: bool) -> tuple[str, str, bool]:
-    """Split a line into its visible text and its ``%% … %%`` text."""
+    """Split a line into its visible text and its ``%% … %%`` text.
+
+    A ``%%`` inside an inline code span is plain text, not a comment marker.
+    """
+    code = [m.span() for m in INLINE_CODE_RE.finditer(line)]
     visible: list[str] = []
     hidden: list[str] = []
-    for i, piece in enumerate(line.split("%%")):
-        if i > 0:
-            in_comment = not in_comment
-        (hidden if in_comment else visible).append(piece)
+    start = 0
+    for m in re.finditer("%%", line):
+        if any(a <= m.start() < b for a, b in code):
+            continue
+        (hidden if in_comment else visible).append(line[start : m.start()])
+        in_comment = not in_comment
+        start = m.end()
+    (hidden if in_comment else visible).append(line[start:])
     return " ".join(visible), " ".join(hidden), in_comment
 
 
