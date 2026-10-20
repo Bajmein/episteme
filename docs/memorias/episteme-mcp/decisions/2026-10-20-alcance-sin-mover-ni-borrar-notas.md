@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [pieza/alcance]
 files: [src/episteme_mcp/server.py]
-source: PLAN.md (Alcance, Riesgos)
+source: PLAN.md@v0.1.0 (Alcance, Riesgos)
 helpful: 0
 ---
 # Alcance: sin mover, renombrar, borrar ni crear notas fuera de memory/

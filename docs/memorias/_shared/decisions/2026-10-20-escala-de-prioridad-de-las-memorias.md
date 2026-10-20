@@ -6,7 +6,7 @@ priority: 5
 status: active
 created: 2026-10-20
 tags: [pieza/memoria, pieza/prioridad]
-source: PLAN.md (Prioridad)
+source: PLAN.md@v0.1.0 (Prioridad)
 helpful: 0
 ---
 # Escala de prioridad de las memorias

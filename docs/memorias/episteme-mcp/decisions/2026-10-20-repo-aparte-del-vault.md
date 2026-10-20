@@ -6,7 +6,7 @@ priority: 3
 status: active
 created: 2026-10-20
 tags: [pieza/repo]
-source: PLAN.md (Decisiones cerradas)
+source: PLAN.md@v0.1.0 (Decisiones cerradas)
 helpful: 0
 ---
 # El código vive en un repo aparte del vault

@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [pieza/distribucion, herramienta/uv]
 files: [pyproject.toml, README.md]
-source: PLAN.md (Distribución y arranque)
+source: PLAN.md@v0.1.0 (Distribución y arranque)
 helpful: 0
 ---
 # Distribución con uvx desde un tag git+ssh, en scope local

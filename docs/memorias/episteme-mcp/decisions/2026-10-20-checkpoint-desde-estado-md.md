@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [pieza/checkpoint, pieza/hooks]
 files: [src/episteme_mcp/checkpoint.py]
-source: PLAN.md (Checkpoints)
+source: PLAN.md@v0.1.0 (Checkpoints)
 helpful: 0
 ---
 # Checkpoint desde el estado.md del proyecto

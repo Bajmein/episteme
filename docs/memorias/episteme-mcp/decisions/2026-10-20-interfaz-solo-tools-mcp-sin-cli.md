@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [pieza/arquitectura, pieza/hooks, pieza/permisos]
 files: [src/episteme_mcp/server.py, src/episteme_mcp/hookmode.py]
-source: PLAN.md (Arquitectura, Decisiones cerradas)
+source: PLAN.md@v0.1.0 (Arquitectura, Decisiones cerradas)
 helpful: 0
 ---
 # Interfaz solo de tools MCP, con los hooks vía mcp_tool y sin CLI

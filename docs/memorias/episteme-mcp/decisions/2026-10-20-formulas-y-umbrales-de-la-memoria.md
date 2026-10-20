@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [pieza/memoria, pieza/bienvenida, pieza/review]
 files: [src/episteme_mcp/memory.py]
-source: PLAN.md (Fórmulas)
+source: PLAN.md@v0.1.0 (Fórmulas)
 helpful: 0
 ---
 # Fórmulas y umbrales de la memoria

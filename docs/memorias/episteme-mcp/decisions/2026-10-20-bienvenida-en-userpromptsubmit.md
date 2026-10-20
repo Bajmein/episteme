@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [pieza/hooks, pieza/bienvenida]
 files: [src/episteme_mcp/memory.py]
-source: PLAN.md (Hooks sobre tools)
+source: PLAN.md@v0.1.0 (Hooks sobre tools)
 helpful: 0
 ---
 # La bienvenida va en UserPromptSubmit con registro en welcomed

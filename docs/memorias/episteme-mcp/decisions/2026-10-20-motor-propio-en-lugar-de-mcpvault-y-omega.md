@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [pieza/arquitectura, origen/omega, origen/mcpvault]
 files: [src/episteme_mcp/server.py]
-source: PLAN.md (Contexto y objetivo, anexos A y B)
+source: PLAN.md@v0.1.0 (Contexto y objetivo, anexos A y B)
 helpful: 0
 ---
 # Motor propio en lugar de mcpvault, OMEGA y la app de Obsidian
