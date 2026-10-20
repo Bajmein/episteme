@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from episteme_mcp.errors import EpistemeError
-from episteme_mcp.links import Resolver, reachable
+from episteme.errors import EpistemeError
+from episteme.links import Resolver, reachable
 
 NOTES = [
     ("docs/best-practices.md", []),

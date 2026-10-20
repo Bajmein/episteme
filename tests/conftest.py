@@ -66,7 +66,7 @@ async def mcp_client(
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
-    args = ["-m", "episteme_mcp", "--vault", str(vault)]
+    args = ["-m", "episteme", "--vault", str(vault)]
     if project:
         args += ["--project", project]
     params = StdioServerParameters(

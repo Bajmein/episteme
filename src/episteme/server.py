@@ -11,10 +11,10 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field, ValidationError
 
-from episteme_mcp import checkpoint as checkpoints
-from episteme_mcp import hookmode, memory
-from episteme_mcp.engine import Engine
-from episteme_mcp.errors import INVALID_ARGUMENT, EpistemeError, invalid
+from episteme import checkpoint as checkpoints
+from episteme import hookmode, memory
+from episteme.engine import Engine
+from episteme.errors import INVALID_ARGUMENT, EpistemeError, invalid
 
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.

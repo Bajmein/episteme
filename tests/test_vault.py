@@ -8,8 +8,8 @@ from pathlib import Path, PurePosixPath
 import pytest
 from test_startup import _start
 
-from episteme_mcp.errors import EpistemeError, StartupError
-from episteme_mcp.vault import MEMORY, READ_ONLY, READ_WRITE, Vault, is_ignored, load_config
+from episteme.errors import EpistemeError, StartupError
+from episteme.vault import MEMORY, READ_ONLY, READ_WRITE, Vault, is_ignored, load_config
 
 
 def test_load_fixture_config(vault: Path) -> None:
@@ -38,7 +38,7 @@ def test_bad_config_refuses_to_start(tmp_path: Path, toml: str) -> None:
     proc = _start("--vault", str(tmp_path))
     assert proc.returncode != 0
     assert proc.stderr
-    assert not (tmp_path / ".episteme").exists()
+    assert not (tmp_path / ".index").exists()
 
 
 def test_zone_lookup_prefers_most_specific(tmp_path: Path) -> None:

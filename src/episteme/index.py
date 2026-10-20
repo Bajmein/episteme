@@ -12,15 +12,15 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from episteme_mcp.links import Resolver
-from episteme_mcp.markdown import (
+from episteme.links import Resolver
+from episteme.markdown import (
     ParsedNote,
     fold,
     fold_with_map,
     normalize_heading,
     parse,
 )
-from episteme_mcp.vault import INDEX_DIR, MEMORY, Vault
+from episteme.vault import INDEX_DIR, MEMORY, Vault
 
 SCHEMA_VERSION = "1"
 

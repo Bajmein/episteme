@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Iterable
 from pathlib import PurePosixPath
 
-from episteme_mcp.errors import AMBIGUOUS, NOT_FOUND, EpistemeError
+from episteme.errors import AMBIGUOUS, NOT_FOUND, EpistemeError
 
 
 def _strip_md(name: str) -> str:

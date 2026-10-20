@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from episteme_mcp.markdown import (
+from episteme.markdown import (
     first_sentence,
     parse,
     parse_wikilink,

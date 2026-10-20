@@ -1,12 +1,12 @@
 ---
 type: decision
 kind: semantic
-project: episteme-mcp
+project: episteme
 priority: 4
 status: active
 created: 2026-10-20
 tags: [pieza/checkpoint, pieza/hooks]
-files: [src/episteme_mcp/checkpoint.py]
+files: [src/episteme/checkpoint.py]
 source: PLAN.md@v0.1.0 (Checkpoints)
 helpful: 0
 ---

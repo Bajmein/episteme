@@ -9,9 +9,9 @@ import os
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from episteme_mcp.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invalid
-from episteme_mcp.index import as_date, as_int
-from episteme_mcp.markdown import (
+from episteme.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invalid
+from episteme.index import as_date, as_int
+from episteme.markdown import (
     body_without_title,
     clip,
     compose,
@@ -24,10 +24,10 @@ from episteme_mcp.markdown import (
     split_frontmatter,
     tokens,
 )
-from episteme_mcp.vault import MEMORY, today
+from episteme.vault import MEMORY, today
 
 if TYPE_CHECKING:
-    from episteme_mcp.engine import Engine
+    from episteme.engine import Engine
 
 FOLDERS = {
     "decision": "decisions",

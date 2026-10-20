@@ -6,7 +6,7 @@ priority: 3
 status: active
 created: 2026-10-20
 tags: [herramienta/claude-code-cloud, herramienta/git]
-source: episteme-mcp PR #1
+source: episteme PR #1
 helpful: 0
 ---
 # Límites del proxy git en Claude Code cloud

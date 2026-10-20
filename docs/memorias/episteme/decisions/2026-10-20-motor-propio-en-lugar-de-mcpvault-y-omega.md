@@ -1,18 +1,18 @@
 ---
 type: decision
 kind: semantic
-project: episteme-mcp
+project: episteme
 priority: 4
 status: active
 created: 2026-10-20
 tags: [pieza/arquitectura, origen/omega, origen/mcpvault]
-files: [src/episteme_mcp/server.py]
+files: [src/episteme/server.py]
 source: PLAN.md@v0.1.0 (Contexto y objetivo, anexos A y B)
 helpful: 0
 ---
 # Motor propio en lugar de mcpvault, OMEGA y la app de Obsidian
 
-`episteme-mcp` sustituye a mcpvault (`@bitbonsai/mcpvault`, documentación) y a OMEGA (memoria). Obsidian deja de ser una dependencia y queda solo como compatibilidad: las notas siguen siendo Markdown con wikilinks, frontmatter y tags, y la app sirve para mirarlas.
+`episteme` sustituye a mcpvault (`@bitbonsai/mcpvault`, documentación) y a OMEGA (memoria). Obsidian deja de ser una dependencia y queda solo como compatibilidad: las notas siguen siendo Markdown con wikilinks, frontmatter y tags, y la app sirve para mirarlas.
 
 Por qué no OMEGA (1.5.20, 167 memorias en fabrik):
 - `consolidate` y `compact` borraban decisiones sin accesos y mezclaban proyectos; estaban frenados con fechas de 2099.

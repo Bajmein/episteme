@@ -1,8 +1,8 @@
-# episteme-mcp
+# episteme
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.1.0 implementada (10 tools, índice SQLite, modo hook y migración de OMEGA).
+> Estado: v0.2.0 (10 tools, índice SQLite, modo hook, migración de OMEGA y vault global por defecto en `~/.episteme`).
 
 ## Instalación
 
@@ -10,18 +10,19 @@ Se distribuye con `uvx` desde un tag de GitHub. El repo es privado, así que se 
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme-mcp@v0.1.0 episteme-mcp \
-  --vault '${HOME}/src/episteme' --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.2.0 episteme --project fabrik
 ```
 
-Las comillas simples guardan `${HOME}` tal cual y Claude Code lo expande al arrancar el servidor, así la config no lleva la ruta de la máquina. Con `~` o comillas dobles la shell lo expande al registrar y queda la ruta completa.
+Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
 
 Actualizar es cambiar el tag. Para desarrollo, una entrada aparte que no fija versión:
 
 ```bash
 claude mcp add --scope local episteme-dev -- \
-  uv run --directory '${HOME}/src/episteme-mcp' episteme-mcp --vault '${HOME}/src/episteme'
+  uv run --directory '${HOME}/src/episteme' episteme --project fabrik
 ```
+
+Las comillas simples guardan `${HOME}/src` tal cual y Claude Code lo expande al arrancar el servidor, así la config no lleva la ruta de la máquina. Con comillas dobles la shell lo expande al registrar y queda la ruta completa.
 
 Requiere Python 3.11 o superior con SQLite y FTS5 (el servidor lo comprueba al arrancar).
 
@@ -29,14 +30,14 @@ Requiere Python 3.11 o superior con SQLite y FTS5 (el servidor lo comprueba al a
 
 | Argumento | Qué hace |
 | --- | --- |
-| `--vault <ruta absoluta>` | Obligatorio (o la variable `EPISTEME_VAULT`; manda el argumento). Si falta, no es absoluta, no existe o no tiene `episteme.toml`, el servidor no arranca y sale con código ≠ 0 |
+| `--vault <ruta absoluta>` | Opcional (o la variable `EPISTEME_VAULT`; manda el argumento). Por defecto, `~/.episteme`, que se crea si falta. Una ruta explícita que no es absoluta, no existe o no tiene `episteme.toml` impide arrancar: el servidor sale con código ≠ 0 sin crear nada |
 | `--project <nombre>` | Opcional. Proyecto por defecto de `remember`, `context`, `surface`, `constraints`, `checkpoint` y `review` |
 
 Variables:
 
 - `EPISTEME_TODAY=AAAA-MM-DD` fija la fecha de hoy (por defecto, la fecha UTC). Existe para los tests.
 
-El índice vive en `<vault>/.episteme/index.db`: es una caché que se reconstruye sola. Añade `.episteme/` al `.gitignore` del vault.
+El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Añade `.index/` al `.gitignore` del vault.
 
 ## `episteme.toml`
 
@@ -58,7 +59,7 @@ state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir; opcional
 
 - `mode` es `read-only`, `read-write` o `memory`. Un valor distinto o una zona repetida impiden arrancar.
 - Lo que no está en ninguna zona es de solo lectura. Si dos zonas se anidan, manda la más específica.
-- Se ignoran `.obsidian/`, `.episteme/`, `.git/`, toda carpeta que empiece por `.` y los archivos que no son `.md`.
+- Se ignoran `.obsidian/`, `.index/`, `.git/`, toda carpeta que empiece por `.` y los archivos que no son `.md`.
 - Toda ruta se confina al vault: se rechazan `..`, las rutas absolutas y los symlinks que salen (`outside_vault`).
 
 ## Tools
@@ -153,7 +154,7 @@ Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__s
 ```bash
 omega export-obsidian --output-dir /tmp/omega --project fabrik --limit 1000
 uv run scripts/migrate_omega.py --export /tmp/omega/omega-memories \
-  --vault "$HOME/src/episteme" --project fabrik --dry-run
+  --vault "$HOME/.episteme" --project fabrik --dry-run
 ```
 
 Sin `--dry-run` escribe. Usa la misma validación y detección de duplicados que `remember`, así que una segunda ejecución no duplica nada. Los `checkpoint` se descartan y las etiquetas `dominio:x` pasan a `dominio/x`.
@@ -164,7 +165,7 @@ Sin `--dry-run` escribe. Usa la misma validación y detección de duplicados que
 uv sync
 uv run ruff check
 uv run pytest
-uv run python -m episteme_mcp --vault "$PWD/tests/fixtures/vault" --project fabrik
+uv run python -m episteme --vault "$PWD/tests/fixtures/vault" --project fabrik
 ```
 
 Los tests copian `tests/fixtures/vault/` a un directorio temporal antes de escribir y arrancan el servidor por stdio con el cliente del SDK de MCP.

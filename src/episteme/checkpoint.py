@@ -7,13 +7,13 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from episteme_mcp.errors import invalid
-from episteme_mcp.markdown import body_without_title, compose, parse, section_text, slugify
-from episteme_mcp.memory import ordered, validate
-from episteme_mcp.vault import today
+from episteme.errors import invalid
+from episteme.markdown import body_without_title, compose, parse, section_text, slugify
+from episteme.memory import ordered, validate
+from episteme.vault import today
 
 if TYPE_CHECKING:
-    from episteme_mcp.engine import Engine
+    from episteme.engine import Engine
 
 SECTIONS = ("Plan", "Progreso", "Decisiones", "Trampas", "Siguientes pasos")
 VALID_DAYS = 7

@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from episteme_mcp import hookmode
-from episteme_mcp.errors import EpistemeError
-from episteme_mcp.memory import file_matches, project_relative
+from episteme import hookmode
+from episteme.errors import EpistemeError
+from episteme.memory import file_matches, project_relative
 
 
 def test_render_per_event() -> None:

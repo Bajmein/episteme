@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from episteme_mcp.errors import invalid
-from episteme_mcp.markdown import clip_at_newline
+from episteme.errors import invalid
+from episteme.markdown import clip_at_newline
 
 PLAIN_EVENTS = ("UserPromptSubmit", "SessionStart")
 JSON_EVENTS = ("PreToolUse", "PostToolUse")

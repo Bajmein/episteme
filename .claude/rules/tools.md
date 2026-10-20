@@ -1,8 +1,8 @@
 ---
 paths:
-  - src/episteme_mcp/server.py
-  - src/episteme_mcp/engine.py
-  - src/episteme_mcp/errors.py
+  - src/episteme/server.py
+  - src/episteme/engine.py
+  - src/episteme/errors.py
 ---
 
 # Tools MCP
