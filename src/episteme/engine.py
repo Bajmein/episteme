@@ -9,11 +9,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from episteme_mcp.errors import NOT_FOUND, EpistemeError, invalid
-from episteme_mcp.index import Index, jsonable
-from episteme_mcp.links import reachable
-from episteme_mcp.markdown import ParsedNote, clip, clip_at_newline, find_section, parse
-from episteme_mcp.vault import Vault, is_ignored
+from episteme.errors import NOT_FOUND, EpistemeError, invalid
+from episteme.index import Index, jsonable
+from episteme.links import reachable
+from episteme.markdown import ParsedNote, clip, clip_at_newline, find_section, parse
+from episteme.vault import Vault, is_ignored
 
 READ_CAP = 20_000
 SECTION_CAP = 60_000

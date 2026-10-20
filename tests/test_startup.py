@@ -12,7 +12,7 @@ from conftest import mcp_client
 
 def _start(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "episteme_mcp", *args],
+        [sys.executable, "-m", "episteme", *args],
         capture_output=True,
         text=True,
         stdin=subprocess.DEVNULL,
@@ -21,10 +21,18 @@ def _start(*args: str, env: dict[str, str] | None = None) -> subprocess.Complete
     )
 
 
-def test_no_vault_fails() -> None:
-    proc = _start()
+def test_default_vault_is_created(tmp_path: Path) -> None:
+    _start(env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+    assert (tmp_path / ".episteme" / "episteme.toml").is_file()
+
+
+def test_explicit_missing_vault_is_not_created(tmp_path: Path) -> None:
+    proc = _start(
+        "--vault", str(tmp_path / "nope"), env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
+    )
     assert proc.returncode != 0
-    assert "no vault given" in proc.stderr
+    assert "does not exist" in proc.stderr
+    assert not (tmp_path / ".episteme").exists()
 
 
 def test_relative_vault_fails(tmp_path: Path) -> None:
@@ -45,7 +53,7 @@ def test_vault_without_toml_fails(tmp_path: Path) -> None:
     proc = _start("--vault", str(tmp_path / "notes"))
     assert proc.returncode != 0
     assert "episteme.toml" in proc.stderr
-    assert not (tmp_path / "notes" / ".episteme").exists()
+    assert not (tmp_path / "notes" / ".index").exists()
 
 
 def test_env_var_is_used(tmp_path: Path) -> None:

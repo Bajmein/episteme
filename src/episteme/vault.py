@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from episteme_mcp.errors import (
+from episteme.errors import (
     OUTSIDE_VAULT,
     READ_ONLY_ZONE,
     EpistemeError,
@@ -23,7 +23,7 @@ READ_WRITE = "read-write"
 MEMORY = "memory"
 MODES = (READ_ONLY, READ_WRITE, MEMORY)
 CONFIG_FILE = "episteme.toml"
-INDEX_DIR = ".episteme"
+INDEX_DIR = ".index"
 
 
 @dataclass(frozen=True)
@@ -83,7 +83,7 @@ def today() -> dt.date:
 
 
 def is_ignored(rel: str) -> bool:
-    """Dot folders (.obsidian, .episteme, .git…) and non-Markdown files are invisible."""
+    """Dot folders (.obsidian, .index, .git…) and non-Markdown files are invisible."""
     parts = PurePosixPath(rel).parts
     return any(p.startswith(".") for p in parts[:-1]) or not rel.lower().endswith(".md")
 

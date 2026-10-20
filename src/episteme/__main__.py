@@ -8,7 +8,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from episteme_mcp.errors import StartupError
+from episteme.errors import StartupError
 
 
 def _check_fts5() -> None:
@@ -20,11 +20,31 @@ def _check_fts5() -> None:
         ) from exc
 
 
+DEFAULT_TOML = """\
+# Vault global de episteme, creado al arrancar sin --vault ni EPISTEME_VAULT.
+# Una ruta que no está en ninguna zona es de solo lectura.
+
+[zones."memory"]
+mode = "memory"
+"""
+
+
+def default_vault() -> Path:
+    return Path.home() / ".episteme"
+
+
 def resolve_vault(arg: str | None) -> Path:
-    """Return the vault path from ``--vault`` or ``EPISTEME_VAULT``, or raise StartupError."""
+    """Return the vault from ``--vault``, ``EPISTEME_VAULT`` or ``~/.episteme``.
+
+    An explicit path must already be a vault; only the default one is created when missing.
+    """
     raw = arg or os.environ.get("EPISTEME_VAULT")
     if not raw:
-        raise StartupError("no vault given. Pass --vault <absolute path> or set EPISTEME_VAULT.")
+        path = default_vault()
+        if not path.exists():
+            path.mkdir(parents=True)
+            (path / "episteme.toml").write_text(DEFAULT_TOML, encoding="utf-8")
+        raw = str(path)
     path = Path(raw)
     if not path.is_absolute():
         raise StartupError(f'vault path "{raw}" is not absolute. Pass an absolute path.')
@@ -40,9 +60,11 @@ def resolve_vault(arg: str | None) -> Path:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="episteme-mcp", description="MCP server for an episteme Markdown vault."
+        prog="episteme", description="MCP server for an episteme Markdown vault."
     )
-    parser.add_argument("--vault", help="absolute path of the vault (or EPISTEME_VAULT)")
+    parser.add_argument(
+        "--vault", help="absolute path of the vault (or EPISTEME_VAULT; default ~/.episteme)"
+    )
     parser.add_argument("--project", help="default project for memory tools, e.g. fabrik")
     return parser.parse_args(argv)
 
@@ -52,11 +74,11 @@ def main(argv: list[str] | None = None) -> None:
     try:
         vault = resolve_vault(args.vault)
         _check_fts5()
-        from episteme_mcp.server import build_server
+        from episteme.server import build_server
 
         server = build_server(vault, args.project)
     except StartupError as exc:
-        print(f"episteme-mcp: {exc}", file=sys.stderr)
+        print(f"episteme: {exc}", file=sys.stderr)
         sys.exit(2)
     server.run("stdio")
 

@@ -1,12 +1,12 @@
 ---
 type: lesson
 kind: procedural
-project: episteme-mcp
+project: episteme
 priority: 4
 status: active
 created: 2026-10-20
 tags: [pieza/wikilinks, herramienta/obsidian]
-files: [src/episteme_mcp/markdown.py, src/episteme_mcp/links.py]
+files: [src/episteme/markdown.py, src/episteme/links.py]
 source: PR #1
 helpful: 0
 ---

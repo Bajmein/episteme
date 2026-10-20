@@ -1,12 +1,12 @@
 ---
 type: decision
 kind: semantic
-project: episteme-mcp
+project: episteme
 priority: 4
 status: active
 created: 2026-10-20
 tags: [pieza/hooks, pieza/hookmode]
-files: [src/episteme_mcp/hookmode.py]
+files: [src/episteme/hookmode.py]
 source: PLAN.md@v0.1.0 (Modo hook, Hooks sobre tools)
 helpful: 0
 ---

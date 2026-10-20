@@ -4,11 +4,11 @@ Guía para Claude Code en este repo.
 
 ## Qué es
 
-`episteme-mcp` es un servidor MCP en Python que sirve un vault Markdown compatible con Obsidian (documentación y memoria de proyectos). El uso, los argumentos, los 10 tools y el bloque de hooks están en `README.md`; el contrato de cada tool, en sus docstrings.
+`episteme` es un servidor MCP en Python que sirve un vault Markdown compatible con Obsidian (documentación y memoria de proyectos). El uso, los argumentos, los 10 tools y el bloque de hooks están en `README.md`; el contrato de cada tool, en sus docstrings.
 
 - La interfaz es **solo tools MCP**: no hay CLI para el agente. El único script es `scripts/migrate_omega.py`, que la persona corre una vez en local.
 - Alcance cerrado: no hay tools para mover, renombrar, borrar o crear notas fuera de `memory/`, ni sync, web, HTTP o embeddings.
-- Los invariantes por módulo están en `.claude/rules/` y se cargan al tocar esos archivos. El porqué de las decisiones está en las memorias de episteme (`search` con `project="episteme-mcp"`), o en `docs/memorias/` mientras no se hayan pasado al vault.
+- Los invariantes por módulo están en `.claude/rules/` y se cargan al tocar esos archivos. El porqué de las decisiones está en las memorias de episteme (`search` con `project="episteme"`), o en `docs/memorias/` mientras no se hayan pasado al vault.
 
 ## Cómo se trabaja
 

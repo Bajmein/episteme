@@ -1,7 +1,7 @@
 ---
 paths:
-  - src/episteme_mcp/hookmode.py
-  - src/episteme_mcp/checkpoint.py
+  - src/episteme/hookmode.py
+  - src/episteme/checkpoint.py
 ---
 
 # Modo hook

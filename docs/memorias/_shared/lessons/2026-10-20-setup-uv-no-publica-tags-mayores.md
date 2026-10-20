@@ -7,7 +7,7 @@ status: active
 created: 2026-10-20
 tags: [herramienta/github-actions, herramienta/uv]
 files: [.github/workflows/ci.yml]
-source: episteme-mcp PR #1
+source: episteme PR #1
 helpful: 0
 ---
 # astral-sh/setup-uv no publica tags mayores flotantes

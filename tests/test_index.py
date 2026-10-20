@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from episteme_mcp.index import Index, query_terms
-from episteme_mcp.vault import Vault
+from episteme.index import Index, query_terms
+from episteme.vault import Vault
 
 
 def _index(vault: Path) -> Index:
@@ -103,7 +103,7 @@ def test_new_note_makes_link_ambiguous(vault: Path) -> None:
 def test_corrupt_index_is_rebuilt(vault: Path) -> None:
     ix = _index(vault)
     ix.close()
-    db = vault / ".episteme/index.db"
+    db = vault / ".index/index.db"
     for suffix in ("-wal", "-shm"):
         Path(f"{db}{suffix}").unlink(missing_ok=True)
     db.write_bytes(b"this is not a database" * 100)
@@ -113,7 +113,7 @@ def test_corrupt_index_is_rebuilt(vault: Path) -> None:
 
 def test_missing_index_is_rebuilt(vault: Path) -> None:
     _index(vault).close()
-    for p in (vault / ".episteme").iterdir():
+    for p in (vault / ".index").iterdir():
         p.unlink()
     ix = _index(vault)
     assert ix.note("memory/_shared/perfil.md") is not None

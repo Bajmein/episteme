@@ -158,5 +158,5 @@ def test_case13_concurrent_writers(vault: Path) -> None:
     anyio.run(check)
     import sqlite3
 
-    conn = sqlite3.connect(vault / ".episteme/index.db")
+    conn = sqlite3.connect(vault / ".index/index.db")
     assert conn.execute("pragma integrity_check").fetchone()[0] == "ok"

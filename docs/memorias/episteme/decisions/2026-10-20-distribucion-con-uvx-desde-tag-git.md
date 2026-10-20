@@ -1,7 +1,7 @@
 ---
 type: decision
 kind: semantic
-project: episteme-mcp
+project: episteme
 priority: 4
 status: active
 created: 2026-10-20
@@ -12,7 +12,7 @@ helpful: 0
 ---
 # Distribución con uvx desde un tag git+ssh, en scope local
 
-`episteme-mcp` se registra con `claude mcp add --scope local episteme -- uvx --from git+ssh://git@github.com/Bajmein/episteme-mcp@<tag> episteme-mcp --vault … --project …`.
+`episteme` se registra con `claude mcp add --scope local episteme -- uvx --from git+ssh://git@github.com/Bajmein/episteme@<tag> episteme --project …`. Sin `--vault` usa el vault global `~/.episteme`.
 
 - `uvx` + tag: la versión queda fijada en la propia config, no instala nada global, tira de caché tras la primera vez y corre como el usuario (los archivos quedan con su dueño). Actualizar es cambiar el tag.
 - `git+ssh` porque el repo es privado: usa la misma clave que `git push`. `git+https` pediría un token.

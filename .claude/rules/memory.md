@@ -1,6 +1,6 @@
 ---
 paths:
-  - src/episteme_mcp/memory.py
+  - src/episteme/memory.py
   - scripts/migrate_omega.py
 ---
 

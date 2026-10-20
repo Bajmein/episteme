@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from episteme_mcp import memory
-from episteme_mcp.engine import Engine
-from episteme_mcp.errors import EpistemeError
+from episteme import memory
+from episteme.engine import Engine
+from episteme.errors import EpistemeError
 
 
 @pytest.fixture

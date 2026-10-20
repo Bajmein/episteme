@@ -18,10 +18,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
 
-from episteme_mcp import memory
-from episteme_mcp.engine import Engine
-from episteme_mcp.errors import EpistemeError, StartupError
-from episteme_mcp.markdown import load_frontmatter, split_frontmatter
+from episteme import memory
+from episteme.engine import Engine
+from episteme.errors import EpistemeError, StartupError
+from episteme.markdown import load_frontmatter, split_frontmatter
 
 TYPE_MAP = {
     "decision": "decision",

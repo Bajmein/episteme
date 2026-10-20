@@ -1,4 +1,4 @@
-# Vault de prueba de episteme-mcp. Mismas zonas que el vault real.
+# Vault de prueba de episteme. Mismas zonas que el vault real.
 
 [zones."docs/claude-code"]
 mode = "read-only"
