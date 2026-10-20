@@ -2,7 +2,7 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.1.0 implementada (10 tools, índice SQLite, modo hook y migración de OMEGA). El plan está en [`PLAN.md`](PLAN.md).
+> Estado: v0.1.0 implementada (10 tools, índice SQLite, modo hook y migración de OMEGA).
 
 ## Instalación
 
