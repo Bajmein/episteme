@@ -2,7 +2,7 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.1.0 implementada (10 tools, índice SQLite, modo hook y migración de OMEGA). El plan está en [`PLAN.md`](PLAN.md).
+> Estado: v0.1.0 implementada (10 tools, índice SQLite, modo hook y migración de OMEGA).
 
 ## Instalación
 
@@ -11,14 +11,16 @@ Se distribuye con `uvx` desde un tag de GitHub. El repo es privado, así que se 
 ```bash
 claude mcp add --scope local episteme -- \
   uvx --from git+ssh://git@github.com/Bajmein/episteme-mcp@v0.1.0 episteme-mcp \
-  --vault /home/ana/src/episteme --project fabrik
+  --vault '${HOME}/src/episteme' --project fabrik
 ```
+
+Las comillas simples guardan `${HOME}` tal cual y Claude Code lo expande al arrancar el servidor, así la config no lleva la ruta de la máquina. Con `~` o comillas dobles la shell lo expande al registrar y queda la ruta completa.
 
 Actualizar es cambiar el tag. Para desarrollo, una entrada aparte que no fija versión:
 
 ```bash
 claude mcp add --scope local episteme-dev -- \
-  uv run --directory ~/src/episteme-mcp episteme-mcp --vault /home/ana/src/episteme
+  uv run --directory '${HOME}/src/episteme-mcp' episteme-mcp --vault '${HOME}/src/episteme'
 ```
 
 Requiere Python 3.11 o superior con SQLite y FTS5 (el servidor lo comprueba al arrancar).
@@ -151,7 +153,7 @@ Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__s
 ```bash
 omega export-obsidian --output-dir /tmp/omega --project fabrik --limit 1000
 uv run scripts/migrate_omega.py --export /tmp/omega/omega-memories \
-  --vault /home/ana/src/episteme --project fabrik --dry-run
+  --vault "$HOME/src/episteme" --project fabrik --dry-run
 ```
 
 Sin `--dry-run` escribe. Usa la misma validación y detección de duplicados que `remember`, así que una segunda ejecución no duplica nada. Los `checkpoint` se descartan y las etiquetas `dominio:x` pasan a `dominio/x`.
