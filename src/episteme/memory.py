@@ -71,8 +71,9 @@ OMIT_WHEN_EMPTY = {
 }
 DUPLICATE = 0.8
 SIMILAR = 0.5
-ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive")
-MEMORY_ACTIONS = ("supersede", "feedback", "archive")
+ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
+MEMORY_ACTIONS = ("supersede", "feedback", "archive", "dismiss")
+UPCOMING_DAYS = 7
 
 
 def kind_for(type_: str) -> str:
@@ -430,6 +431,10 @@ def revise(
             result["changed"] = nf.set_fields({"flagged": True})
     elif action == "archive":
         result["changed"] = nf.set_fields({"status": "archived"})
+    elif action == "dismiss":
+        if nf.fm.get("type") != "reminder":
+            raise invalid(f"dismiss only applies to reminders, and {rel} is not one.")
+        result["changed"] = nf.set_fields({"status": "archived"})
 
     nf.save()
     return result
@@ -498,54 +503,80 @@ def entry_line(row: Any) -> str:
     return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']}){tail}"
 
 
-def welcome(engine: Engine, project: str | None) -> tuple[str, list[dict[str, Any]]]:
-    """The welcome text: overdue reminders, then the best memories (10 entries, 4000 chars)."""
+def welcome(
+    engine: Engine, project: str | None, upcoming_days: int = UPCOMING_DAYS
+) -> tuple[str, list[dict[str, Any]]]:
+    """The welcome text (4000 chars max).
+
+    Sections, in order: overdue reminders, "Normas" (every active priority-5 memory, whatever
+    its age), "Vencen pronto" (reminders due within ``upcoming_days``) and "Memorias" (the
+    10 best by score, without the norms already listed).
+    """
     project = engine.need_project(project)
     now = today()
     iso = now.isoformat()
+    soon = (now + dt.timedelta(days=upcoming_days)).isoformat()
     rows = engine.index.memories(
         "project in (?, '_shared') and status = 'active'", (project,)
     )
     reminders = sorted(
-        (r for r in rows if r["type"] == "reminder" and r["due"] and r["due"] <= iso),
+        (r for r in rows if r["type"] == "reminder" and r["due"]),
         key=lambda r: (r["due"], r["path"]),
     )
+    overdue = [r for r in reminders if r["due"] <= iso]
+    upcoming = [r for r in reminders if iso < r["due"] <= soon]
     candidates = [
         r
         for r in rows
         if r["type"] not in ("session", "reminder")
         and not (r["valid_until"] and r["valid_until"] < iso)
     ]
+    norms = sorted(
+        (r for r in candidates if r["priority"] == 5),
+        key=lambda r: (_neg_date(r["created"]), r["path"]),
+    )
     scored = sorted(
-        ((welcome_score(r, now), r) for r in candidates),
+        ((welcome_score(r, now), r) for r in candidates if r["priority"] != 5),
         key=lambda x: (-x[0], _neg_date(x[1]["created"]), x[1]["path"]),
     )
     header = f"episteme · memoria de {project}"
     lines = [header]
     entries: list[dict[str, Any]] = []
     budget = 4000 - len(header) - 1
+    ranked = 0
 
-    def add(line: str, section: str | None) -> bool:
-        nonlocal budget
+    def add(line: str, section: str | None, ranked_entry: bool = False) -> bool:
+        nonlocal budget, ranked
         extra = len(line) + 1 + (len(section) + 1 if section else 0)
-        if len(entries) >= 10 or extra > budget:
+        if (ranked_entry and ranked >= 10) or extra > budget:
             return False
         if section:
             lines.append(section)
         lines.append(line)
         budget -= extra
+        ranked += ranked_entry
         return True
 
+    def reminder_lines(rows_: list[Any], section: str) -> None:
+        first = True
+        for r in rows_:
+            line = f"- [{r['due']}] {r['title']} ({r['path']})"
+            if not add(line, section if first else None):
+                break
+            first = False
+            entries.append({"path": r["path"], "score": None, "kind": "reminder"})
+
+    reminder_lines(overdue, "Recordatorios vencidos:")
     first = True
-    for r in reminders:
-        line = f"- [{r['due']}] {r['title']} ({r['path']})"
-        if not add(line, "Recordatorios vencidos:" if first else None):
+    for r in norms:
+        if not add(entry_line(r), "Normas:" if first else None):
             break
         first = False
-        entries.append({"path": r["path"], "score": None, "kind": "reminder"})
+        entries.append({"path": r["path"], "score": None, "kind": "norm"})
+    reminder_lines(upcoming, f"Vencen pronto ({upcoming_days} días):")
     first = True
     for score, r in scored:
-        if not add(entry_line(r), "Memorias:" if first else None):
+        if not add(entry_line(r), "Memorias:" if first else None, True):
             break
         first = False
         entries.append({"path": r["path"], "score": round(score, 4), "kind": "memory"})

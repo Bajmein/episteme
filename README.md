@@ -72,7 +72,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
 | `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`) |
-| `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory`; `supersede`, `feedback` y `archive` solo en memorias |
+| `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory`; `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
 | `review(path?, project?, limit=50)` | sí | Memorias viejas, contradicciones posibles, huérfanas, enlaces rotos, frontmatter inválido y marcadas |
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
 | `surface(file, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin las constraints |

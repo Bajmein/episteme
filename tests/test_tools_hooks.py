@@ -23,16 +23,19 @@ async def test_case9_welcome_once_per_session(vault: Path) -> None:
         assert lines[0] == "episteme · memoria de fabrik"
         assert lines[1] == "Recordatorios vencidos:"
         assert lines[2].startswith("- [2026-10-21] Correr las trigger queries")
-        assert lines[3] == "Memorias:"
+        assert lines[3] == "Normas:"
         paths = [e["path"] for e in first["entries"]]
-        assert paths == [
-            "memory/fabrik/reminders/2026-10-18-revisar-trigger-queries.md",
-            "memory/fabrik/decisions/2026-10-02-serena-ty.md",
-            "memory/_shared/perfil.md",
+        norms = [e["path"] for e in first["entries"] if e["kind"] == "norm"]
+        assert "memory/fabrik/decisions/2026-10-02-serena-ty.md" in norms
+        assert paths[0] == "memory/fabrik/reminders/2026-10-18-revisar-trigger-queries.md"
+        assert paths[1 : 1 + len(norms)] == norms
+        assert "Memorias:" in lines
+        assert "memory/_shared/perfil.md" in norms
+        assert paths[1 + len(norms) :] == [
             CONSTRAINT,
             "memory/fabrik/lessons/2026-10-14-omega-rss-limit.md",
         ]
-        scores = [e["score"] for e in first["entries"][1:]]
+        scores = [e["score"] for e in first["entries"] if e["kind"] == "memory"]
         assert scores == sorted(scores, reverse=True)
         assert "serena-pyright" not in first["text"]
         assert "— Serena pasa de `pyright` a `ty` 0.0.89" in first["text"]
