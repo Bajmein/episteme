@@ -26,6 +26,15 @@ CONFIG_FILE = "episteme.toml"
 INDEX_DIR = ".index"
 
 
+@dataclass
+class DirListing:
+    """A cached directory listing: visible subdirectories and ``.md`` notes (relative paths)."""
+
+    mtime_ns: int
+    subdirs: list[str]
+    notes: list[str]
+
+
 @dataclass(frozen=True)
 class Zone:
     path: str
@@ -125,24 +134,60 @@ class Vault:
 
     def iter_notes(self) -> Iterator[tuple[str, os.stat_result]]:
         """Every visible ``.md`` note with its stat, skipping symlinks that leave the vault."""
-        for dirpath, dirnames, filenames in os.walk(self.root):
-            dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
-            base = Path(dirpath)
-            for name in sorted(filenames):
-                if not name.lower().endswith(".md"):
+        yield from self.scan_notes({})
+
+    def scan_notes(self, cache: dict[str, DirListing]) -> Iterator[tuple[str, os.stat_result]]:
+        """Like ``iter_notes``, reusing a directory's listing while its mtime is unchanged.
+
+        A directory's mtime moves when an entry is added, removed or renamed (also on atomic
+        replace), so the listing is only rebuilt then. Files are always stat-ed: an in-place
+        edit does not touch the directory. ``cache`` (keyed by relative dir, ``""`` for the root)
+        is updated in place and pruned of directories that no longer exist.
+        """
+        seen: set[str] = set()
+        stack = [""]
+        while stack:
+            reldir = stack.pop()
+            base = self.root / reldir if reldir else self.root
+            try:
+                dir_mtime = base.stat().st_mtime_ns
+            except OSError:
+                continue
+            seen.add(reldir)
+            listing = cache.get(reldir)
+            if listing is None or listing.mtime_ns != dir_mtime:
+                listing = self._list_dir(base, reldir, dir_mtime)
+                cache[reldir] = listing
+            stack.extend(reversed(listing.subdirs))
+            for rel in listing.notes:
+                try:
+                    st = (self.root / rel).stat()
+                except OSError:
                     continue
-                path = base / name
-                rel = path.relative_to(self.root).as_posix()
-                if path.is_symlink():
+                yield rel, st
+        for gone in set(cache) - seen:
+            del cache[gone]
+
+    def _list_dir(self, base: Path, reldir: str, mtime_ns: int) -> DirListing:
+        subdirs: list[str] = []
+        notes: list[str] = []
+        try:
+            entries = sorted(os.scandir(base), key=lambda e: e.name)
+        except OSError:
+            return DirListing(mtime_ns, [], [])
+        for entry in entries:
+            rel = f"{reldir}/{entry.name}" if reldir else entry.name
+            if entry.is_dir(follow_symlinks=False):
+                if not entry.name.startswith("."):
+                    subdirs.append(rel)
+            elif entry.name.lower().endswith(".md"):
+                if entry.is_symlink():
                     try:
                         self.resolve(rel)
                     except EpistemeError:
                         continue
-                try:
-                    st = path.stat()
-                except OSError:
-                    continue
-                yield rel, st
+                notes.append(rel)
+        return DirListing(mtime_ns, subdirs, notes)
 
     # -- zones -------------------------------------------------------------
 
