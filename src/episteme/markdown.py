@@ -91,9 +91,26 @@ def load_frontmatter(raw: str | None) -> tuple[dict[str, Any], bool, str | None]
     return {str(k): v for k, v in data.items()}, True, None
 
 
+class _FrontmatterDumper(yaml.SafeDumper):
+    """One key per line; lists inline (``tags: [a, b]``), as Obsidian writes them."""
+
+
+_FrontmatterDumper.add_representer(
+    list,
+    lambda dumper, data: dumper.represent_sequence("tag:yaml.org,2002:seq", data, flow_style=True),
+)
+
+
 def dump_frontmatter(data: dict[str, Any]) -> str:
-    text = yaml.safe_dump(
-        data, sort_keys=False, allow_unicode=True, default_flow_style=None, width=1000
+    # default_flow_style=None would also inline a mapping made only of scalars, so a memory
+    # without lists got its whole frontmatter on one line.
+    text = yaml.dump(
+        data,
+        Dumper=_FrontmatterDumper,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+        width=1000,
     )
     return f"---\n{text}---\n"
 

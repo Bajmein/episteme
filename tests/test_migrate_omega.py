@@ -127,6 +127,7 @@ def test_migration_and_idempotency(vault: Path) -> None:
     out = proc.stdout
     assert "project_status (descartada)" in out
     assert "(edit pattern)" in out and "(captura automática)" in out
+    assert "(texto del harness) mem-a0b1c2d3e4f5" in out
     assert "duplicada de mem-1b2c3d4e5f60" in out
     assert "(proyecto vigilia)" in out
     assert not any(p.parent.name == "insights" for p in new)
