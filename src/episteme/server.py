@@ -252,7 +252,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str,
             Field(
                 description="edit (old, new) | append (text, heading?) | set (fields) | "
-                "supersede (by) | feedback (value) | archive"
+                "supersede (by) | feedback (value) | archive | dismiss (reminders)"
             ),
         ],
         old: Annotated[str | None, Field(description="edit: text that appears once.")] = None,
@@ -274,8 +274,9 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     ) -> str:
         """Change a note in a read-write or memory zone. Read-only zones are refused.
 
-        supersede, feedback and archive only apply to memories. Memories are validated against
-        the schema before anything is written. Returns JSON {"path", "action", "changed"}.
+        supersede, feedback, archive and dismiss (archives a reminder) only apply to memories.
+        Memories are validated against the schema before anything is written.
+        Returns JSON {"path", "action", "changed"}.
         """
         with engine.session():
             return dump(
@@ -327,7 +328,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     ) -> str:
         """Load project memory: the session welcome, or a context pack for a task.
 
-        welcome: overdue reminders, then the highest-scoring active memories.
+        welcome: overdue reminders, the active priority-5 norms, reminders due within 7 days,
+        then the highest-scoring active memories.
         task: decisions, constraints and lessons matching the task (Spanish stopwords ignored,
         weak matches dropped), within budget_tokens, plus up to 5 related notes to open with read.
         Returns JSON {"text", "entries": [{"path", "score", "kind"}]} with every score on a 0-1

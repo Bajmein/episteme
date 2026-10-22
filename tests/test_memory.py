@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 from pathlib import Path
 
@@ -11,6 +12,8 @@ import yaml
 from episteme import memory
 from episteme.engine import Engine
 from episteme.errors import EpistemeError
+from episteme.memory import NoteFile
+from episteme.vault import today
 
 
 @pytest.fixture
@@ -160,7 +163,7 @@ def test_welcome_caps(engine: Engine) -> None:
             force=True,
         )  # fmt: skip
     text, entries = memory.welcome(engine, "fabrik")
-    assert len(entries) == 10
+    assert sum(e["kind"] == "memory" for e in entries) == 10
     assert len(text) <= 4000
     assert all(len(line) < 400 for line in text.splitlines())
 
@@ -173,3 +176,31 @@ def test_review_reports_memory_without_project(engine: Engine, vault: Path) -> N
     engine.index.refresh()
     out = memory.review(engine, None, None, 50)
     assert rel in {x["path"] for x in out["invalid_frontmatter"]}
+
+
+def test_welcome_keeps_old_norm_and_lists_upcoming_reminders(engine: Engine, vault: Path) -> None:
+    norm = memory.remember(engine, "constraint", "Norma vieja", "Siempre validar.", priority=5)[
+        "path"
+    ]
+    nf = NoteFile(engine, norm)
+    nf.set_fields({"created": dt.date(2025, 1, 1)})
+    nf.save()
+    for i in range(12):
+        memory.remember(engine, "insight", f"Reciente {i} {'y' * i}", f"Cuerpo {i}.", force=True)
+    soon = (today() + dt.timedelta(days=3)).isoformat()
+    far = (today() + dt.timedelta(days=30)).isoformat()
+    near = memory.remember(engine, "reminder", "Pronto", "x", due=soon)["path"]
+    memory.remember(engine, "reminder", "Lejano", "x", due=far)
+    text, entries = memory.welcome(engine, "fabrik")
+    lines = text.splitlines()
+    assert lines.index("Normas:") < lines.index("Memorias:")
+    assert any(e["path"] == norm and e["kind"] == "norm" for e in entries)
+    assert "Vencen pronto (7 días):" in lines
+    assert near in {e["path"] for e in entries}
+    assert "Lejano" not in text
+    memory.revise(engine, near, "dismiss")
+    assert _fm(vault / near)["status"] == "archived"
+    assert "Pronto" not in memory.welcome(engine, "fabrik")[0]
+    with pytest.raises(EpistemeError) as err:
+        memory.revise(engine, norm, "dismiss")
+    assert err.value.code == "invalid_argument"
