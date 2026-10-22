@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import fnmatch
+import json
 import math
 import os
 from pathlib import PurePosixPath
@@ -589,11 +590,40 @@ def file_matches(file: str, rel: str, entry: str) -> bool:
     return rel == entry or file.endswith("/" + entry) or rel.endswith("/" + entry)
 
 
-def _files_of(engine: Engine, rel: str) -> list[str]:
-    files = engine.index.props(rel).get("files")
-    if isinstance(files, str):
-        return [files]
-    return [f for f in files if isinstance(f, str)] if isinstance(files, list) else []
+def _as_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    return [f for f in value if isinstance(f, str)] if isinstance(value, list) else []
+
+
+def _files_of(engine: Engine) -> dict[str, list[str]]:
+    """The ``files`` entries of every note that has them, in one query: ``{path: [entry]}``."""
+    return {
+        r["path"]: _as_list(json.loads(r["value"]))
+        for r in engine.index.conn.execute("select path, value from props where key = 'files'")
+    }
+
+
+def _hook_file(
+    file: str, relative_path: str | None, project_dir: str | None
+) -> tuple[str, str] | None:
+    """The file a hook is about: ``file`` or, for Serena edits, ``relative_path``; None if both
+    are empty."""
+    chosen = (file or "").strip() or (relative_path or "").strip()
+    return (chosen, project_relative(chosen, project_dir)) if chosen else None
+
+
+def _name_is_unambiguous(rel: str, name: str, files: dict[str, list[str]]) -> bool:
+    """True when no other known path in the project shares the base name ``name``."""
+    if name == rel:
+        return False
+    for entries in files.values():
+        for e in entries:
+            e = e.strip().replace("\\", "/").removeprefix("./")
+            if e and not any(c in e for c in "*?[") and e != rel and PurePosixPath(e).name == name:
+                if not rel.endswith("/" + e) and not e.endswith("/" + rel):
+                    return False
+    return True
 
 
 def _by_priority(rows: list[Any]) -> list[Any]:
@@ -601,23 +631,33 @@ def _by_priority(rows: list[Any]) -> list[Any]:
 
 
 def surface(
-    engine: Engine, file: str, project_dir: str | None, project: str | None, limit: int
+    engine: Engine,
+    file: str,
+    project_dir: str | None,
+    project: str | None,
+    limit: int,
+    relative_path: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if not (1 <= limit <= 50):
         raise invalid(f"limit must be 1-50, got {limit}.")
-    if not file or not file.strip():
-        raise invalid("file is empty. Pass the path of the file being edited.")
     project = engine.need_project(project)
-    rel = project_relative(file, project_dir)
+    target = _hook_file(file, relative_path, project_dir)
+    if target is None:
+        return "", {"file": "", "memories": []}
+    file, rel = target
     rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active' and type != 'constraint'", (project,)
+        "project in (?, '_shared') and status = 'active'"
+        " and type not in ('constraint', 'session', 'reminder')"
+        " and (valid_until is null or valid_until >= ?)",
+        (project, today().isoformat()),
     )
+    files = _files_of(engine)
     by_files = _by_priority(
-        [r for r in rows if any(file_matches(file, rel, e) for e in _files_of(engine, r["path"]))]
+        [r for r in rows if any(file_matches(file, rel, e) for e in files.get(r["path"], []))]
     )
     seen = {r["path"] for r in by_files}
     name = PurePosixPath(rel).name
-    query = f'"{rel}"' + (f' "{name}"' if name != rel else "")
+    query = f'"{rel}"' + (f' "{name}"' if _name_is_unambiguous(rel, name, files) else "")
     hits, _ = engine.index.search(
         query, any_term=True, mode=MEMORY, project=[project, "_shared"], limit=1000
     )
@@ -645,17 +685,25 @@ def surface(
 
 
 def constraints(
-    engine: Engine, file: str, project_dir: str | None, project: str | None
+    engine: Engine,
+    file: str,
+    project_dir: str | None,
+    project: str | None,
+    relative_path: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    if not file or not file.strip():
-        raise invalid("file is empty. Pass the path of the file being edited.")
     project = engine.need_project(project)
-    rel = project_relative(file, project_dir)
+    target = _hook_file(file, relative_path, project_dir)
+    if target is None:
+        return "", {"file": "", "constraints": []}
+    file, rel = target
     rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active' and type = 'constraint'", (project,)
+        "project in (?, '_shared') and status = 'active' and type = 'constraint'"
+        " and (valid_until is null or valid_until >= ?)",
+        (project, today().isoformat()),
     )
+    files = _files_of(engine)
     found = _by_priority(
-        [r for r in rows if any(file_matches(file, rel, e) for e in _files_of(engine, r["path"]))]
+        [r for r in rows if any(file_matches(file, rel, e) for e in files.get(r["path"], []))]
     )
     items = [
         {
@@ -701,6 +749,7 @@ def task_context(
     raw = [h.score for h in hits]
     lo, hi = (min(raw), max(raw)) if raw else (0.0, 0.0)
     scored = []
+    files = _files_of(engine)
     for h in hits:
         row = rows[h.path]
         relevance = 1.0 if hi == lo else (h.score - lo) / (hi - lo)
@@ -709,7 +758,7 @@ def task_context(
             + 0.3 * ((row["priority"] or 1) - 1) / 4
             + 0.2 * recency(row["created"], now)
         )
-        pinned = row["type"] == "constraint" and bool(_files_of(engine, h.path))
+        pinned = row["type"] == "constraint" and bool(files.get(h.path))
         if pinned or score >= MIN_CONTEXT_SCORE:
             scored.append((pinned, score, row))
     scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))

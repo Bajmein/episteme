@@ -41,7 +41,15 @@ ProjectDir = Annotated[
     Field(description="Absolute project directory (hooks pass ${cwd}); used to relativize file."),
 ]
 FileArg = Annotated[
-    str, Field(description="File being edited: absolute or relative to the project.")
+    str,
+    Field(
+        description="File being edited: absolute or relative to the project. "
+        "Empty (with no relative_path) returns an empty result."
+    ),
+]
+RelativePathArg = Annotated[
+    str | None,
+    Field(description="Serena edits pass relative_path instead of file; used when file is empty."),
 ]
 
 
@@ -346,9 +354,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def surface(
-        file: FileArg,
+        file: FileArg = "",
         project_dir: ProjectDir = None,
         project: ProjectArg = None,
+        relative_path: RelativePathArg = None,
         limit: Annotated[int, Field(description="Maximum memories, 1-50.")] = 5,
         hook_event: HookEvent = None,
     ) -> str:
@@ -358,14 +367,15 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         hookmode.check(hook_event)
         with engine.session():
-            text, data = memory.surface(engine, file, project_dir, project, limit)
+            text, data = memory.surface(engine, file, project_dir, project, limit, relative_path)
         return hookmode.render(hook_event, text) if hook_event else dump(data)
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def constraints(
-        file: FileArg,
+        file: FileArg = "",
         project_dir: ProjectDir = None,
         project: ProjectArg = None,
+        relative_path: RelativePathArg = None,
         hook_event: HookEvent = None,
     ) -> str:
         """Active constraints whose files match a file. Warns before editing; never blocks.
@@ -374,7 +384,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         hookmode.check(hook_event)
         with engine.session():
-            text, data = memory.constraints(engine, file, project_dir, project)
+            text, data = memory.constraints(engine, file, project_dir, project, relative_path)
         return hookmode.render(hook_event, text) if hook_event else dump(data)
 
     @server.tool(structured_output=False)

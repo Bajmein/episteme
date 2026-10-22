@@ -75,8 +75,8 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory`; `supersede`, `feedback` y `archive` solo en memorias |
 | `review(path?, project?, limit=50, zone?)` | sí | Memorias viejas, contradicciones posibles, huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
-| `surface(file, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin las constraints |
-| `constraints(file, project_dir?, project?, hook_event?)` | sí | Constraints activas que aplican a un archivo. Avisa, no bloquea |
+| `surface(file?, relative_path?, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin constraints, `session` ni `reminder`; el nombre base solo cuenta si es inequívoco; ignora las vencidas por `valid_until`. `relative_path` sustituye a `file` en las ediciones con Serena; sin ninguno, salida vacía |
+| `constraints(file?, relative_path?, project_dir?, project?, hook_event?)` | sí | Constraints activas (no vencidas) que aplican a un archivo. Avisa, no bloquea |
 | `checkpoint(action="save"\|"restore", project_dir?, project?, hook_event?)` | no | Guarda el `estado.md` activo (sin la Bitácora) como memoria de sesión, o devuelve el último vigente |
 
 Los nombres de nota aceptan una ruta relativa al vault (con o sin `.md`) o un nombre que se resuelve como un wikilink: ruta exacta, nombre base, `aliases`. Si hay varios candidatos, el error `ambiguous` los lista. Dentro de una nota, un `[[nombre]]` repetido prefiere la nota de su misma carpeta, como Obsidian; si ninguna está ahí, el enlace queda ambiguo (roto en `review`). Los `#hex` (`#fff`, `#a1b2c3`; con al menos un dígito o una sola letra repetida, así que `#bad` o `#cafe` siguen siendo tags) y el texto dentro de código (bloques, indentado e inline) no cuentan como tags.
@@ -119,15 +119,19 @@ Bloque para el `settings.json` del proyecto:
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PreToolUse": [
-      { "matcher": "Edit|Write",
+      { "matcher": "Edit|Write|mcp__serena__.*",
         "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "constraints",
-                    "input": { "file": "${tool_input.file_path}", "project_dir": "${cwd}",
+                    "input": { "file": "${tool_input.file_path}",
+                               "relative_path": "${tool_input.relative_path}",
+                               "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PostToolUse": [
-      { "matcher": "Edit|Write",
+      { "matcher": "Edit|Write|mcp__serena__.*",
         "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "surface",
-                    "input": { "file": "${tool_input.file_path}", "project_dir": "${cwd}",
+                    "input": { "file": "${tool_input.file_path}",
+                               "relative_path": "${tool_input.relative_path}",
+                               "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PreCompact": [
