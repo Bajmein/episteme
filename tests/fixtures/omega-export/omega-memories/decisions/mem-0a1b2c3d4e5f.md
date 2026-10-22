@@ -1,7 +1,7 @@
 ---
 id: mem-0a1b2c3d4e5f
 type: decision
-tags: [dominio:auth, pieza:serena_guard, /fd/eza/yq/mdq, fabrik, python]
+tags: [dominio:auth, pieza:serena_guard, /.claude/hooks/serena_guard.py, /home/ana/src/fabrik, fabrik, python]
 created: 2026-10-05T12:00:00.000000+00:00
 strength: 0.40
 project: fabrik

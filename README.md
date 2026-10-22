@@ -158,10 +158,19 @@ Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__s
 ```bash
 omega export-obsidian --output-dir /tmp/omega --project fabrik --limit 1000
 uv run scripts/migrate_omega.py --export /tmp/omega/omega-memories \
-  --vault "$HOME/.episteme" --project fabrik --dry-run
+  --vault "$HOME/.episteme" --project fabrik \
+  --omega-db ~/.omega/omega.db \
+  --map-project /home/ana/src/fabrik=fabrik --dry-run
 ```
 
-Sin `--dry-run` escribe. Usa la misma validación y detección de duplicados que `remember`, así que una segunda ejecución no duplica nada. Los `checkpoint` se descartan y las etiquetas `dominio:x` pasan a `dominio/x`.
+Sin `--dry-run` escribe; `--dry-run` cuenta lo mismo que la ejecución real. Usa la misma validación y detección de duplicados que `remember`, así que una segunda ejecución no duplica nada. Qué hace con cada cosa:
+
+- Se descartan los `checkpoint`, los `project_status`, los «Edit pattern…», las capturas automáticas de sesión y las reemplazadas en OMEGA.
+- Se quitan los prefijos «fabrik (fecha):», «Decision:», «Lesson:» y «Assistant fix:».
+- Las etiquetas `dominio:x` pasan a `dominio/x`; las que son una ruta pasan a `files`; el resto se descarta. `helpful` queda en 0.
+- `source` lleva el id de OMEGA (`omega:mem-…`): una memoria con ese `source` ya en el vault no se vuelve a crear. Entre duplicados del export se queda el más reciente por fecha.
+- `--omega-db` abre `omega.db` solo para lectura (`mode=ro`) y no toca nada de `~/.omega`. De ahí salen `priority` (el export no la trae) y los recordatorios: los `pending` pasan a `reminder` con `due` = `remind_at`; los `dismissed` no se migran.
+- `--map-project VIEJO=NUEVO` (repetible) lleva proyectos de OMEGA, por nombre o ruta, a uno de episteme. Lo que no sea `--project` ni esté mapeado se omite.
 
 ## Desarrollo
 

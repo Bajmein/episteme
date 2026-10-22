@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -11,12 +14,14 @@ from conftest import FIXTURES
 
 SCRIPT = Path(__file__).parents[1] / "scripts/migrate_omega.py"
 EXPORT = FIXTURES / "omega-export/omega-memories"
+MAP = "/home/ana/src/fabrik=fabrik"
 
 
-def _run(vault: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+def _run(vault: Path, *extra: str, mapped: bool = True) -> subprocess.CompletedProcess[str]:
+    args = ["--map-project", MAP] if mapped else []
     return subprocess.run(
         [sys.executable, str(SCRIPT), "--export", str(EXPORT), "--vault", str(vault),
-         "--project", "fabrik", *extra],
+         "--project", "fabrik", *args, *extra],
         capture_output=True, text=True, timeout=120, env={"EPISTEME_TODAY": "2026-10-19"},
     )  # fmt: skip
 
@@ -27,6 +32,49 @@ def _memories(vault: Path) -> set[Path]:
 
 def _fm(path: Path) -> dict:
     return yaml.safe_load(path.read_text().split("---\n")[1])
+
+
+def _summary(proc: subprocess.CompletedProcess[str]) -> str:
+    return proc.stdout.splitlines()[-1].split(": ", 1)[1]
+
+
+def _make_db(path: Path) -> None:
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "create table memories (id integer primary key autoincrement, node_id text unique,"
+        " content text, metadata text, created_at text, event_type text, project text,"
+        " priority integer, status text)"
+    )
+    rows = [
+        ("mem-0a1b2c3d4e5f", "x", {}, "decision", "fabrik", 5, "active"),
+        ("mem-1b2c3d4e5f60", "x", {}, "lesson_learned", "fabrik", 4, "active"),
+        ("mem-4e5f60718293", "x", {}, "session_summary", "fabrik", 2, "active"),
+        (
+            "mem-aaaaaaaaaaaa",
+            "fabrik (19-10-2026): revisar la PR de explore antes de cerrar.",
+            {"reminder_status": "pending", "remind_at": "2026-11-02T10:00:00+00:00",
+             "context": "Ver docs/flujo.md.", "tags": ["pieza:explore", "/docs/flujo.md"]},
+            "reminder", "fabrik", 5, "active",
+        ),
+        (
+            "mem-bbbbbbbbbbbb", "fabrik: recordatorio descartado.",
+            {"reminder_status": "dismissed", "remind_at": "2026-10-20T10:00:00+00:00"},
+            "reminder", "fabrik", 3, "active",
+        ),
+        (
+            "mem-cccccccccccc", "otro: recordatorio de otro proyecto.",
+            {"reminder_status": "pending", "remind_at": "2026-11-03T10:00:00+00:00"},
+            "reminder", "otro", 3, "active",
+        ),
+    ]  # fmt: skip
+    for node_id, content, meta, event, project, priority, status in rows:
+        conn.execute(
+            "insert into memories (node_id, content, metadata, created_at, event_type, project,"
+            " priority, status) values (?, ?, ?, '2026-10-19T08:00:00+00:00', ?, ?, ?, ?)",
+            (node_id, content, json.dumps(meta), event, project, priority, status),
+        )
+    conn.commit()
+    conn.close()
 
 
 def test_dry_run_writes_nothing(vault: Path) -> None:
@@ -45,28 +93,44 @@ def test_migration_and_idempotency(vault: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     new = _memories(vault) - before
     folders = sorted(p.parent.name for p in new)
-    assert folders == ["decisions", "insights", "lessons", "sessions"]
+    assert folders == ["decisions", "errors", "lessons", "sessions"]
     lines = proc.stdout.splitlines()
     assert sum(line.startswith("+ ") for line in lines) == 4
     assert lines[-1].startswith("Resumen:")
 
     decision = next(p for p in new if p.parent.name == "decisions")
     fm = _fm(decision)
-    assert fm["type"] == "decision" and fm["priority"] == 4
+    assert fm["type"] == "decision" and fm["priority"] == 4  # no DB: the default
     assert str(fm["created"]) == "2026-10-05"
     assert fm["tags"] == ["dominio/auth", "pieza/serena_guard"]
-    assert fm["helpful"] == 3
+    assert fm["files"] == [".claude/hooks/serena_guard.py"]  # the project root tag is dropped
+    assert fm["source"] == "omega:mem-0a1b2c3d4e5f"
+    assert "helpful" not in fm or fm["helpful"] == 0  # never access_count (3 here)
+    body = decision.read_text()
+    assert "# serena_guard deja pasar `cd $VAR`" in body  # «fabrik (fecha):» removed
     lesson = next(p for p in new if p.parent.name == "lessons")
     assert fm["related"] == [f"[[{lesson.stem}]]"]
     lfm = _fm(lesson)
-    assert lfm["source"] == "session 00000000-0000-4000-8000-000000000001"
-    assert lfm["tags"] == ["pieza/omega"]
+    assert lfm["source"] == "omega:mem-1b2c3d4e5f60"
+    assert lfm["tags"] == ["pieza/omega"] and lfm["files"] == [".claude/settings.json"]
     assert lfm["related"] == [f"[[{decision.stem}]]"]
+    assert "# el watchdog de OMEGA" in lesson.read_text()  # «Lesson:» removed
+    assert lfm["created"].isoformat() == "2026-10-14"  # the newer duplicate stays
+    error = next(p for p in new if p.parent.name == "errors")
+    assert "# codemap.py check daba" in error.read_text()  # «Assistant fix:» removed
+    assert _fm(error)["files"] == ["plugins/fabrik/skills/explore/scripts/codemap.py"]
     title = decision.read_text().split("\n# ", 1)[1].split("\n", 1)[0]
     assert len(title) <= 80
     session = next(p for p in new if p.parent.name == "sessions")
     assert _fm(session)["kind"] == "episodic"
-    assert "tags" not in _fm(next(p for p in new if p.parent.name == "insights"))
+
+    out = proc.stdout
+    assert "project_status (descartada)" in out
+    assert "(edit pattern)" in out and "(captura automática)" in out
+    assert "duplicada de mem-1b2c3d4e5f60" in out
+    assert "(proyecto vigilia)" in out
+    assert not any(p.parent.name == "insights" for p in new)
+    assert not any("reminder" in line for line in lines if line.startswith("+ "))
 
     texts = {p: p.read_text() for p in _memories(vault)}
     again = _run(vault)
@@ -76,6 +140,59 @@ def test_migration_and_idempotency(vault: Path) -> None:
     assert {p: p.read_text() for p in _memories(vault)} == texts
 
 
+def test_unmapped_project_is_skipped(vault: Path) -> None:
+    before = _memories(vault)
+    proc = _run(vault, mapped=False)
+    assert proc.returncode == 0, proc.stderr
+    assert "(proyecto /home/ana/src/fabrik)" in proc.stdout
+    assert {p.parent.name for p in _memories(vault) - before} == {
+        "decisions",
+        "lessons",
+        "sessions",
+    }
+
+
+def test_omega_db_priority_and_reminders(vault: Path, tmp_path: Path) -> None:
+    db = tmp_path / "omega.db"
+    _make_db(db)
+    digest = hashlib.sha256(db.read_bytes()).hexdigest()
+    before = _memories(vault)
+
+    dry = _run(vault, "--omega-db", str(db), "--dry-run")
+    assert dry.returncode == 0, dry.stderr
+    assert _memories(vault) == before
+    real = _run(vault, "--omega-db", str(db))
+    assert real.returncode == 0, real.stderr
+    assert _summary(dry) == _summary(real)  # dry-run counts what the real run does
+    assert "reminder 1" in _summary(real)
+    assert hashlib.sha256(db.read_bytes()).hexdigest() == digest  # OMEGA is only read
+
+    new = _memories(vault) - before
+    by_type = {_fm(p)["type"]: _fm(p) for p in new}
+    assert by_type["decision"]["priority"] == 5
+    assert by_type["lesson"]["priority"] == 4
+    assert by_type["session"]["priority"] == 2
+    reminder = next(p for p in new if p.parent.name == "reminders")
+    fm = _fm(reminder)
+    assert fm["priority"] == 5 and str(fm["due"]) == "2026-11-02"
+    assert fm["source"] == "omega:mem-aaaaaaaaaaaa"
+    assert fm["tags"] == ["pieza/explore"] and fm["files"] == ["docs/flujo.md"]
+    text = reminder.read_text()
+    assert "# revisar la PR de explore" in text and "Ver docs/flujo.md." in text
+    assert len([p for p in new if p.parent.name == "reminders"]) == 1  # dismissed/other: no
+
+    again = _run(vault, "--omega-db", str(db))
+    assert "+ " not in again.stdout and "existente:reminder 1" in again.stdout
+    assert _memories(vault) - before == new
+
+
 def test_bad_vault(tmp_path: Path) -> None:
     proc = _run(tmp_path)
     assert proc.returncode != 0 and "episteme.toml" in proc.stderr
+
+
+def test_bad_db_and_map(vault: Path, tmp_path: Path) -> None:
+    proc = _run(vault, "--omega-db", str(tmp_path / "nope.db"))
+    assert proc.returncode == 2 and "omega.db" in proc.stderr
+    proc = _run(vault, "--map-project", "sin-igual")
+    assert proc.returncode == 2 and "OLD=NEW" in proc.stderr
