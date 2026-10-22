@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from episteme.links import Resolver
+from episteme.links import Resolver, _strip_md
 from episteme.markdown import (
     ParsedNote,
     fold,
@@ -20,9 +20,12 @@ from episteme.markdown import (
     normalize_heading,
     parse,
 )
-from episteme.vault import INDEX_DIR, MEMORY, Vault
+from episteme.vault import INDEX_DIR, MEMORY, DirListing, Vault
 
 SCHEMA_VERSION = "1"
+
+# ``welcomed`` rows older than this are dropped when a new session is recorded.
+WELCOMED_TTL_DAYS = 30
 
 SCHEMA = """
 create table meta(key text primary key, value text);
@@ -117,6 +120,7 @@ class Index:
         self.db_path = self.dir / "index.db"
         self.generation = 0
         self._resolver: tuple[tuple[int, int], Resolver] | None = None
+        self._dirs: dict[str, DirListing] = {}
         self.conn = self._open()
 
     # -- connection --------------------------------------------------------
@@ -220,7 +224,7 @@ class Index:
 
     def refresh(self) -> bool:
         """Reindex what changed on disk since the last call. True if anything changed."""
-        disk = {rel: (st.st_mtime_ns, st.st_size) for rel, st in self.vault.iter_notes()}
+        disk = {rel: (st.st_mtime_ns, st.st_size) for rel, st in self.vault.scan_notes(self._dirs)}
         stored = {
             r["path"]: (r["mtime_ns"], r["size"])
             for r in self.conn.execute("select path, mtime_ns, size from notes")
@@ -235,15 +239,7 @@ class Index:
             if item is not None:
                 parsed.append(item)
 
-        def apply() -> None:
-            for rel in removed:
-                self._delete(rel)
-            for rel, sig, note in parsed:
-                self._delete(rel)
-                self._insert(rel, sig, note)
-            self._relink()
-
-        self._in_transaction(self.conn, apply)
+        self._in_transaction(self.conn, lambda: self._apply(removed, parsed))
         self.generation += 1
         return True
 
@@ -251,14 +247,37 @@ class Index:
         """Reindex one note right after a tool wrote it."""
         item = self._load(rel)
 
-        def apply() -> None:
-            self._delete(rel)
-            if item is not None:
-                self._insert(*item)
-            self._relink()
-
-        self._in_transaction(self.conn, apply)
+        self._in_transaction(
+            self.conn, lambda: self._apply([] if item else [rel], [item] if item else [])
+        )
         self.generation += 1
+
+    def _apply(
+        self, removed: list[str], items: list[tuple[str, tuple[int, int], ParsedNote]]
+    ) -> None:
+        """Delete and insert notes, then re-resolve only the links they can affect."""
+        new = {item[0] for item in items}
+        before = {rel: self._aliases_of(rel) for rel in [*removed, *new]}
+        for rel in removed:
+            self._delete(rel)
+        for rel, sig, note in items:
+            self._delete(rel)
+            self._insert(rel, sig, note)
+        paths: set[str] = set()
+        aliases: set[str] = set()
+        for rel, old in before.items():
+            now = self._aliases_of(rel) if rel in new else None
+            if (old is None) != (now is None):
+                paths.add(rel)
+            aliases |= (old or set()) ^ (now or set())
+        self._relink(set(before), paths, aliases)
+
+    def _aliases_of(self, rel: str) -> set[str] | None:
+        """Normalized aliases of an indexed note, or None if ``rel`` is not indexed."""
+        if self.conn.execute("select 1 from notes where path = ?", (rel,)).fetchone() is None:
+            return None
+        rows = self.conn.execute("select alias from aliases where path = ?", (rel,))
+        return {a for (a,) in ((r["alias"].strip().lower(),) for r in rows) if a}
 
     def _load(self, rel: str) -> tuple[str, tuple[int, int], ParsedNote] | None:
         path = self.vault.root / rel
@@ -340,19 +359,64 @@ class Index:
             [(rel, lk.target, lk.kind, lk.heading, lk.block, lk.line) for lk in note.links],
         )
 
-    def _relink(self) -> None:
-        """Resolve every link again: a new or removed note can change any of them."""
-        resolver = self._build_resolver()
+    def _relink(self, changed: set[str], paths: set[str], aliases: set[str]) -> None:
+        """Resolve again only the links that can have changed.
+
+        ``changed`` are the notes just reindexed, ``paths`` those that appeared or vanished and
+        ``aliases`` the aliases gained or lost (normalized). A link is redone if it starts in a
+        changed note, points at one (its heading may have moved) or names something a touched
+        path or alias can answer to.
+        """
+        keys: set[str] = set()
+        names: set[str] = set()
+        stems: list[str] = []
+        for path in paths:
+            stem = _strip_md(path).lower()
+            keys.update((path.lower(), stem))
+            names.add(stem.rsplit("/", 1)[-1])
+            stems.append(stem)
+        verdicts: dict[str, bool] = {}
+
+        def touched(raw: str) -> bool:
+            if raw not in verdicts:
+                key = raw.strip().replace("\\", "/").strip("/").lower()
+                stem = _strip_md(key)
+                if key in keys or key in aliases:
+                    hit = True
+                elif "/" in stem:
+                    hit = any(s.endswith("/" + stem) for s in stems)
+                else:
+                    hit = stem in names
+                verdicts[raw] = hit
+            return verdicts[raw]
+
+        resolver: Resolver | None = None
         headings: dict[str, set[str]] = {}
-        for r in self.conn.execute("select path, text from headings"):
-            headings.setdefault(r["path"], set()).add(normalize_heading(r["text"]))
         updates = []
-        for r in self.conn.execute("select rowid, src, dst_raw, heading from links"):
-            dst = r["src"] if not r["dst_raw"] else resolver.resolve_quiet(r["dst_raw"])
+        rows = self.conn.execute(
+            "select rowid, src, dst_raw, dst_path, heading, heading_missing from links"
+        ).fetchall()
+        for r in rows:
+            if r["src"] not in changed and r["dst_path"] not in changed:
+                if not r["dst_raw"] or not touched(r["dst_raw"]):
+                    continue
+            if not r["dst_raw"]:
+                dst = r["src"]
+            else:
+                resolver = resolver or self._build_resolver()
+                dst = resolver.resolve_quiet(r["dst_raw"])
             missing = 0
             if dst is not None and r["heading"]:
-                missing = int(normalize_heading(r["heading"]) not in headings.get(dst, set()))
-            updates.append((dst, missing, r["rowid"]))
+                if dst not in headings:
+                    headings[dst] = {
+                        normalize_heading(h["text"])
+                        for h in self.conn.execute(
+                            "select text from headings where path = ?", (dst,)
+                        )
+                    }
+                missing = int(normalize_heading(r["heading"]) not in headings[dst])
+            if (dst, missing) != (r["dst_path"], r["heading_missing"]):
+                updates.append((dst, missing, r["rowid"]))
         self.conn.executemany(
             "update links set dst_path = ?, heading_missing = ? where rowid = ?", updates
         )
@@ -404,6 +468,10 @@ class Index:
         """Record that ``session`` got its welcome. False if it already had."""
 
         def insert() -> bool:
+            cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=WELCOMED_TTL_DAYS)
+            self.conn.execute(
+                "delete from welcomed where at < ?", (cutoff.isoformat(timespec="seconds"),)
+            )
             cur = self.conn.execute(
                 "insert or ignore into welcomed(session_id, at) values (?, ?)",
                 (session, dt.datetime.now(dt.UTC).isoformat(timespec="seconds")),
