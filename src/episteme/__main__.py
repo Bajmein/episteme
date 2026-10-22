@@ -26,6 +26,9 @@ DEFAULT_TOML = """\
 
 [zones."memory"]
 mode = "memory"
+
+[checkpoint]
+state_glob = ".fabrik/**/estado.md"   # relativo a project_dir
 """
 
 

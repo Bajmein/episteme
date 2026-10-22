@@ -17,4 +17,4 @@ helpful: 0
 - `save` (hook `PreCompact`) toma el `estado.md` con `estado: activo` más reciente y guarda `memory/<proyecto>/sessions/checkpoint-<slug>.md`, uno por tarea que se sobrescribe, con Plan, Progreso, Decisiones, Trampas y Siguientes pasos. La Bitácora queda fuera porque es un registro largo que no ayuda a retomar.
 - `valid_until` a 7 días: un checkpoint más viejo ya no describe la tarea.
 - Nunca bloquea `PreCompact`: no devuelve `decision: "block"` ni JSON. Sin estado activo, `saved: false` sin error.
-- `restore` (hook `SessionStart` con `compact|clear`) devuelve el checkpoint vigente más reciente del proyecto.
+- `restore` (hook `SessionStart` con `compact|clear`) lee primero el `estado.md` activo vivo de `project_dir`: el de la rama `<tipo>/<ID>-<change>`, si no el más reciente, con una línea de flujo (`etapa` y avance del `tasks.md` hermano). Sin estado activo cae al checkpoint vigente más reciente. `task_title` retoma una tarea concreta. Al restaurar un estado vivo se archivan los checkpoints guardados de tareas sin estado activo, para que un `/clear` no resucite otra tarea.

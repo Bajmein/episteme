@@ -77,7 +77,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
 | `surface(file, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin las constraints |
 | `constraints(file, project_dir?, project?, hook_event?)` | sí | Constraints activas que aplican a un archivo. Avisa, no bloquea |
-| `checkpoint(action="save"\|"restore", project_dir?, project?, hook_event?)` | no | Guarda el `estado.md` activo (sin la Bitácora) como memoria de sesión, o devuelve el último vigente |
+| `checkpoint(action="save"\|"restore", project_dir?, project?, task_title?, hook_event?)` | no | `save` guarda el `estado.md` activo (sin la Bitácora) como memoria de sesión. `restore` lee primero el `estado.md` activo vivo (el de la rama `<tipo>/<ID>-<change>`, si no el más reciente) con una línea de flujo (`etapa` y avance de `tasks.md`); sin estado activo cae al último checkpoint vigente. `task_title` retoma esa tarea. Archiva los checkpoints de tareas sin estado activo |
 
 Los nombres de nota aceptan una ruta relativa al vault (con o sin `.md`) o un nombre que se resuelve como un wikilink: ruta exacta, nombre base, `aliases`. Si hay varios candidatos, el error `ambiguous` los lista.
 
