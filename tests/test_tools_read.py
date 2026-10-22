@@ -130,3 +130,27 @@ async def test_search_filters_and_superseded(vault: Path) -> None:
         assert res["total"] == 2
         res = await c.ok("search", query="serena", tags=["pieza"], project="fabrik", limit=1)
         assert res["total"] >= 2 and len(res["results"]) == 1
+
+
+async def test_search_without_query_by_tags_or_type(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        res = await c.ok("search", tags=["pieza"], project="fabrik")
+        assert res["total"] >= 2 and "match" not in res
+        res = await c.ok("search", type="decision", project="fabrik")
+        assert res["total"] >= 1
+        assert (await c.ok("search", tags=["pieza:serena"]))["total"] == (
+            await c.ok("search", tags=["pieza/serena"])
+        )["total"]
+        err = await c.error("search")
+        assert err.startswith("invalid_argument:")
+
+
+async def test_search_or_fallback_and_prefix(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        res = await c.ok("search", query="zzzinexistente qqqnada")
+        assert res["total"] == 0 and "match" not in res
+        res = await c.ok("search", query="serena PreToolUse")
+        assert res["results"] and res["match"] == "or" and "OR" in res["note"]
+        res = await c.ok("search", query="pretool*")
+        assert any("hooks-reference" in r["path"] for r in res["results"])
+        assert (await c.ok("search", query="pretool"))["total"] == 0

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -23,28 +24,27 @@ async def test_case9_welcome_once_per_session(vault: Path) -> None:
         assert lines[0] == "episteme · memoria de fabrik"
         assert lines[1] == "Recordatorios vencidos:"
         assert lines[2].startswith("- [2026-10-21] Correr las trigger queries")
-        assert lines[3] == "Memorias:"
+        assert lines[3] == "Normas:"
         paths = [e["path"] for e in first["entries"]]
-        assert paths == [
-            "memory/fabrik/reminders/2026-10-18-revisar-trigger-queries.md",
-            "memory/fabrik/decisions/2026-10-02-serena-ty.md",
-            "memory/_shared/perfil.md",
+        norms = [e["path"] for e in first["entries"] if e["kind"] == "norm"]
+        assert "memory/fabrik/decisions/2026-10-02-serena-ty.md" in norms
+        assert paths[0] == "memory/fabrik/reminders/2026-10-18-revisar-trigger-queries.md"
+        assert paths[1 : 1 + len(norms)] == norms
+        assert "Memorias:" in lines
+        assert "memory/_shared/perfil.md" in norms
+        assert paths[1 + len(norms) :] == [
             CONSTRAINT,
             "memory/fabrik/lessons/2026-10-14-omega-rss-limit.md",
         ]
-        scores = [e["score"] for e in first["entries"][1:]]
+        scores = [e["score"] for e in first["entries"] if e["kind"] == "memory"]
         assert scores == sorted(scores, reverse=True)
         assert "serena-pyright" not in first["text"]
         assert "— Serena pasa de `pyright` a `ty` 0.0.89" in first["text"]
         second = await c.ok("context", mode="welcome", session="s1")
         assert second == {"text": "", "entries": [], "already_sent": True}
-        hook = await c.call(
-            "context", mode="welcome", session="s2", hook_event="UserPromptSubmit"
-        )
+        hook = await c.call("context", mode="welcome", session="s2", hook_event="UserPromptSubmit")
         assert hook[0] is False and hook[1].startswith("episteme · memoria de fabrik")
-        again = await c.call(
-            "context", mode="welcome", session="s2", hook_event="UserPromptSubmit"
-        )
+        again = await c.call("context", mode="welcome", session="s2", hook_event="UserPromptSubmit")
         assert again == (False, "")
 
 
@@ -82,9 +82,7 @@ async def test_case10_surface_and_constraints(vault: Path) -> None:
 
 async def test_case15_hook_output(vault: Path) -> None:
     async with mcp_client(vault) as c:
-        await c.ok(
-            "remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD]
-        )
+        await c.ok("remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD])
         for tool, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
             is_error, text = await c.call(tool, file=GUARD, hook_event=event)
             assert not is_error
@@ -103,9 +101,7 @@ async def test_case16_absolute_file_with_project_dir(vault: Path, tmp_path: Path
     project = tmp_path / "proyecto"
     (project / ".claude/hooks").mkdir(parents=True)
     async with mcp_client(vault) as c:
-        res = await c.ok(
-            "constraints", file=str(project / GUARD), project_dir=str(project)
-        )
+        res = await c.ok("constraints", file=str(project / GUARD), project_dir=str(project))
         assert res["file"] == GUARD
         assert [x["path"] for x in res["constraints"]] == [CONSTRAINT]
         res = await c.ok("constraints", file=str(project / "data.py"), project_dir=str(project))
@@ -129,8 +125,9 @@ async def test_case11_checkpoint_save_and_restore(vault: Path, project_dir: Path
         assert "## Siguientes pasos" in text
         assert "Bitácora" not in text and "salida larga de pytest" not in text
 
-        restored = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        restored = await c.ok("checkpoint", action="restore")
         assert restored["found"] is True and restored["path"] == saved["path"]
+        assert restored["source"] == "checkpoint"
         assert "Tests de error" in restored["content"]
         assert "Bitácora" not in restored["content"]
         hook = await c.call(
@@ -148,7 +145,7 @@ async def test_restore_ignores_expired(vault: Path, project_dir: Path) -> None:
     async with mcp_client(vault) as c:
         await c.ok("checkpoint", action="save", project_dir=str(project_dir))
     async with mcp_client(vault, today="2026-11-30") as c:
-        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        res = await c.ok("checkpoint", action="restore")
         assert res["found"] is False
 
 
@@ -167,3 +164,145 @@ async def test_checkpoint_without_state_glob(vault: Path, project_dir: Path) -> 
     async with mcp_client(vault) as c:
         text = await c.error("checkpoint", action="save", project_dir=str(project_dir))
         assert text.startswith("invalid_argument:") and "state_glob" in text
+
+
+def _change(project: Path, name: str, estado: str = "activo", etapa: str = "build") -> Path:
+    folder = project / ".fabrik/core" / name
+    folder.mkdir(parents=True)
+    (folder / "estado.md").write_text(
+        f"---\ntask_title: {name}\nestado: {estado}\netapa: {etapa}\n---\n"
+        f"# Estado · {name}\n\n## Progreso\n- trabajo de {name}\n\n"
+        "## Siguientes pasos\n1. seguir\n"
+    )
+    return folder
+
+
+def _branch(project: Path, ref: str) -> None:
+    (project / ".git").mkdir()
+    (project / ".git/HEAD").write_text(f"ref: refs/heads/{ref}\n")
+
+
+async def test_restore_live_state_of_branch(vault: Path, project_dir: Path) -> None:
+    other = _change(project_dir, "002-otro")
+    (other / "tasks.md").write_text("- [x] T1 a\n- [~] T2 b\n- [ ] T3 c\n")
+    _branch(project_dir, "feat/002-otro")
+    async with mcp_client(vault) as c:
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["source"] == "state" and res["task_title"] == "002-otro"
+        assert res["path"] == ".fabrik/core/002-otro/estado.md"
+        first = res["content"].splitlines()[0]
+        assert first == (
+            "Flujo fabrik: change 002-otro (core), etapa build, "
+            "tasks 1/3, en curso T2, siguiente T3"
+        )
+        assert "trabajo de 002-otro" in res["content"] and "001" not in res["content"]
+
+
+async def test_restore_newest_when_branch_is_not_a_change(vault: Path, project_dir: Path) -> None:
+    other = _change(project_dir, "002-otro")
+    old = project_dir / ".fabrik/core/001-demo/estado.md"
+    os.utime(old, (1, 1))
+    _branch(project_dir, "main")
+    async with mcp_client(vault) as c:
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["task_title"] == "002-otro" and other.is_dir()
+        assert "tasks" not in res["content"].splitlines()[0]
+
+
+async def test_restore_by_task_title(vault: Path, project_dir: Path) -> None:
+    _change(project_dir, "002-otro")
+    _branch(project_dir, "feat/001-demo")
+    async with mcp_client(vault) as c:
+        res = await c.ok(
+            "checkpoint", action="restore", project_dir=str(project_dir), task_title="002-otro"
+        )
+        assert res["task_title"] == "002-otro" and res["source"] == "state"
+        res = await c.ok(
+            "checkpoint", action="restore", project_dir=str(project_dir), task_title="nope"
+        )
+        assert res["found"] is False
+
+
+async def test_restore_falls_back_then_archives_stale(vault: Path, project_dir: Path) -> None:
+    async with mcp_client(vault) as c:
+        saved = await c.ok("checkpoint", action="save", project_dir=str(project_dir))
+        state = project_dir / ".fabrik/core/001-demo/estado.md"
+        state.write_text(state.read_text().replace("estado: activo", "estado: cerrado"))
+        # No active state: the saved checkpoint is the fallback.
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["source"] == "checkpoint" and res["path"] == saved["path"]
+        # Another task becomes active: the stale checkpoint is archived, not restored again.
+        _change(project_dir, "002-otro")
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["task_title"] == "002-otro"
+        assert "status: archived" in (vault / saved["path"]).read_text()
+        res = await c.ok("checkpoint", action="restore")
+        assert res["found"] is False
+
+
+async def test_surface_relative_path_and_empty_file(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        mem = await c.ok(
+            "remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD]
+        )
+        res = await c.ok("surface", relative_path=GUARD)
+        assert [m["path"] for m in res["memories"]] == [mem["path"]]
+        cons = await c.ok("constraints", file="", relative_path=GUARD)
+        assert [x["path"] for x in cons["constraints"]] == [CONSTRAINT]
+        assert await c.ok("surface", file="") == {"file": "", "memories": []}
+        assert await c.ok("constraints") == {"file": "", "constraints": []}
+        for tool, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
+            assert await c.call(tool, file="", hook_event=event) == (False, "")
+
+
+async def test_surface_excludes_session_and_reminder(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok(
+            "remember",
+            type="reminder",
+            title="Recordar guard",
+            body=f"Ver `{GUARD}`.",
+            due="2026-10-25",
+        )
+        await c.ok("remember", type="session", title="Sesion guard", body=f"Toca `{GUARD}`.")
+        res = await c.ok("surface", file=GUARD)
+        assert {m["type"] for m in res["memories"]}.isdisjoint({"session", "reminder"})
+
+
+async def test_surface_basename_only_when_unambiguous(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok(
+            "remember", type="insight", title="Sobre util", body="Cuidado con `util.py` al editar."
+        )
+        res = await c.ok("surface", file="src/a/util.py")
+        assert [m["match"] for m in res["memories"]] == ["mention"]
+        await c.ok(
+            "remember", type="lesson", title="Otro util", body="x" * 50, files=["src/b/util.py"]
+        )
+        res = await c.ok("surface", file="src/a/util.py")
+        assert res["memories"] == []
+
+
+async def test_surface_and_constraints_skip_expired(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-19") as c:
+        await c.ok(
+            "remember",
+            type="lesson",
+            title="Vence pronto",
+            body="x" * 50,
+            files=["src/v.py"],
+            valid_until="2026-10-30",
+        )
+        await c.ok(
+            "remember",
+            type="constraint",
+            title="Regla vence",
+            body="x" * 50,
+            files=["src/v.py"],
+            valid_until="2026-10-30",
+        )
+        assert len((await c.ok("surface", file="src/v.py"))["memories"]) == 1
+        assert len((await c.ok("constraints", file="src/v.py"))["constraints"]) == 1
+    async with mcp_client(vault, today="2026-11-05") as c:
+        assert (await c.ok("surface", file="src/v.py"))["memories"] == []
+        assert (await c.ok("constraints", file="src/v.py"))["constraints"] == []

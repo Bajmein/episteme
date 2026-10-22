@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import datetime as dt
 import fnmatch
+import json
 import math
 import os
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invalid
-from episteme.index import as_date, as_int
+from episteme.index import STOPWORDS_ES, as_date, as_int
 from episteme.markdown import (
     body_without_title,
     clip,
@@ -24,7 +25,7 @@ from episteme.markdown import (
     split_frontmatter,
     tokens,
 )
-from episteme.vault import MEMORY, today
+from episteme.vault import MEMORY, READ_ONLY, today
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -71,8 +72,10 @@ OMIT_WHEN_EMPTY = {
 }
 DUPLICATE = 0.8
 SIMILAR = 0.5
-ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive")
-MEMORY_ACTIONS = ("supersede", "feedback", "archive")
+MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left out
+ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
+MEMORY_ACTIONS = ("supersede", "feedback", "archive", "dismiss")
+UPCOMING_DAYS = 7
 
 
 def kind_for(type_: str) -> str:
@@ -175,7 +178,8 @@ def similarity(a: set[str], b: set[str]) -> float:
 
 
 def dedup_tokens(title: str, body: str) -> set[str]:
-    return set(tokens(f"{title}\n{body}", min_len=3))
+    toks = tokens(f"{title}\n{body}", min_len=3)
+    return {t for t in toks if t not in STOPWORDS_ES}
 
 
 def wikilink(engine: Engine, rel: str) -> str:
@@ -390,7 +394,7 @@ def revise(
         result["changed"] = ["body"]
     elif action == "set":
         if not fields:
-            raise invalid("set needs fields, e.g. {\"priority\": 5}.")
+            raise invalid('set needs fields, e.g. {"priority": 5}.')
         fields = {k: _coerce(k, v) for k, v in fields.items()}
         result["changed"] = nf.set_fields(fields)
     elif action == "supersede":
@@ -429,6 +433,10 @@ def revise(
         else:
             result["changed"] = nf.set_fields({"flagged": True})
     elif action == "archive":
+        result["changed"] = nf.set_fields({"status": "archived"})
+    elif action == "dismiss":
+        if nf.fm.get("type") != "reminder":
+            raise invalid(f"dismiss only applies to reminders, and {rel} is not one.")
         result["changed"] = nf.set_fields({"status": "archived"})
 
     nf.save()
@@ -498,54 +506,78 @@ def entry_line(row: Any) -> str:
     return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']}){tail}"
 
 
-def welcome(engine: Engine, project: str | None) -> tuple[str, list[dict[str, Any]]]:
-    """The welcome text: overdue reminders, then the best memories (10 entries, 4000 chars)."""
+def welcome(
+    engine: Engine, project: str | None, upcoming_days: int = UPCOMING_DAYS
+) -> tuple[str, list[dict[str, Any]]]:
+    """The welcome text (4000 chars max).
+
+    Sections, in order: overdue reminders, "Normas" (every active priority-5 memory, whatever
+    its age), "Vencen pronto" (reminders due within ``upcoming_days``) and "Memorias" (the
+    10 best by score, without the norms already listed).
+    """
     project = engine.need_project(project)
     now = today()
     iso = now.isoformat()
-    rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active'", (project,)
-    )
+    soon = (now + dt.timedelta(days=upcoming_days)).isoformat()
+    rows = engine.index.memories("project in (?, '_shared') and status = 'active'", (project,))
     reminders = sorted(
-        (r for r in rows if r["type"] == "reminder" and r["due"] and r["due"] <= iso),
+        (r for r in rows if r["type"] == "reminder" and r["due"]),
         key=lambda r: (r["due"], r["path"]),
     )
+    overdue = [r for r in reminders if r["due"] <= iso]
+    upcoming = [r for r in reminders if iso < r["due"] <= soon]
     candidates = [
         r
         for r in rows
         if r["type"] not in ("session", "reminder")
         and not (r["valid_until"] and r["valid_until"] < iso)
     ]
+    norms = sorted(
+        (r for r in candidates if r["priority"] == 5),
+        key=lambda r: (_neg_date(r["created"]), r["path"]),
+    )
     scored = sorted(
-        ((welcome_score(r, now), r) for r in candidates),
+        ((welcome_score(r, now), r) for r in candidates if r["priority"] != 5),
         key=lambda x: (-x[0], _neg_date(x[1]["created"]), x[1]["path"]),
     )
     header = f"episteme · memoria de {project}"
     lines = [header]
     entries: list[dict[str, Any]] = []
     budget = 4000 - len(header) - 1
+    ranked = 0
 
-    def add(line: str, section: str | None) -> bool:
-        nonlocal budget
+    def add(line: str, section: str | None, ranked_entry: bool = False) -> bool:
+        nonlocal budget, ranked
         extra = len(line) + 1 + (len(section) + 1 if section else 0)
-        if len(entries) >= 10 or extra > budget:
+        if (ranked_entry and ranked >= 10) or extra > budget:
             return False
         if section:
             lines.append(section)
         lines.append(line)
         budget -= extra
+        ranked += ranked_entry
         return True
 
+    def reminder_lines(rows_: list[Any], section: str) -> None:
+        first = True
+        for r in rows_:
+            line = f"- [{r['due']}] {r['title']} ({r['path']})"
+            if not add(line, section if first else None):
+                break
+            first = False
+            entries.append({"path": r["path"], "score": None, "kind": "reminder"})
+
+    reminder_lines(overdue, "Recordatorios vencidos:")
     first = True
-    for r in reminders:
-        line = f"- [{r['due']}] {r['title']} ({r['path']})"
-        if not add(line, "Recordatorios vencidos:" if first else None):
+    for r in norms:
+        if not add(entry_line(r), "Normas:" if first else None):
             break
         first = False
-        entries.append({"path": r["path"], "score": None, "kind": "reminder"})
+        entries.append({"path": r["path"], "score": None, "kind": "norm"})
+    reminder_lines(upcoming, f"Vencen pronto ({upcoming_days} días):")
     first = True
     for score, r in scored:
-        if not add(entry_line(r), "Memorias:" if first else None):
+        if not add(entry_line(r), "Memorias:" if first else None, True):
             break
         first = False
         entries.append({"path": r["path"], "score": round(score, 4), "kind": "memory"})
@@ -589,11 +621,40 @@ def file_matches(file: str, rel: str, entry: str) -> bool:
     return rel == entry or file.endswith("/" + entry) or rel.endswith("/" + entry)
 
 
-def _files_of(engine: Engine, rel: str) -> list[str]:
-    files = engine.index.props(rel).get("files")
-    if isinstance(files, str):
-        return [files]
-    return [f for f in files if isinstance(f, str)] if isinstance(files, list) else []
+def _as_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    return [f for f in value if isinstance(f, str)] if isinstance(value, list) else []
+
+
+def _files_of(engine: Engine) -> dict[str, list[str]]:
+    """The ``files`` entries of every note that has them, in one query: ``{path: [entry]}``."""
+    return {
+        r["path"]: _as_list(json.loads(r["value"]))
+        for r in engine.index.conn.execute("select path, value from props where key = 'files'")
+    }
+
+
+def _hook_file(
+    file: str, relative_path: str | None, project_dir: str | None
+) -> tuple[str, str] | None:
+    """The file a hook is about: ``file`` or, for Serena edits, ``relative_path``; None if both
+    are empty."""
+    chosen = (file or "").strip() or (relative_path or "").strip()
+    return (chosen, project_relative(chosen, project_dir)) if chosen else None
+
+
+def _name_is_unambiguous(rel: str, name: str, files: dict[str, list[str]]) -> bool:
+    """True when no other known path in the project shares the base name ``name``."""
+    if name == rel:
+        return False
+    for entries in files.values():
+        for e in entries:
+            e = e.strip().replace("\\", "/").removeprefix("./")
+            if e and not any(c in e for c in "*?[") and e != rel and PurePosixPath(e).name == name:
+                if not rel.endswith("/" + e) and not e.endswith("/" + rel):
+                    return False
+    return True
 
 
 def _by_priority(rows: list[Any]) -> list[Any]:
@@ -601,30 +662,38 @@ def _by_priority(rows: list[Any]) -> list[Any]:
 
 
 def surface(
-    engine: Engine, file: str, project_dir: str | None, project: str | None, limit: int
+    engine: Engine,
+    file: str,
+    project_dir: str | None,
+    project: str | None,
+    limit: int,
+    relative_path: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if not (1 <= limit <= 50):
         raise invalid(f"limit must be 1-50, got {limit}.")
-    if not file or not file.strip():
-        raise invalid("file is empty. Pass the path of the file being edited.")
     project = engine.need_project(project)
-    rel = project_relative(file, project_dir)
+    target = _hook_file(file, relative_path, project_dir)
+    if target is None:
+        return "", {"file": "", "memories": []}
+    file, rel = target
     rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active' and type != 'constraint'", (project,)
+        "project in (?, '_shared') and status = 'active'"
+        " and type not in ('constraint', 'session', 'reminder')"
+        " and (valid_until is null or valid_until >= ?)",
+        (project, today().isoformat()),
     )
+    files = _files_of(engine)
     by_files = _by_priority(
-        [r for r in rows if any(file_matches(file, rel, e) for e in _files_of(engine, r["path"]))]
+        [r for r in rows if any(file_matches(file, rel, e) for e in files.get(r["path"], []))]
     )
     seen = {r["path"] for r in by_files}
     name = PurePosixPath(rel).name
-    query = f'"{rel}"' + (f' "{name}"' if name != rel else "")
+    query = f'"{rel}"' + (f' "{name}"' if _name_is_unambiguous(rel, name, files) else "")
     hits, _ = engine.index.search(
         query, any_term=True, mode=MEMORY, project=[project, "_shared"], limit=1000
     )
     hit_paths = {h.path for h in hits}
-    by_mention = _by_priority(
-        [r for r in rows if r["path"] in hit_paths and r["path"] not in seen]
-    )
+    by_mention = _by_priority([r for r in rows if r["path"] in hit_paths and r["path"] not in seen])
     chosen = [(r, "files") for r in by_files] + [(r, "mention") for r in by_mention]
     chosen = chosen[:limit]
     text = ""
@@ -647,17 +716,25 @@ def surface(
 
 
 def constraints(
-    engine: Engine, file: str, project_dir: str | None, project: str | None
+    engine: Engine,
+    file: str,
+    project_dir: str | None,
+    project: str | None,
+    relative_path: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    if not file or not file.strip():
-        raise invalid("file is empty. Pass the path of the file being edited.")
     project = engine.need_project(project)
-    rel = project_relative(file, project_dir)
+    target = _hook_file(file, relative_path, project_dir)
+    if target is None:
+        return "", {"file": "", "constraints": []}
+    file, rel = target
     rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active' and type = 'constraint'", (project,)
+        "project in (?, '_shared') and status = 'active' and type = 'constraint'"
+        " and (valid_until is null or valid_until >= ?)",
+        (project, today().isoformat()),
     )
+    files = _files_of(engine)
     found = _by_priority(
-        [r for r in rows if any(file_matches(file, rel, e) for e in _files_of(engine, r["path"]))]
+        [r for r in rows if any(file_matches(file, rel, e) for e in files.get(r["path"], []))]
     )
     items = [
         {
@@ -692,6 +769,7 @@ def task_context(
     hits, _ = engine.index.search(
         task,
         any_term=True,
+        drop_stopwords=True,
         mode=MEMORY,
         project=[project, "_shared"],
         status="active",
@@ -702,6 +780,7 @@ def task_context(
     raw = [h.score for h in hits]
     lo, hi = (min(raw), max(raw)) if raw else (0.0, 0.0)
     scored = []
+    files = _files_of(engine)
     for h in hits:
         row = rows[h.path]
         relevance = 1.0 if hi == lo else (h.score - lo) / (hi - lo)
@@ -710,8 +789,9 @@ def task_context(
             + 0.3 * ((row["priority"] or 1) - 1) / 4
             + 0.2 * recency(row["created"], now)
         )
-        pinned = row["type"] == "constraint" and bool(_files_of(engine, h.path))
-        scored.append((pinned, score, row))
+        pinned = row["type"] == "constraint" and bool(files.get(h.path))
+        if pinned or score >= MIN_CONTEXT_SCORE:
+            scored.append((pinned, score, row))
     scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
 
     budget = budget_tokens * 4
@@ -728,8 +808,17 @@ def task_context(
         used += len(block) + 1
         entries.append({"path": row["path"], "score": round(score, 4), "kind": "memory"})
 
-    notes, _ = engine.index.search(task, any_term=True, limit=50)
-    notes = [n for n in notes if engine.vault.mode_for(n.path) != MEMORY][:5]
+    found, _ = engine.index.search(task, any_term=True, drop_stopwords=True, limit=50)
+    found = [n for n in found if engine.vault.mode_for(n.path) != MEMORY]
+    # Same scale as the memories (0-1): the relevance part of their formula, min-max over the hits.
+    note_raw = [n.score for n in found]
+    nlo, nhi = (min(note_raw), max(note_raw)) if note_raw else (0.0, 0.0)
+    notes = []
+    for n in found:
+        n.score = round(0.5 * (1.0 if nhi == nlo else (n.score - nlo) / (nhi - nlo)), 4)
+        if n.score >= MIN_CONTEXT_SCORE:
+            notes.append(n)
+    notes = notes[:5]
     first = True
     for n in notes:
         line = f"- {n.path} — {n.title}"
@@ -750,13 +839,22 @@ def task_context(
 # -- review --------------------------------------------------------------
 
 STALE_DAYS = 90
+READ_ONLY_CATEGORIES = ("broken_links", "invalid_frontmatter")
 
 
 def review(
-    engine: Engine, path: str | None, project: str | None, limit: int
+    engine: Engine, path: str | None, project: str | None, limit: int, zone: str | None = None
 ) -> dict[str, Any]:
     if limit < 1:
         raise invalid(f"limit must be positive, got {limit}.")
+    zone = zone.strip().strip("/") if zone else None
+    if zone and zone not in {z.path for z in engine.vault.config.zones}:
+        known = ", ".join(sorted(z.path for z in engine.vault.config.zones))
+        raise invalid(f'unknown zone "{zone}". Use one of: {known}.')
+    zones = {
+        r["path"]: (r["zone"], r["mode"])
+        for r in engine.index.conn.execute("select path, zone, mode from notes")
+    }
     prefix = None
     if path:
         engine.check_path(path.strip().rstrip("/") or "/")
@@ -764,7 +862,13 @@ def review(
     project = project or engine.project
 
     def in_scope(rel: str) -> bool:
-        return prefix is None or rel == prefix or rel.startswith(prefix + "/")
+        if prefix is not None and rel != prefix and not rel.startswith(prefix + "/"):
+            return False
+        return zone is None or zones.get(rel, (None, None))[0] == zone
+
+    def is_read_only(rel: str) -> bool:
+        # Notes outside every zone are read-only too (see vault.mode_for).
+        return zones.get(rel, (None, READ_ONLY))[1] in (READ_ONLY, None)
 
     def in_project(r: Any) -> bool:
         # A memory with a missing or invalid project is matched by its folder, so that
@@ -825,8 +929,7 @@ def review(
     broken = [
         {"path": r["src"], "target": _target(r), "line": r["line"]}
         for r in engine.index.conn.execute(
-            "select * from links where dst_path is null or heading_missing = 1 "
-            "order by src, line"
+            "select * from links where dst_path is null or heading_missing = 1 order by src, line"
         )
         if in_scope(r["src"])
     ]
@@ -844,14 +947,28 @@ def review(
                 invalid_fm.append({"path": r["path"], "error": exc.message})
 
     flagged = [r["path"] for r in mems if r["flagged"]]
-    return {
-        "stale": stale[:limit],
-        "contradictions": contradictions[:limit],
-        "orphans": orphans[:limit],
-        "broken_links": broken[:limit],
-        "invalid_frontmatter": invalid_fm[:limit],
-        "flagged": flagged[:limit],
+    found: dict[str, list[Any]] = {
+        "stale": stale,
+        "contradictions": contradictions,
+        "orphans": orphans,
+        "broken_links": broken,
+        "invalid_frontmatter": invalid_fm,
+        "flagged": flagged,
     }
+
+    def path_of(item: Any) -> str:
+        return item if isinstance(item, str) else item.get("path") or item["a"]
+
+    # Read-only zones are reported apart: they are not the project's to fix.
+    own = {k: [i for i in v if not is_read_only(path_of(i))] for k, v in found.items()}
+    apart = {k: [i for i in v if is_read_only(path_of(i))] for k, v in found.items()}
+    out: dict[str, Any] = {"totals": {k: len(v) for k, v in own.items()}}
+    out.update({k: v[:limit] for k, v in own.items()})
+    out["read_only"] = {
+        "totals": {k: len(v) for k, v in apart.items() if k in READ_ONLY_CATEGORIES},
+        **{k: v[:limit] for k, v in apart.items() if k in READ_ONLY_CATEGORIES},
+    }
+    return out
 
 
 def _list_prop(props: dict[str, Any], key: str) -> list[str]:

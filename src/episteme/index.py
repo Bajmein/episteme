@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from episteme.links import Resolver
+from episteme.links import Resolver, _strip_md
 from episteme.markdown import (
     ParsedNote,
     fold,
@@ -20,9 +20,21 @@ from episteme.markdown import (
     normalize_heading,
     parse,
 )
-from episteme.vault import INDEX_DIR, MEMORY, Vault
+from episteme.markdown import normalize_tag as markdown_normalize_tag
+from episteme.vault import INDEX_DIR, MEMORY, DirListing, Vault
 
+# Spanish function words: ignored when matching a task or comparing memories for duplicates.
+STOPWORDS_ES = frozenset(
+    """a al algo ante con contra cual cuando de del desde donde durante e el ella ellas ellos en
+    entre era eran es esa esas ese eso esos esta estaba estan estar este esto estos fue ha han
+    hay la las le les lo los me mi mis mucho muy ni no nos nuestro o para pero por porque que
+    quien se ser si sin sobre son su sus te tiene tienen todo tu tus un una uno unos unas y ya
+    yo como mas hacer hace cada tambien""".split()
+)
 SCHEMA_VERSION = "1"
+
+# ``welcomed`` rows older than this are dropped when a new session is recorded.
+WELCOMED_TTL_DAYS = 30
 
 SCHEMA = """
 create table meta(key text primary key, value text);
@@ -117,6 +129,7 @@ class Index:
         self.db_path = self.dir / "index.db"
         self.generation = 0
         self._resolver: tuple[tuple[int, int], Resolver] | None = None
+        self._dirs: dict[str, DirListing] = {}
         self.conn = self._open()
 
     # -- connection --------------------------------------------------------
@@ -220,7 +233,7 @@ class Index:
 
     def refresh(self) -> bool:
         """Reindex what changed on disk since the last call. True if anything changed."""
-        disk = {rel: (st.st_mtime_ns, st.st_size) for rel, st in self.vault.iter_notes()}
+        disk = {rel: (st.st_mtime_ns, st.st_size) for rel, st in self.vault.scan_notes(self._dirs)}
         stored = {
             r["path"]: (r["mtime_ns"], r["size"])
             for r in self.conn.execute("select path, mtime_ns, size from notes")
@@ -235,15 +248,7 @@ class Index:
             if item is not None:
                 parsed.append(item)
 
-        def apply() -> None:
-            for rel in removed:
-                self._delete(rel)
-            for rel, sig, note in parsed:
-                self._delete(rel)
-                self._insert(rel, sig, note)
-            self._relink()
-
-        self._in_transaction(self.conn, apply)
+        self._in_transaction(self.conn, lambda: self._apply(removed, parsed))
         self.generation += 1
         return True
 
@@ -251,14 +256,37 @@ class Index:
         """Reindex one note right after a tool wrote it."""
         item = self._load(rel)
 
-        def apply() -> None:
-            self._delete(rel)
-            if item is not None:
-                self._insert(*item)
-            self._relink()
-
-        self._in_transaction(self.conn, apply)
+        self._in_transaction(
+            self.conn, lambda: self._apply([] if item else [rel], [item] if item else [])
+        )
         self.generation += 1
+
+    def _apply(
+        self, removed: list[str], items: list[tuple[str, tuple[int, int], ParsedNote]]
+    ) -> None:
+        """Delete and insert notes, then re-resolve only the links they can affect."""
+        new = {item[0] for item in items}
+        before = {rel: self._aliases_of(rel) for rel in [*removed, *new]}
+        for rel in removed:
+            self._delete(rel)
+        for rel, sig, note in items:
+            self._delete(rel)
+            self._insert(rel, sig, note)
+        paths: set[str] = set()
+        aliases: set[str] = set()
+        for rel, old in before.items():
+            now = self._aliases_of(rel) if rel in new else None
+            if (old is None) != (now is None):
+                paths.add(rel)
+            aliases |= (old or set()) ^ (now or set())
+        self._relink(set(before), paths, aliases)
+
+    def _aliases_of(self, rel: str) -> set[str] | None:
+        """Normalized aliases of an indexed note, or None if ``rel`` is not indexed."""
+        if self.conn.execute("select 1 from notes where path = ?", (rel,)).fetchone() is None:
+            return None
+        rows = self.conn.execute("select alias from aliases where path = ?", (rel,))
+        return {a for (a,) in ((r["alias"].strip().lower(),) for r in rows) if a}
 
     def _load(self, rel: str) -> tuple[str, tuple[int, int], ParsedNote] | None:
         path = self.vault.root / rel
@@ -340,19 +368,64 @@ class Index:
             [(rel, lk.target, lk.kind, lk.heading, lk.block, lk.line) for lk in note.links],
         )
 
-    def _relink(self) -> None:
-        """Resolve every link again: a new or removed note can change any of them."""
-        resolver = self._build_resolver()
+    def _relink(self, changed: set[str], paths: set[str], aliases: set[str]) -> None:
+        """Resolve again only the links that can have changed.
+
+        ``changed`` are the notes just reindexed, ``paths`` those that appeared or vanished and
+        ``aliases`` the aliases gained or lost (normalized). A link is redone if it starts in a
+        changed note, points at one (its heading may have moved) or names something a touched
+        path or alias can answer to.
+        """
+        keys: set[str] = set()
+        names: set[str] = set()
+        stems: list[str] = []
+        for path in paths:
+            stem = _strip_md(path).lower()
+            keys.update((path.lower(), stem))
+            names.add(stem.rsplit("/", 1)[-1])
+            stems.append(stem)
+        verdicts: dict[str, bool] = {}
+
+        def touched(raw: str) -> bool:
+            if raw not in verdicts:
+                key = raw.strip().replace("\\", "/").strip("/").lower()
+                stem = _strip_md(key)
+                if key in keys or key in aliases:
+                    hit = True
+                elif "/" in stem:
+                    hit = any(s.endswith("/" + stem) for s in stems)
+                else:
+                    hit = stem in names
+                verdicts[raw] = hit
+            return verdicts[raw]
+
+        resolver: Resolver | None = None
         headings: dict[str, set[str]] = {}
-        for r in self.conn.execute("select path, text from headings"):
-            headings.setdefault(r["path"], set()).add(normalize_heading(r["text"]))
         updates = []
-        for r in self.conn.execute("select rowid, src, dst_raw, heading from links"):
-            dst = r["src"] if not r["dst_raw"] else resolver.resolve_quiet(r["dst_raw"])
+        rows = self.conn.execute(
+            "select rowid, src, dst_raw, dst_path, heading, heading_missing from links"
+        ).fetchall()
+        for r in rows:
+            if r["src"] not in changed and r["dst_path"] not in changed:
+                if not r["dst_raw"] or not touched(r["dst_raw"]):
+                    continue
+            if not r["dst_raw"]:
+                dst = r["src"]
+            else:
+                resolver = resolver or self._build_resolver()
+                dst = resolver.resolve_quiet(r["dst_raw"], r["src"])
             missing = 0
             if dst is not None and r["heading"]:
-                missing = int(normalize_heading(r["heading"]) not in headings.get(dst, set()))
-            updates.append((dst, missing, r["rowid"]))
+                if dst not in headings:
+                    headings[dst] = {
+                        normalize_heading(h["text"])
+                        for h in self.conn.execute(
+                            "select text from headings where path = ?", (dst,)
+                        )
+                    }
+                missing = int(normalize_heading(r["heading"]) not in headings[dst])
+            if (dst, missing) != (r["dst_path"], r["heading_missing"]):
+                updates.append((dst, missing, r["rowid"]))
         self.conn.executemany(
             "update links set dst_path = ?, heading_missing = ? where rowid = ?", updates
         )
@@ -404,6 +477,10 @@ class Index:
         """Record that ``session`` got its welcome. False if it already had."""
 
         def insert() -> bool:
+            cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=WELCOMED_TTL_DAYS)
+            self.conn.execute(
+                "delete from welcomed where at < ?", (cutoff.isoformat(timespec="seconds"),)
+            )
             cur = self.conn.execute(
                 "insert or ignore into welcomed(session_id, at) values (?, ?)",
                 (session, dt.datetime.now(dt.UTC).isoformat(timespec="seconds")),
@@ -414,9 +491,10 @@ class Index:
 
     def search(
         self,
-        query: str,
+        query: str | None,
         *,
         any_term: bool = False,
+        drop_stopwords: bool = False,
         path: str | None = None,
         type: str | None = None,
         tags: list[str] | None = None,
@@ -425,13 +503,22 @@ class Index:
         mode: str | None = None,
         limit: int = 20,
     ) -> tuple[list[Hit], int]:
-        """Full-text search. Returns the hits (after ``limit``) and the total before it."""
-        terms = query_terms(query)
-        if not terms:
-            return [], 0
-        match = (" OR " if any_term else " AND ").join(f'"{" ".join(t)}"' for t in terms)
-        where = ["fts match ?"]
-        params: list[Any] = [match]
+        """Full-text search. Returns the hits (after ``limit``) and the total before it.
+
+        Without ``query`` the filters alone select the notes (ordered by priority, then path).
+        ``term*`` is a prefix match; ``drop_stopwords`` ignores Spanish function words.
+        """
+        terms: list[list[str]] = []
+        where: list[str] = []
+        params: list[Any] = []
+        if query is not None:
+            terms = query_terms(query, drop_stopwords=drop_stopwords)
+            if not terms:
+                return [], 0
+            joiner = " OR " if any_term else " AND "
+            match = joiner.join(_fts_term(t) for t in terms)
+            where.append("fts match ?")
+            params.append(match)
         if path:
             prefix = path.strip().strip("/")
             where.append("(n.path = ? or n.path like ? escape '\\')")
@@ -456,20 +543,31 @@ class Index:
             params.append(status)
         for tag in tags or []:
             where.append("n.path in (select path from tags where tag = ?)")
-            params.append(tag.strip().lstrip("#").lower())
+            params.append(normalize_tag(tag))
         # Every clause in ``where`` is a literal; user values are bound parameters.
-        sql = (
-            "select n.path, n.title, n.search_text, bm25(fts, 5.0, 1.0, 1.0) as rank "
-            "from fts join notes n on n.id = fts.rowid "
-            f"where {' and '.join(where)} "  # nosec B608
-            "order by rank, coalesce(n.priority, 0) desc, n.path"
-        )
-        rows = self.conn.execute(sql, params).fetchall()
+        if query is not None:
+            source = "from fts join notes n on n.id = fts.rowid"
+            cols = "bm25(fts, 5.0, 1.0, 1.0) as rank"
+            order = "order by rank, coalesce(n.priority, 0) desc, n.path"
+        else:
+            source = "from notes n"
+            cols = "0.0 as rank"
+            order = "order by coalesce(n.priority, 0) desc, n.path"
+        clause = " and ".join(where) or "1"
+        total = self.conn.execute(
+            f"select count(*) {source} where {clause}",  # nosec B608
+            params,
+        ).fetchone()[0]
+        rows = self.conn.execute(
+            f"select n.path, n.title, n.search_text, {cols} {source} "  # nosec B608
+            f"where {clause} {order} limit ?",
+            [*params, limit],
+        ).fetchall()
         hits = []
-        for r in rows[:limit]:
+        for r in rows:
             line, snippet = locate(r["search_text"], terms)
-            hits.append(Hit(r["path"], r["title"], line, snippet, round(-r["rank"], 4)))
-        return hits, len(rows)
+            hits.append(Hit(r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0))
+        return hits, total
 
 
 def _is_lock(exc: sqlite3.DatabaseError) -> bool:
@@ -483,22 +581,43 @@ def _like_prefix(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def query_terms(query: str) -> list[list[str]]:
+def normalize_tag(tag: str) -> str:
+    """A tag as stored: ``#Dominio:Auth`` and ``dominio/auth`` both become ``dominio/auth``."""
+    return markdown_normalize_tag(tag).replace(":", "/")
+
+
+def query_terms(query: str, drop_stopwords: bool = False) -> list[list[str]]:
     """Split a user query into terms (a quoted phrase is one term) of folded tokens.
 
-    Only word characters survive, so the query is never read as FTS5 syntax.
+    Only word characters survive, so the query is never read as FTS5 syntax. A bare ``word*``
+    is a prefix term: its last token keeps a trailing ``*``. With ``drop_stopwords``, single
+    Spanish function words are dropped (phrases are kept).
     """
     terms = []
     for phrase, word in re.findall(r'"([^"]*)"|(\S+)', query):
-        toks = [t for t in re.findall(r"[^\W_]+", fold(phrase or word))]
-        if toks:
-            terms.append(toks)
+        toks = re.findall(r"[^\W_]+", fold(phrase or word))
+        if not toks:
+            continue
+        if drop_stopwords and not phrase and len(toks) == 1 and toks[0] in STOPWORDS_ES:
+            continue
+        if word and word.endswith("*"):
+            toks[-1] += "*"
+        terms.append(toks)
     return terms
 
 
+def _fts_term(term: list[str]) -> str:
+    last = term[-1]
+    if last.endswith("*"):
+        return '"' + " ".join([*term[:-1], last[:-1]]) + '" *'
+    return '"' + " ".join(term) + '"'
+
+
 def _term_regex(term: list[str]) -> re.Pattern[str]:
-    body = r"[\W_]+".join(re.escape(t) for t in term)
-    return re.compile(rf"(?<![^\W_]){body}(?![^\W_])")
+    prefix = term[-1].endswith("*")
+    toks = [*term[:-1], term[-1].rstrip("*")]
+    body = r"[\W_]+".join(re.escape(t) for t in toks)
+    return re.compile(rf"(?<![^\W_]){body}" + ("" if prefix else r"(?![^\W_])"))
 
 
 def locate(text: str, terms: list[list[str]], width: int = 200) -> tuple[int, str]:
