@@ -310,7 +310,7 @@ def migrate(
         if is_auto_capture(note.text, note.source):
             skip(note, "captura automática", "captura-automatica")
             continue
-        if HARNESS_TEXT_RE.match(note.text.strip()):
+        if HARNESS_TEXT_RE.match(clean_text(note.text)):  # also after «Decision:»
             skip(note, "texto del harness", "harness")
             continue
         if note.status == "superseded":

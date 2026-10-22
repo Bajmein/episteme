@@ -7,7 +7,7 @@ strength: 0.40
 project: fabrik
 ---
 
-<agent-message from="a1f1820b3e42efaf2"> [Subagent hand-back] The text below is the final report of a subagent this session delegated to.
+Decision: <agent-message from="a1f1820b3e42efaf2"> [Subagent hand-back] The text below is the final report of a subagent this session delegated to.
 
 ## Metadata
 - Access count: 0
