@@ -2,7 +2,7 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.2.0 (10 tools, índice SQLite, modo hook, migración de OMEGA y vault global por defecto en `~/.episteme`).
+> Estado: v0.3.0 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2 y vault global por defecto en `~/.episteme`).
 
 ## Instalación
 
@@ -10,7 +10,7 @@ Se distribuye con `uvx` desde un tag de GitHub. El repo es privado, así que se 
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.2.0 episteme --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.3.0 episteme --project fabrik
 ```
 
 Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
