@@ -118,6 +118,11 @@ def test_hex_colors_and_code_are_not_tags() -> None:
     assert tags == {"real", "in-list-continuation", "last"}
 
 
+def test_hex_letter_words_are_tags() -> None:
+    text = "# T\n\n#bad #cafe #decade #FFF #aaaaaa #1f2e3d #12345\n"
+    assert set(parse(text, "a.md").tags) == {"bad", "cafe", "decade"}
+
+
 def test_indented_after_fence_is_not_stale_code() -> None:
     text = "# T\n\ntext\n\n```\ncode\n```\n    #after\n"
     assert "after" in parse(text, "a.md").tags

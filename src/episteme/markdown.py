@@ -15,7 +15,8 @@ HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
 WIKILINK_RE = re.compile(r"\[\[([^\[\]\n]+?)\]\]")
 TAG_RE = re.compile(r"(?:^|(?<=\s))#([\w/-]+)")
 INLINE_CODE_RE = re.compile(r"(`+)(.+?)\1")
-# ``#fff``, ``#a1b2c3`` and ``#a1b2c3ff`` are colors, not tags.
+# ``#fff``, ``#a1b2c3`` and ``#a1b2c3ff`` are colors, not tags. Hex letters alone also spell
+# words (``#bad``, ``#cafe``, ``#decade``), so a color needs a digit or a single repeated letter.
 HEX_COLOR_RE = re.compile(r"(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")
 INDENTED_RE = re.compile(r"^(?: {4}|\t)")
 LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
@@ -202,6 +203,13 @@ def _property_links(fm: dict[str, Any], fm_lines: list[str]) -> list[Link]:
     return links
 
 
+def is_hex_color(tag: str) -> bool:
+    """True for ``a1b2c3``-style tags that are colors rather than words made of hex letters."""
+    if not HEX_COLOR_RE.fullmatch(tag):
+        return False
+    return any(c.isdigit() for c in tag) or len(set(tag.lower())) == 1
+
+
 def parse(text: str, rel: str) -> ParsedNote:
     """Parse a note. Never raises on bad YAML: the note is flagged instead."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -273,7 +281,7 @@ def parse(text: str, rel: str) -> ParsedNote:
         no_links = WIKILINK_RE.sub(" ", code_free)
         for t in TAG_RE.findall(no_links):
             tag = normalize_tag(t)
-            if tag and not tag.replace("/", "").isdigit() and not HEX_COLOR_RE.fullmatch(tag):
+            if tag and not tag.replace("/", "").isdigit() and not is_hex_color(tag):
                 body_tags.append(tag)
 
     tags = expand_tags(frontmatter_tags(fm) + body_tags)

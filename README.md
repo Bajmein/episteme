@@ -79,7 +79,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `constraints(file, project_dir?, project?, hook_event?)` | sí | Constraints activas que aplican a un archivo. Avisa, no bloquea |
 | `checkpoint(action="save"\|"restore", project_dir?, project?, hook_event?)` | no | Guarda el `estado.md` activo (sin la Bitácora) como memoria de sesión, o devuelve el último vigente |
 
-Los nombres de nota aceptan una ruta relativa al vault (con o sin `.md`) o un nombre que se resuelve como un wikilink: ruta exacta, nombre base, `aliases`. Si hay varios candidatos, el error `ambiguous` los lista. Dentro de una nota, un `[[nombre]]` repetido prefiere la nota de su misma carpeta, como Obsidian; si ninguna está ahí, el enlace queda ambiguo (roto en `review`). Los `#hex` (`#fff`, `#a1b2c3`) y el texto dentro de código (bloques, indentado e inline) no cuentan como tags.
+Los nombres de nota aceptan una ruta relativa al vault (con o sin `.md`) o un nombre que se resuelve como un wikilink: ruta exacta, nombre base, `aliases`. Si hay varios candidatos, el error `ambiguous` los lista. Dentro de una nota, un `[[nombre]]` repetido prefiere la nota de su misma carpeta, como Obsidian; si ninguna está ahí, el enlace queda ambiguo (roto en `review`). Los `#hex` (`#fff`, `#a1b2c3`; con al menos un dígito o una sola letra repetida, así que `#bad` o `#cafe` siguen siendo tags) y el texto dentro de código (bloques, indentado e inline) no cuentan como tags.
 
 ### Memorias
 
