@@ -282,15 +282,22 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             Field(description="Limit memory checks to this project (and _shared)."),
         ] = None,
         limit: Annotated[int, Field(description="Maximum items per category.")] = 50,
+        zone: Annotated[
+            str | None,
+            Field(description='Only notes of this zone, as in episteme.toml (e.g. "memory").'),
+        ] = None,
     ) -> str:
         """Vault health: stale memories, possible contradictions, orphans, broken links,
         invalid frontmatter and memories flagged as outdated.
 
-        Returns JSON {"stale", "contradictions", "orphans", "broken_links",
-        "invalid_frontmatter", "flagged"}.
+        Returns JSON {"totals", "stale", "contradictions", "orphans", "broken_links",
+        "invalid_frontmatter", "flagged", "read_only"}. "totals" counts every item per
+        category (the lists are cut at limit). Problems in read-only zones (broken links and
+        invalid frontmatter you cannot fix here) are not mixed in: they go under "read_only",
+        with their own "totals".
         """
         with engine.session():
-            return dump(memory.review(engine, path, project, limit))
+            return dump(memory.review(engine, path, project, limit, zone))
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def context(

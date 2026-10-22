@@ -413,7 +413,7 @@ class Index:
                 dst = r["src"]
             else:
                 resolver = resolver or self._build_resolver()
-                dst = resolver.resolve_quiet(r["dst_raw"])
+                dst = resolver.resolve_quiet(r["dst_raw"], r["src"])
             missing = 0
             if dst is not None and r["heading"]:
                 if dst not in headings:

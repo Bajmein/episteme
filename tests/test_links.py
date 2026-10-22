@@ -38,6 +38,14 @@ def test_ambiguous_and_missing() -> None:
     assert r.resolve_quiet("best-practices") is None
 
 
+def test_same_folder_preferred() -> None:
+    r = Resolver(NOTES)
+    assert r.resolve("best-practices", "docs/x.md") == "docs/best-practices.md"
+    assert r.resolve("best-practices", "docs/std/y.md") == "docs/std/best-practices.md"
+    assert r.resolve_quiet("best-practices", "memory/a.md") is None
+    assert r.resolve_quiet("best-practices") is None
+
+
 def test_reachable() -> None:
     graph = {"a": ["b"], "b": ["c", "a"], "c": ["d"]}
     out = reachable("a", lambda n: graph.get(n, []), 2)
