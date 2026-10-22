@@ -49,6 +49,11 @@ DATE_PREFIX_RE = re.compile(
 )
 TYPE_PREFIX_RE = re.compile(r"^(?:Decisi[oó]n|Decision|Lesson|Assistant fix)\s*:\s*", re.IGNORECASE)
 AUTO_TEXT_RE = re.compile(r"^(?:Project:\s.*\|\s*Key decisions:|Session summary:)")
+# Text the Claude Code harness wraps around messages (a subagent's report, another session's
+# message), saved as if it were a memory.
+HARNESS_TEXT_RE = re.compile(
+    r"^<(?:agent-message|cross-session-message|system-reminder|task-notification)\b"
+)
 
 
 @dataclass
@@ -304,6 +309,9 @@ def migrate(
             continue
         if is_auto_capture(note.text, note.source):
             skip(note, "captura automática", "captura-automatica")
+            continue
+        if HARNESS_TEXT_RE.match(note.text.strip()):
+            skip(note, "texto del harness", "harness")
             continue
         if note.status == "superseded":
             skip(note, "reemplazada en OMEGA", "superseded")

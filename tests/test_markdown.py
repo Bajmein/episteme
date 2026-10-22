@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 from episteme.markdown import (
+    dump_frontmatter,
     first_sentence,
     parse,
     parse_wikilink,
@@ -138,3 +141,11 @@ def test_lazy_continuation_keeps_the_list_open() -> None:
 def test_indented_after_fence_is_not_stale_code() -> None:
     text = "# T\n\ntext\n\n```\ncode\n```\n    #after\n"
     assert "after" in parse(text, "a.md").tags
+
+
+def test_frontmatter_is_one_key_per_line() -> None:
+    # Without lists the whole mapping used to come out inline: {type: reminder, ...}.
+    text = dump_frontmatter({"type": "reminder", "due": dt.date(2026, 10, 27)})
+    assert text == "---\ntype: reminder\ndue: 2026-10-27\n---\n"
+    text = dump_frontmatter({"tags": ["a/b", "c"], "related": ["[[x]]"], "m": {"k": 1}})
+    assert text == "---\ntags: [a/b, c]\nrelated: ['[[x]]']\nm:\n  k: 1\n---\n"
