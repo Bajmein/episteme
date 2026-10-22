@@ -20,8 +20,17 @@ from episteme.markdown import (
     normalize_heading,
     parse,
 )
+from episteme.markdown import normalize_tag as markdown_normalize_tag
 from episteme.vault import INDEX_DIR, MEMORY, Vault
 
+# Spanish function words: ignored when matching a task or comparing memories for duplicates.
+STOPWORDS_ES = frozenset(
+    """a al algo ante con contra cual cuando de del desde donde durante e el ella ellas ellos en
+    entre era eran es esa esas ese eso esos esta estaba estan estar este esto estos fue ha han
+    hay la las le les lo los me mi mis mucho muy ni no nos nuestro o para pero por porque que
+    quien se ser si sin sobre son su sus te tiene tienen todo tu tus un una uno unos unas y ya
+    yo como mas hacer hace cada tambien""".split()
+)
 SCHEMA_VERSION = "1"
 
 SCHEMA = """
@@ -414,9 +423,10 @@ class Index:
 
     def search(
         self,
-        query: str,
+        query: str | None,
         *,
         any_term: bool = False,
+        drop_stopwords: bool = False,
         path: str | None = None,
         type: str | None = None,
         tags: list[str] | None = None,
@@ -425,13 +435,22 @@ class Index:
         mode: str | None = None,
         limit: int = 20,
     ) -> tuple[list[Hit], int]:
-        """Full-text search. Returns the hits (after ``limit``) and the total before it."""
-        terms = query_terms(query)
-        if not terms:
-            return [], 0
-        match = (" OR " if any_term else " AND ").join(f'"{" ".join(t)}"' for t in terms)
-        where = ["fts match ?"]
-        params: list[Any] = [match]
+        """Full-text search. Returns the hits (after ``limit``) and the total before it.
+
+        Without ``query`` the filters alone select the notes (ordered by priority, then path).
+        ``term*`` is a prefix match; ``drop_stopwords`` ignores Spanish function words.
+        """
+        terms: list[list[str]] = []
+        where: list[str] = []
+        params: list[Any] = []
+        if query is not None:
+            terms = query_terms(query, drop_stopwords=drop_stopwords)
+            if not terms:
+                return [], 0
+            joiner = " OR " if any_term else " AND "
+            match = joiner.join(_fts_term(t) for t in terms)
+            where.append("fts match ?")
+            params.append(match)
         if path:
             prefix = path.strip().strip("/")
             where.append("(n.path = ? or n.path like ? escape '\\')")
@@ -456,20 +475,31 @@ class Index:
             params.append(status)
         for tag in tags or []:
             where.append("n.path in (select path from tags where tag = ?)")
-            params.append(tag.strip().lstrip("#").lower())
+            params.append(normalize_tag(tag))
         # Every clause in ``where`` is a literal; user values are bound parameters.
-        sql = (
-            "select n.path, n.title, n.search_text, bm25(fts, 5.0, 1.0, 1.0) as rank "
-            "from fts join notes n on n.id = fts.rowid "
-            f"where {' and '.join(where)} "  # nosec B608
-            "order by rank, coalesce(n.priority, 0) desc, n.path"
-        )
-        rows = self.conn.execute(sql, params).fetchall()
+        if query is not None:
+            source = "from fts join notes n on n.id = fts.rowid"
+            cols = "bm25(fts, 5.0, 1.0, 1.0) as rank"
+            order = "order by rank, coalesce(n.priority, 0) desc, n.path"
+        else:
+            source = "from notes n"
+            cols = "0.0 as rank"
+            order = "order by coalesce(n.priority, 0) desc, n.path"
+        clause = " and ".join(where) or "1"
+        total = self.conn.execute(
+            f"select count(*) {source} where {clause}",  # nosec B608
+            params,
+        ).fetchone()[0]
+        rows = self.conn.execute(
+            f"select n.path, n.title, n.search_text, {cols} {source} "  # nosec B608
+            f"where {clause} {order} limit ?",
+            [*params, limit],
+        ).fetchall()
         hits = []
-        for r in rows[:limit]:
+        for r in rows:
             line, snippet = locate(r["search_text"], terms)
-            hits.append(Hit(r["path"], r["title"], line, snippet, round(-r["rank"], 4)))
-        return hits, len(rows)
+            hits.append(Hit(r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0))
+        return hits, total
 
 
 def _is_lock(exc: sqlite3.DatabaseError) -> bool:
@@ -483,22 +513,43 @@ def _like_prefix(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def query_terms(query: str) -> list[list[str]]:
+def normalize_tag(tag: str) -> str:
+    """A tag as stored: ``#Dominio:Auth`` and ``dominio/auth`` both become ``dominio/auth``."""
+    return markdown_normalize_tag(tag).replace(":", "/")
+
+
+def query_terms(query: str, drop_stopwords: bool = False) -> list[list[str]]:
     """Split a user query into terms (a quoted phrase is one term) of folded tokens.
 
-    Only word characters survive, so the query is never read as FTS5 syntax.
+    Only word characters survive, so the query is never read as FTS5 syntax. A bare ``word*``
+    is a prefix term: its last token keeps a trailing ``*``. With ``drop_stopwords``, single
+    Spanish function words are dropped (phrases are kept).
     """
     terms = []
     for phrase, word in re.findall(r'"([^"]*)"|(\S+)', query):
-        toks = [t for t in re.findall(r"[^\W_]+", fold(phrase or word))]
-        if toks:
-            terms.append(toks)
+        toks = re.findall(r"[^\W_]+", fold(phrase or word))
+        if not toks:
+            continue
+        if drop_stopwords and not phrase and len(toks) == 1 and toks[0] in STOPWORDS_ES:
+            continue
+        if word and word.endswith("*"):
+            toks[-1] += "*"
+        terms.append(toks)
     return terms
 
 
+def _fts_term(term: list[str]) -> str:
+    last = term[-1]
+    if last.endswith("*"):
+        return '"' + " ".join([*term[:-1], last[:-1]]) + '" *'
+    return '"' + " ".join(term) + '"'
+
+
 def _term_regex(term: list[str]) -> re.Pattern[str]:
-    body = r"[\W_]+".join(re.escape(t) for t in term)
-    return re.compile(rf"(?<![^\W_]){body}(?![^\W_])")
+    prefix = term[-1].endswith("*")
+    toks = [*term[:-1], term[-1].rstrip("*")]
+    body = r"[\W_]+".join(re.escape(t) for t in toks)
+    return re.compile(rf"(?<![^\W_]){body}" + ("" if prefix else r"(?![^\W_])"))
 
 
 def locate(text: str, terms: list[list[str]], width: int = 200) -> tuple[int, str]:

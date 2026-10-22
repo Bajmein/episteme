@@ -10,7 +10,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invalid
-from episteme.index import as_date, as_int
+from episteme.index import STOPWORDS_ES, as_date, as_int
 from episteme.markdown import (
     body_without_title,
     clip,
@@ -71,6 +71,7 @@ OMIT_WHEN_EMPTY = {
 }
 DUPLICATE = 0.8
 SIMILAR = 0.5
+MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left out
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive")
 MEMORY_ACTIONS = ("supersede", "feedback", "archive")
 
@@ -175,7 +176,8 @@ def similarity(a: set[str], b: set[str]) -> float:
 
 
 def dedup_tokens(title: str, body: str) -> set[str]:
-    return set(tokens(f"{title}\n{body}", min_len=3))
+    toks = tokens(f"{title}\n{body}", min_len=3)
+    return {t for t in toks if t not in STOPWORDS_ES}
 
 
 def wikilink(engine: Engine, rel: str) -> str:
@@ -390,7 +392,7 @@ def revise(
         result["changed"] = ["body"]
     elif action == "set":
         if not fields:
-            raise invalid("set needs fields, e.g. {\"priority\": 5}.")
+            raise invalid('set needs fields, e.g. {"priority": 5}.')
         fields = {k: _coerce(k, v) for k, v in fields.items()}
         result["changed"] = nf.set_fields(fields)
     elif action == "supersede":
@@ -503,9 +505,7 @@ def welcome(engine: Engine, project: str | None) -> tuple[str, list[dict[str, An
     project = engine.need_project(project)
     now = today()
     iso = now.isoformat()
-    rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active'", (project,)
-    )
+    rows = engine.index.memories("project in (?, '_shared') and status = 'active'", (project,))
     reminders = sorted(
         (r for r in rows if r["type"] == "reminder" and r["due"] and r["due"] <= iso),
         key=lambda r: (r["due"], r["path"]),
@@ -622,9 +622,7 @@ def surface(
         query, any_term=True, mode=MEMORY, project=[project, "_shared"], limit=1000
     )
     hit_paths = {h.path for h in hits}
-    by_mention = _by_priority(
-        [r for r in rows if r["path"] in hit_paths and r["path"] not in seen]
-    )
+    by_mention = _by_priority([r for r in rows if r["path"] in hit_paths and r["path"] not in seen])
     chosen = [(r, "files") for r in by_files] + [(r, "mention") for r in by_mention]
     chosen = chosen[:limit]
     text = ""
@@ -692,6 +690,7 @@ def task_context(
     hits, _ = engine.index.search(
         task,
         any_term=True,
+        drop_stopwords=True,
         mode=MEMORY,
         project=[project, "_shared"],
         status="active",
@@ -711,7 +710,8 @@ def task_context(
             + 0.2 * recency(row["created"], now)
         )
         pinned = row["type"] == "constraint" and bool(_files_of(engine, h.path))
-        scored.append((pinned, score, row))
+        if pinned or score >= MIN_CONTEXT_SCORE:
+            scored.append((pinned, score, row))
     scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
 
     budget = budget_tokens * 4
@@ -728,8 +728,17 @@ def task_context(
         used += len(block) + 1
         entries.append({"path": row["path"], "score": round(score, 4), "kind": "memory"})
 
-    notes, _ = engine.index.search(task, any_term=True, limit=50)
-    notes = [n for n in notes if engine.vault.mode_for(n.path) != MEMORY][:5]
+    found, _ = engine.index.search(task, any_term=True, drop_stopwords=True, limit=50)
+    found = [n for n in found if engine.vault.mode_for(n.path) != MEMORY]
+    # Same scale as the memories (0-1): the relevance part of their formula, min-max over the hits.
+    note_raw = [n.score for n in found]
+    nlo, nhi = (min(note_raw), max(note_raw)) if note_raw else (0.0, 0.0)
+    notes = []
+    for n in found:
+        n.score = round(0.5 * (1.0 if nhi == nlo else (n.score - nlo) / (nhi - nlo)), 4)
+        if n.score >= MIN_CONTEXT_SCORE:
+            notes.append(n)
+    notes = notes[:5]
     first = True
     for n in notes:
         line = f"- {n.path} — {n.title}"
@@ -752,9 +761,7 @@ def task_context(
 STALE_DAYS = 90
 
 
-def review(
-    engine: Engine, path: str | None, project: str | None, limit: int
-) -> dict[str, Any]:
+def review(engine: Engine, path: str | None, project: str | None, limit: int) -> dict[str, Any]:
     if limit < 1:
         raise invalid(f"limit must be positive, got {limit}.")
     prefix = None
@@ -825,8 +832,7 @@ def review(
     broken = [
         {"path": r["src"], "target": _target(r), "line": r["line"]}
         for r in engine.index.conn.execute(
-            "select * from links where dst_path is null or heading_missing = 1 "
-            "order by src, line"
+            "select * from links where dst_path is null or heading_missing = 1 order by src, line"
         )
         if in_scope(r["src"])
     ]

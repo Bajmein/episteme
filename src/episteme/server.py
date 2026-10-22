@@ -38,9 +38,7 @@ HookEvent = Annotated[
 ProjectArg = Annotated[str | None, Field(description="Project; defaults to --project.")]
 ProjectDir = Annotated[
     str | None,
-    Field(
-        description="Absolute project directory (hooks pass ${cwd}); used to relativize file."
-    ),
+    Field(description="Absolute project directory (hooks pass ${cwd}); used to relativize file."),
 ]
 FileArg = Annotated[
     str, Field(description="File being edited: absolute or relative to the project.")
@@ -89,12 +87,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def search(
         query: Annotated[
-            str,
+            str | None,
             Field(
-                description='Words that must all appear (AND); "quoted text" is a phrase. '
-                "Case and accents are ignored."
+                description='Words that must all appear (AND); "quoted text" is a phrase; '
+                "`word*` matches any word starting with it. Case and accents are ignored. "
+                "Optional when tags or type is given."
             ),
-        ],
+        ] = None,
         path: Annotated[
             str | None, Field(description="Path prefix, e.g. docs/claude-code.")
         ] = None,
@@ -102,7 +101,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None, Field(description="Frontmatter type, e.g. decision or reference.")
         ] = None,
         tags: Annotated[
-            list[str] | None, Field(description="Tags the note must all have.")
+            list[str] | None,
+            Field(description="Tags the note must all have; `dominio:x` is read as `dominio/x`."),
         ] = None,
         project: Annotated[str | None, Field(description="Frontmatter project.")] = None,
         status: Annotated[
@@ -116,6 +116,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     ) -> str:
         """Full-text search over the vault (notes and memories), best matches first.
 
+        With no query, lists the notes matching tags and/or type. If no note has all the words,
+        retries with any of them and says so ("match": "or", "note").
         Returns JSON {"results": [{"path", "title", "line", "snippet", "score"}], "total"}.
         `line` is the 1-based line of the first match; open it with read(path, lines=...).
         """
@@ -197,9 +199,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None, Field(description="Memory this one replaces; it becomes superseded.")
         ] = None,
         source: Annotated[str | None, Field(description="Commit sha or PR.")] = None,
-        due: Annotated[
-            str | None, Field(description="YYYY-MM-DD; required for reminders.")
-        ] = None,
+        due: Annotated[str | None, Field(description="YYYY-MM-DD; required for reminders.")] = None,
         valid_until: Annotated[
             str | None, Field(description="YYYY-MM-DD after which the memory no longer holds.")
         ] = None,
@@ -313,9 +313,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """Load project memory: the session welcome, or a context pack for a task.
 
         welcome: overdue reminders, then the highest-scoring active memories.
-        task: decisions, constraints and lessons matching the task, within budget_tokens,
-        plus up to 5 related notes to open with read.
-        Returns JSON {"text", "entries": [...]} (welcome adds "already_sent").
+        task: decisions, constraints and lessons matching the task (Spanish stopwords ignored,
+        weak matches dropped), within budget_tokens, plus up to 5 related notes to open with read.
+        Returns JSON {"text", "entries": [{"path", "score", "kind"}]} with every score on a 0-1
+        scale (welcome adds "already_sent").
         """
         hookmode.check(hook_event)
         with engine.session():
