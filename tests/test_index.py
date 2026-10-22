@@ -68,7 +68,7 @@ def test_search_diacritics_and_syntax_escaping(vault: Path) -> None:
     ix = _index(vault)
     hits, total = ix.search("configuracion")
     assert total > 0 and "**" in hits[0].snippet
-    for q in ['NEAR(a b)', 'foo AND OR "', "col:umn", "*", "^x", "(-)"]:
+    for q in ["NEAR(a b)", 'foo AND OR "', "col:umn", "*", "^x", "(-)"]:
         ix.search(q)  # never FTS5 syntax errors
     assert query_terms('a "b c" -d') == [["a"], ["b", "c"], ["d"]]
 
@@ -95,9 +95,14 @@ def test_new_note_makes_link_ambiguous(vault: Path) -> None:
     (vault / "plans/a.md").write_text("[[routines]]\n")
     ix.refresh()
     assert ix.outgoing("plans/a.md")[0]["dst_path"] == "docs/claude-code/routines.md"
-    (vault / "plans/routines.md").write_text("# other\n")
+    (vault / "plans/sub").mkdir()
+    (vault / "plans/sub/routines.md").write_text("# other\n")
     ix.refresh()
     assert ix.outgoing("plans/a.md")[0]["dst_path"] is None
+    # A note with the same name in the link's own folder wins, as in Obsidian.
+    (vault / "plans/routines.md").write_text("# same folder\n")
+    ix.refresh()
+    assert ix.outgoing("plans/a.md")[0]["dst_path"] == "plans/routines.md"
 
 
 def test_corrupt_index_is_rebuilt(vault: Path) -> None:

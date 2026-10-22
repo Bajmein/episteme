@@ -38,9 +38,7 @@ HookEvent = Annotated[
 ProjectArg = Annotated[str | None, Field(description="Project; defaults to --project.")]
 ProjectDir = Annotated[
     str | None,
-    Field(
-        description="Absolute project directory (hooks pass ${cwd}); used to relativize file."
-    ),
+    Field(description="Absolute project directory (hooks pass ${cwd}); used to relativize file."),
 ]
 FileArg = Annotated[
     str, Field(description="File being edited: absolute or relative to the project.")
@@ -101,9 +99,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         type: Annotated[
             str | None, Field(description="Frontmatter type, e.g. decision or reference.")
         ] = None,
-        tags: Annotated[
-            list[str] | None, Field(description="Tags the note must all have.")
-        ] = None,
+        tags: Annotated[list[str] | None, Field(description="Tags the note must all have.")] = None,
         project: Annotated[str | None, Field(description="Frontmatter project.")] = None,
         status: Annotated[
             str | None,
@@ -197,9 +193,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None, Field(description="Memory this one replaces; it becomes superseded.")
         ] = None,
         source: Annotated[str | None, Field(description="Commit sha or PR.")] = None,
-        due: Annotated[
-            str | None, Field(description="YYYY-MM-DD; required for reminders.")
-        ] = None,
+        due: Annotated[str | None, Field(description="YYYY-MM-DD; required for reminders.")] = None,
         valid_until: Annotated[
             str | None, Field(description="YYYY-MM-DD after which the memory no longer holds.")
         ] = None,
@@ -282,15 +276,22 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             Field(description="Limit memory checks to this project (and _shared)."),
         ] = None,
         limit: Annotated[int, Field(description="Maximum items per category.")] = 50,
+        zone: Annotated[
+            str | None,
+            Field(description='Only notes of this zone, as in episteme.toml (e.g. "memory").'),
+        ] = None,
     ) -> str:
         """Vault health: stale memories, possible contradictions, orphans, broken links,
         invalid frontmatter and memories flagged as outdated.
 
-        Returns JSON {"stale", "contradictions", "orphans", "broken_links",
-        "invalid_frontmatter", "flagged"}.
+        Returns JSON {"totals", "stale", "contradictions", "orphans", "broken_links",
+        "invalid_frontmatter", "flagged", "read_only"}. "totals" counts every item per
+        category (the lists are cut at limit). Problems in read-only zones (broken links and
+        invalid frontmatter you cannot fix here) are not mixed in: they go under "read_only",
+        with their own "totals".
         """
         with engine.session():
-            return dump(memory.review(engine, path, project, limit))
+            return dump(memory.review(engine, path, project, limit, zone))
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def context(

@@ -17,7 +17,9 @@ class Resolver:
     """Resolves a link destination or note name to a vault path.
 
     Order: exact path (with or without ``.md``), then base name (or path suffix when the
-    target has folders), then ``aliases``. Several candidates at one step is ambiguous.
+    target has folders), then ``aliases``. Several candidates at one step is ambiguous,
+    unless a ``source`` note is given and exactly one candidate sits in its folder: like
+    Obsidian, a repeated name prefers the note in the same folder as the link.
     """
 
     def __init__(self, notes: Iterable[tuple[str, Iterable[str]]]) -> None:
@@ -35,7 +37,15 @@ class Resolver:
                 if key and path not in self.by_alias[key]:
                     self.by_alias[key].append(path)
 
-    def candidates(self, target: str) -> list[str]:
+    @staticmethod
+    def _prefer_same_folder(found: list[str], source: str | None) -> list[str]:
+        if source is None or len(found) < 2:
+            return found
+        folder = PurePosixPath(source).parent
+        near = [p for p in found if PurePosixPath(p).parent == folder]
+        return near if len(near) == 1 else found
+
+    def candidates(self, target: str, source: str | None = None) -> list[str]:
         t = target.strip().replace("\\", "/").strip("/")
         if not t:
             return []
@@ -49,12 +59,12 @@ class Resolver:
         else:
             found = list(self.by_name.get(stem, []))
         if found:
-            return sorted(found)
-        return sorted(self.by_alias.get(key, []))
+            return self._prefer_same_folder(sorted(found), source)
+        return self._prefer_same_folder(sorted(self.by_alias.get(key, [])), source)
 
-    def resolve(self, target: str) -> str:
+    def resolve(self, target: str, source: str | None = None) -> str:
         """Resolve ``target`` or raise ``not_found`` / ``ambiguous``."""
-        found = self.candidates(target)
+        found = self.candidates(target, source)
         if not found:
             raise EpistemeError(NOT_FOUND, f'no note "{target}". Use search to find the path.')
         if len(found) > 1:
@@ -65,8 +75,8 @@ class Resolver:
             )
         return found[0]
 
-    def resolve_quiet(self, target: str) -> str | None:
-        found = self.candidates(target)
+    def resolve_quiet(self, target: str, source: str | None = None) -> str | None:
+        found = self.candidates(target, source)
         return found[0] if len(found) == 1 else None
 
 

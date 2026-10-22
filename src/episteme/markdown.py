@@ -15,6 +15,10 @@ HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
 WIKILINK_RE = re.compile(r"\[\[([^\[\]\n]+?)\]\]")
 TAG_RE = re.compile(r"(?:^|(?<=\s))#([\w/-]+)")
 INLINE_CODE_RE = re.compile(r"(`+)(.+?)\1")
+# ``#fff``, ``#a1b2c3`` and ``#a1b2c3ff`` are colors, not tags.
+HEX_COLOR_RE = re.compile(r"(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")
+INDENTED_RE = re.compile(r"^(?: {4}|\t)")
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 # ``%% nav:start %%`` … ``%% nav:end %%``: the whole block is treated as a comment.
 MARKER_RE = re.compile(r"^\s*%%\s*([\w-]+):(start|end)\s*%%\s*$")
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s")
@@ -214,6 +218,9 @@ def parse(text: str, rel: str) -> ParsedNote:
 
     fence: str | None = None
     in_comment = False
+    in_indented = False  # inside an indented code block (not a list continuation)
+    prev_blank = True
+    in_list = False
     region: str | None = None  # name of an open ``%% name:start %%`` block
     for i in range(fm_end, len(lines)):
         line = lines[i]
@@ -246,16 +253,25 @@ def parse(text: str, rel: str) -> ParsedNote:
         if hidden:
             links.extend(_links_in(_strip_inline_code(hidden), "body", lineno))
         if not visible.strip():
+            prev_blank = True
             continue
         h = HEADING_RE.match(visible)
         if h:
             headings.append(Heading(len(h.group(1)), (h.group(2) or "").strip(), lineno))
         code_free = _strip_inline_code(visible)
         links.extend(_links_in(code_free, "body", lineno))
+        if INDENTED_RE.match(line):
+            in_indented = (prev_blank and not in_list) or in_indented
+        else:
+            in_indented = False
+            in_list = bool(LIST_ITEM_RE.match(line))
+        prev_blank = False
+        if in_indented:
+            continue
         no_links = WIKILINK_RE.sub(" ", code_free)
         for t in TAG_RE.findall(no_links):
             tag = normalize_tag(t)
-            if tag and not tag.replace("/", "").isdigit():
+            if tag and not tag.replace("/", "").isdigit() and not HEX_COLOR_RE.fullmatch(tag):
                 body_tags.append(tag)
 
     tags = expand_tags(frontmatter_tags(fm) + body_tags)

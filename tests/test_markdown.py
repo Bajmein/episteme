@@ -106,3 +106,13 @@ def test_section_and_helpers() -> None:
     assert section_text(note, "missing") is None
     assert first_sentence("# T\n\nFirst one. Second one.") == "First one."
     assert slugify("Serena usa ty 0.0.89 ¡ya!") == "serena-usa-ty-0-0-89-ya"
+
+
+def test_hex_colors_and_code_are_not_tags() -> None:
+    text = (
+        "# T\n\n#real #fff #A1B2C3 #a1b2c3ff `#inline` ``x #dbl``\n\n"
+        "```css\n#fenced\n```\n\n    #indented\n    #indented2\n\n"
+        "- item\n\n    #in-list-continuation\n\nend #last\n"
+    )
+    tags = set(parse(text, "a.md").tags)
+    assert tags == {"real", "in-list-continuation", "last"}

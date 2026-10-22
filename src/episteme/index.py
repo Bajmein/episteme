@@ -348,7 +348,7 @@ class Index:
             headings.setdefault(r["path"], set()).add(normalize_heading(r["text"]))
         updates = []
         for r in self.conn.execute("select rowid, src, dst_raw, heading from links"):
-            dst = r["src"] if not r["dst_raw"] else resolver.resolve_quiet(r["dst_raw"])
+            dst = r["src"] if not r["dst_raw"] else resolver.resolve_quiet(r["dst_raw"], r["src"])
             missing = 0
             if dst is not None and r["heading"]:
                 missing = int(normalize_heading(r["heading"]) not in headings.get(dst, set()))
