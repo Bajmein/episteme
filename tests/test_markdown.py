@@ -116,3 +116,8 @@ def test_hex_colors_and_code_are_not_tags() -> None:
     )
     tags = set(parse(text, "a.md").tags)
     assert tags == {"real", "in-list-continuation", "last"}
+
+
+def test_indented_after_fence_is_not_stale_code() -> None:
+    text = "# T\n\ntext\n\n```\ncode\n```\n    #after\n"
+    assert "after" in parse(text, "a.md").tags

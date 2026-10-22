@@ -240,8 +240,10 @@ def parse(text: str, rel: str) -> ParsedNote:
             if m:
                 fence = m.group(1)
                 search_lines[i] = line
+                prev_blank, in_indented = False, False
                 continue
         elif fence is not None:
+            prev_blank, in_indented = False, False
             stripped = line.strip()
             if stripped.startswith(fence[0] * len(fence)) and set(stripped) == {fence[0]}:
                 fence = None
