@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
-from episteme.index import Index, jsonable
+from episteme.index import Index, jsonable, query_terms
 from episteme.links import reachable
 from episteme.markdown import ParsedNote, clip, clip_at_newline, find_section, parse
 from episteme.vault import Vault, is_ignored
@@ -78,7 +78,7 @@ class Engine:
 
     def search(
         self,
-        query: str,
+        query: str | None = None,
         path: str | None = None,
         type: str | None = None,
         tags: list[str] | None = None,
@@ -88,20 +88,29 @@ class Engine:
     ) -> dict[str, Any]:
         if not (1 <= limit <= 100):
             raise invalid(f"limit must be 1-100, got {limit}.")
-        if not query or not re.search(r"[^\W_]", query):
+        if query is not None and not query.strip():
+            query = None
+        if query is None:
+            if not (tags or type):
+                raise invalid("query has no words. Pass the words to look for, or tags or type.")
+        elif not re.search(r"[^\W_]", query):
             raise invalid("query has no words. Pass the words to look for.")
         if path:
             self.check_path(path.strip().rstrip("/") or "/")
-        hits, total = self.index.search(
-            query,
-            path=path,
-            type=type,
-            tags=tags,
-            project=project,
-            status=status,
-            limit=limit,
-        )
-        return {
+        kwargs: dict[str, Any] = {
+            "path": path,
+            "type": type,
+            "tags": tags,
+            "project": project,
+            "status": status,
+            "limit": limit,
+        }
+        hits, total = self.index.search(query, **kwargs)
+        fallback = False
+        if not hits and query is not None and len(query_terms(query)) > 1:
+            hits, total = self.index.search(query, any_term=True, **kwargs)
+            fallback = bool(hits)
+        out: dict[str, Any] = {
             "results": [
                 {
                     "path": h.path,
@@ -114,6 +123,10 @@ class Engine:
             ],
             "total": total,
         }
+        if fallback:
+            out["match"] = "or"
+            out["note"] = "No note has all the words; showing notes with any of them (OR)."
+        return out
 
     # -- read --------------------------------------------------------------
 

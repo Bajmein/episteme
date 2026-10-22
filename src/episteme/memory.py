@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invalid
-from episteme.index import as_date, as_int
+from episteme.index import STOPWORDS_ES, as_date, as_int
 from episteme.markdown import (
     body_without_title,
     clip,
@@ -25,7 +25,7 @@ from episteme.markdown import (
     split_frontmatter,
     tokens,
 )
-from episteme.vault import MEMORY, today
+from episteme.vault import MEMORY, READ_ONLY, today
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -72,6 +72,7 @@ OMIT_WHEN_EMPTY = {
 }
 DUPLICATE = 0.8
 SIMILAR = 0.5
+MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left out
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive")
 MEMORY_ACTIONS = ("supersede", "feedback", "archive")
 
@@ -176,7 +177,8 @@ def similarity(a: set[str], b: set[str]) -> float:
 
 
 def dedup_tokens(title: str, body: str) -> set[str]:
-    return set(tokens(f"{title}\n{body}", min_len=3))
+    toks = tokens(f"{title}\n{body}", min_len=3)
+    return {t for t in toks if t not in STOPWORDS_ES}
 
 
 def wikilink(engine: Engine, rel: str) -> str:
@@ -391,7 +393,7 @@ def revise(
         result["changed"] = ["body"]
     elif action == "set":
         if not fields:
-            raise invalid("set needs fields, e.g. {\"priority\": 5}.")
+            raise invalid('set needs fields, e.g. {"priority": 5}.')
         fields = {k: _coerce(k, v) for k, v in fields.items()}
         result["changed"] = nf.set_fields(fields)
     elif action == "supersede":
@@ -504,9 +506,7 @@ def welcome(engine: Engine, project: str | None) -> tuple[str, list[dict[str, An
     project = engine.need_project(project)
     now = today()
     iso = now.isoformat()
-    rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active'", (project,)
-    )
+    rows = engine.index.memories("project in (?, '_shared') and status = 'active'", (project,))
     reminders = sorted(
         (r for r in rows if r["type"] == "reminder" and r["due"] and r["due"] <= iso),
         key=lambda r: (r["due"], r["path"]),
@@ -738,6 +738,7 @@ def task_context(
     hits, _ = engine.index.search(
         task,
         any_term=True,
+        drop_stopwords=True,
         mode=MEMORY,
         project=[project, "_shared"],
         status="active",
@@ -758,7 +759,8 @@ def task_context(
             + 0.2 * recency(row["created"], now)
         )
         pinned = row["type"] == "constraint" and bool(files.get(h.path))
-        scored.append((pinned, score, row))
+        if pinned or score >= MIN_CONTEXT_SCORE:
+            scored.append((pinned, score, row))
     scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
 
     budget = budget_tokens * 4
@@ -775,8 +777,17 @@ def task_context(
         used += len(block) + 1
         entries.append({"path": row["path"], "score": round(score, 4), "kind": "memory"})
 
-    notes, _ = engine.index.search(task, any_term=True, limit=50)
-    notes = [n for n in notes if engine.vault.mode_for(n.path) != MEMORY][:5]
+    found, _ = engine.index.search(task, any_term=True, drop_stopwords=True, limit=50)
+    found = [n for n in found if engine.vault.mode_for(n.path) != MEMORY]
+    # Same scale as the memories (0-1): the relevance part of their formula, min-max over the hits.
+    note_raw = [n.score for n in found]
+    nlo, nhi = (min(note_raw), max(note_raw)) if note_raw else (0.0, 0.0)
+    notes = []
+    for n in found:
+        n.score = round(0.5 * (1.0 if nhi == nlo else (n.score - nlo) / (nhi - nlo)), 4)
+        if n.score >= MIN_CONTEXT_SCORE:
+            notes.append(n)
+    notes = notes[:5]
     first = True
     for n in notes:
         line = f"- {n.path} — {n.title}"
@@ -797,11 +808,22 @@ def task_context(
 # -- review --------------------------------------------------------------
 
 STALE_DAYS = 90
+READ_ONLY_CATEGORIES = ("broken_links", "invalid_frontmatter")
 
 
-def review(engine: Engine, path: str | None, project: str | None, limit: int) -> dict[str, Any]:
+def review(
+    engine: Engine, path: str | None, project: str | None, limit: int, zone: str | None = None
+) -> dict[str, Any]:
     if limit < 1:
         raise invalid(f"limit must be positive, got {limit}.")
+    zone = zone.strip().strip("/") if zone else None
+    if zone and zone not in {z.path for z in engine.vault.config.zones}:
+        known = ", ".join(sorted(z.path for z in engine.vault.config.zones))
+        raise invalid(f'unknown zone "{zone}". Use one of: {known}.')
+    zones = {
+        r["path"]: (r["zone"], r["mode"])
+        for r in engine.index.conn.execute("select path, zone, mode from notes")
+    }
     prefix = None
     if path:
         engine.check_path(path.strip().rstrip("/") or "/")
@@ -809,7 +831,13 @@ def review(engine: Engine, path: str | None, project: str | None, limit: int) ->
     project = project or engine.project
 
     def in_scope(rel: str) -> bool:
-        return prefix is None or rel == prefix or rel.startswith(prefix + "/")
+        if prefix is not None and rel != prefix and not rel.startswith(prefix + "/"):
+            return False
+        return zone is None or zones.get(rel, (None, None))[0] == zone
+
+    def is_read_only(rel: str) -> bool:
+        # Notes outside every zone are read-only too (see vault.mode_for).
+        return zones.get(rel, (None, READ_ONLY))[1] in (READ_ONLY, None)
 
     def in_project(r: Any) -> bool:
         # A memory with a missing or invalid project is matched by its folder, so that
@@ -888,14 +916,28 @@ def review(engine: Engine, path: str | None, project: str | None, limit: int) ->
                 invalid_fm.append({"path": r["path"], "error": exc.message})
 
     flagged = [r["path"] for r in mems if r["flagged"]]
-    return {
-        "stale": stale[:limit],
-        "contradictions": contradictions[:limit],
-        "orphans": orphans[:limit],
-        "broken_links": broken[:limit],
-        "invalid_frontmatter": invalid_fm[:limit],
-        "flagged": flagged[:limit],
+    found: dict[str, list[Any]] = {
+        "stale": stale,
+        "contradictions": contradictions,
+        "orphans": orphans,
+        "broken_links": broken,
+        "invalid_frontmatter": invalid_fm,
+        "flagged": flagged,
     }
+
+    def path_of(item: Any) -> str:
+        return item if isinstance(item, str) else item.get("path") or item["a"]
+
+    # Read-only zones are reported apart: they are not the project's to fix.
+    own = {k: [i for i in v if not is_read_only(path_of(i))] for k, v in found.items()}
+    apart = {k: [i for i in v if is_read_only(path_of(i))] for k, v in found.items()}
+    out: dict[str, Any] = {"totals": {k: len(v) for k, v in own.items()}}
+    out.update({k: v[:limit] for k, v in own.items()})
+    out["read_only"] = {
+        "totals": {k: len(v) for k, v in apart.items() if k in READ_ONLY_CATEGORIES},
+        **{k: v[:limit] for k, v in apart.items() if k in READ_ONLY_CATEGORIES},
+    }
+    return out
 
 
 def _list_prop(props: dict[str, Any], key: str) -> list[str]:
