@@ -24,28 +24,27 @@ async def test_case9_welcome_once_per_session(vault: Path) -> None:
         assert lines[0] == "episteme · memoria de fabrik"
         assert lines[1] == "Recordatorios vencidos:"
         assert lines[2].startswith("- [2026-10-21] Correr las trigger queries")
-        assert lines[3] == "Memorias:"
+        assert lines[3] == "Normas:"
         paths = [e["path"] for e in first["entries"]]
-        assert paths == [
-            "memory/fabrik/reminders/2026-10-18-revisar-trigger-queries.md",
-            "memory/fabrik/decisions/2026-10-02-serena-ty.md",
-            "memory/_shared/perfil.md",
+        norms = [e["path"] for e in first["entries"] if e["kind"] == "norm"]
+        assert "memory/fabrik/decisions/2026-10-02-serena-ty.md" in norms
+        assert paths[0] == "memory/fabrik/reminders/2026-10-18-revisar-trigger-queries.md"
+        assert paths[1 : 1 + len(norms)] == norms
+        assert "Memorias:" in lines
+        assert "memory/_shared/perfil.md" in norms
+        assert paths[1 + len(norms) :] == [
             CONSTRAINT,
             "memory/fabrik/lessons/2026-10-14-omega-rss-limit.md",
         ]
-        scores = [e["score"] for e in first["entries"][1:]]
+        scores = [e["score"] for e in first["entries"] if e["kind"] == "memory"]
         assert scores == sorted(scores, reverse=True)
         assert "serena-pyright" not in first["text"]
         assert "— Serena pasa de `pyright` a `ty` 0.0.89" in first["text"]
         second = await c.ok("context", mode="welcome", session="s1")
         assert second == {"text": "", "entries": [], "already_sent": True}
-        hook = await c.call(
-            "context", mode="welcome", session="s2", hook_event="UserPromptSubmit"
-        )
+        hook = await c.call("context", mode="welcome", session="s2", hook_event="UserPromptSubmit")
         assert hook[0] is False and hook[1].startswith("episteme · memoria de fabrik")
-        again = await c.call(
-            "context", mode="welcome", session="s2", hook_event="UserPromptSubmit"
-        )
+        again = await c.call("context", mode="welcome", session="s2", hook_event="UserPromptSubmit")
         assert again == (False, "")
 
 
@@ -83,9 +82,7 @@ async def test_case10_surface_and_constraints(vault: Path) -> None:
 
 async def test_case15_hook_output(vault: Path) -> None:
     async with mcp_client(vault) as c:
-        await c.ok(
-            "remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD]
-        )
+        await c.ok("remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD])
         for tool, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
             is_error, text = await c.call(tool, file=GUARD, hook_event=event)
             assert not is_error
@@ -104,9 +101,7 @@ async def test_case16_absolute_file_with_project_dir(vault: Path, tmp_path: Path
     project = tmp_path / "proyecto"
     (project / ".claude/hooks").mkdir(parents=True)
     async with mcp_client(vault) as c:
-        res = await c.ok(
-            "constraints", file=str(project / GUARD), project_dir=str(project)
-        )
+        res = await c.ok("constraints", file=str(project / GUARD), project_dir=str(project))
         assert res["file"] == GUARD
         assert [x["path"] for x in res["constraints"]] == [CONSTRAINT]
         res = await c.ok("constraints", file=str(project / "data.py"), project_dir=str(project))
@@ -243,3 +238,71 @@ async def test_restore_falls_back_then_archives_stale(vault: Path, project_dir: 
         assert "status: archived" in (vault / saved["path"]).read_text()
         res = await c.ok("checkpoint", action="restore")
         assert res["found"] is False
+
+
+async def test_surface_relative_path_and_empty_file(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        mem = await c.ok(
+            "remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD]
+        )
+        res = await c.ok("surface", relative_path=GUARD)
+        assert [m["path"] for m in res["memories"]] == [mem["path"]]
+        cons = await c.ok("constraints", file="", relative_path=GUARD)
+        assert [x["path"] for x in cons["constraints"]] == [CONSTRAINT]
+        assert await c.ok("surface", file="") == {"file": "", "memories": []}
+        assert await c.ok("constraints") == {"file": "", "constraints": []}
+        for tool, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
+            assert await c.call(tool, file="", hook_event=event) == (False, "")
+
+
+async def test_surface_excludes_session_and_reminder(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok(
+            "remember",
+            type="reminder",
+            title="Recordar guard",
+            body=f"Ver `{GUARD}`.",
+            due="2026-10-25",
+        )
+        await c.ok("remember", type="session", title="Sesion guard", body=f"Toca `{GUARD}`.")
+        res = await c.ok("surface", file=GUARD)
+        assert {m["type"] for m in res["memories"]}.isdisjoint({"session", "reminder"})
+
+
+async def test_surface_basename_only_when_unambiguous(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok(
+            "remember", type="insight", title="Sobre util", body="Cuidado con `util.py` al editar."
+        )
+        res = await c.ok("surface", file="src/a/util.py")
+        assert [m["match"] for m in res["memories"]] == ["mention"]
+        await c.ok(
+            "remember", type="lesson", title="Otro util", body="x" * 50, files=["src/b/util.py"]
+        )
+        res = await c.ok("surface", file="src/a/util.py")
+        assert res["memories"] == []
+
+
+async def test_surface_and_constraints_skip_expired(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-19") as c:
+        await c.ok(
+            "remember",
+            type="lesson",
+            title="Vence pronto",
+            body="x" * 50,
+            files=["src/v.py"],
+            valid_until="2026-10-30",
+        )
+        await c.ok(
+            "remember",
+            type="constraint",
+            title="Regla vence",
+            body="x" * 50,
+            files=["src/v.py"],
+            valid_until="2026-10-30",
+        )
+        assert len((await c.ok("surface", file="src/v.py"))["memories"]) == 1
+        assert len((await c.ok("constraints", file="src/v.py"))["constraints"]) == 1
+    async with mcp_client(vault, today="2026-11-05") as c:
+        assert (await c.ok("surface", file="src/v.py"))["memories"] == []
+        assert (await c.ok("constraints", file="src/v.py"))["constraints"] == []

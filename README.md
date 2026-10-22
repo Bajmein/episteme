@@ -72,14 +72,14 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
 | `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`) |
-| `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory`; `supersede`, `feedback` y `archive` solo en memorias |
-| `review(path?, project?, limit=50)` | sí | Memorias viejas, contradicciones posibles, huérfanas, enlaces rotos, frontmatter inválido y marcadas |
+| `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory`; `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
+| `review(path?, project?, limit=50, zone?)` | sí | Memorias viejas, contradicciones posibles, huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
-| `surface(file, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin las constraints |
-| `constraints(file, project_dir?, project?, hook_event?)` | sí | Constraints activas que aplican a un archivo. Avisa, no bloquea |
+| `surface(file?, relative_path?, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin constraints, `session` ni `reminder`; el nombre base solo cuenta si es inequívoco; ignora las vencidas por `valid_until`. `relative_path` sustituye a `file` en las ediciones con Serena; sin ninguno, salida vacía |
+| `constraints(file?, relative_path?, project_dir?, project?, hook_event?)` | sí | Constraints activas (no vencidas) que aplican a un archivo. Avisa, no bloquea |
 | `checkpoint(action="save"\|"restore", project_dir?, project?, task_title?, hook_event?)` | no | `save` guarda el `estado.md` activo (sin la Bitácora) como memoria de sesión. `restore` lee primero el `estado.md` activo vivo (el de la rama `<tipo>/<ID>-<change>`, si no el más reciente) con una línea de flujo (`etapa` y avance de `tasks.md`); sin estado activo cae al último checkpoint vigente. `task_title` retoma esa tarea. Archiva los checkpoints de tareas sin estado activo |
 
-Los nombres de nota aceptan una ruta relativa al vault (con o sin `.md`) o un nombre que se resuelve como un wikilink: ruta exacta, nombre base, `aliases`. Si hay varios candidatos, el error `ambiguous` los lista.
+Los nombres de nota aceptan una ruta relativa al vault (con o sin `.md`) o un nombre que se resuelve como un wikilink: ruta exacta, nombre base, `aliases`. Si hay varios candidatos, el error `ambiguous` los lista. Dentro de una nota, un `[[nombre]]` repetido prefiere la nota de su misma carpeta, como Obsidian; si ninguna está ahí, el enlace queda ambiguo (roto en `review`). Los `#hex` (`#fff`, `#a1b2c3`; con al menos un dígito o una sola letra repetida, así que `#bad` o `#cafe` siguen siendo tags) y el texto dentro de código (bloques, indentado e inline) no cuentan como tags.
 
 ### Memorias
 
@@ -119,15 +119,19 @@ Bloque para el `settings.json` del proyecto:
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PreToolUse": [
-      { "matcher": "Edit|Write",
+      { "matcher": "Edit|Write|mcp__serena__.*",
         "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "constraints",
-                    "input": { "file": "${tool_input.file_path}", "project_dir": "${cwd}",
+                    "input": { "file": "${tool_input.file_path}",
+                               "relative_path": "${tool_input.relative_path}",
+                               "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PostToolUse": [
-      { "matcher": "Edit|Write",
+      { "matcher": "Edit|Write|mcp__serena__.*",
         "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "surface",
-                    "input": { "file": "${tool_input.file_path}", "project_dir": "${cwd}",
+                    "input": { "file": "${tool_input.file_path}",
+                               "relative_path": "${tool_input.relative_path}",
+                               "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PreCompact": [

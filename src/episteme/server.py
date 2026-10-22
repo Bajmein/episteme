@@ -38,12 +38,18 @@ HookEvent = Annotated[
 ProjectArg = Annotated[str | None, Field(description="Project; defaults to --project.")]
 ProjectDir = Annotated[
     str | None,
-    Field(
-        description="Absolute project directory (hooks pass ${cwd}); used to relativize file."
-    ),
+    Field(description="Absolute project directory (hooks pass ${cwd}); used to relativize file."),
 ]
 FileArg = Annotated[
-    str, Field(description="File being edited: absolute or relative to the project.")
+    str,
+    Field(
+        description="File being edited: absolute or relative to the project. "
+        "Empty (with no relative_path) returns an empty result."
+    ),
+]
+RelativePathArg = Annotated[
+    str | None,
+    Field(description="Serena edits pass relative_path instead of file; used when file is empty."),
 ]
 
 
@@ -89,12 +95,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def search(
         query: Annotated[
-            str,
+            str | None,
             Field(
-                description='Words that must all appear (AND); "quoted text" is a phrase. '
-                "Case and accents are ignored."
+                description='Words that must all appear (AND); "quoted text" is a phrase; '
+                "`word*` matches any word starting with it. Case and accents are ignored. "
+                "Optional when tags or type is given."
             ),
-        ],
+        ] = None,
         path: Annotated[
             str | None, Field(description="Path prefix, e.g. docs/claude-code.")
         ] = None,
@@ -102,7 +109,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None, Field(description="Frontmatter type, e.g. decision or reference.")
         ] = None,
         tags: Annotated[
-            list[str] | None, Field(description="Tags the note must all have.")
+            list[str] | None,
+            Field(description="Tags the note must all have; `dominio:x` is read as `dominio/x`."),
         ] = None,
         project: Annotated[str | None, Field(description="Frontmatter project.")] = None,
         status: Annotated[
@@ -116,6 +124,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     ) -> str:
         """Full-text search over the vault (notes and memories), best matches first.
 
+        With no query, lists the notes matching tags and/or type. If no note has all the words,
+        retries with any of them and says so ("match": "or", "note").
         Returns JSON {"results": [{"path", "title", "line", "snippet", "score"}], "total"}.
         `line` is the 1-based line of the first match; open it with read(path, lines=...).
         """
@@ -197,9 +207,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None, Field(description="Memory this one replaces; it becomes superseded.")
         ] = None,
         source: Annotated[str | None, Field(description="Commit sha or PR.")] = None,
-        due: Annotated[
-            str | None, Field(description="YYYY-MM-DD; required for reminders.")
-        ] = None,
+        due: Annotated[str | None, Field(description="YYYY-MM-DD; required for reminders.")] = None,
         valid_until: Annotated[
             str | None, Field(description="YYYY-MM-DD after which the memory no longer holds.")
         ] = None,
@@ -244,7 +252,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str,
             Field(
                 description="edit (old, new) | append (text, heading?) | set (fields) | "
-                "supersede (by) | feedback (value) | archive"
+                "supersede (by) | feedback (value) | archive | dismiss (reminders)"
             ),
         ],
         old: Annotated[str | None, Field(description="edit: text that appears once.")] = None,
@@ -266,8 +274,9 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     ) -> str:
         """Change a note in a read-write or memory zone. Read-only zones are refused.
 
-        supersede, feedback and archive only apply to memories. Memories are validated against
-        the schema before anything is written. Returns JSON {"path", "action", "changed"}.
+        supersede, feedback, archive and dismiss (archives a reminder) only apply to memories.
+        Memories are validated against the schema before anything is written.
+        Returns JSON {"path", "action", "changed"}.
         """
         with engine.session():
             return dump(
@@ -282,15 +291,22 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             Field(description="Limit memory checks to this project (and _shared)."),
         ] = None,
         limit: Annotated[int, Field(description="Maximum items per category.")] = 50,
+        zone: Annotated[
+            str | None,
+            Field(description='Only notes of this zone, as in episteme.toml (e.g. "memory").'),
+        ] = None,
     ) -> str:
         """Vault health: stale memories, possible contradictions, orphans, broken links,
         invalid frontmatter and memories flagged as outdated.
 
-        Returns JSON {"stale", "contradictions", "orphans", "broken_links",
-        "invalid_frontmatter", "flagged"}.
+        Returns JSON {"totals", "stale", "contradictions", "orphans", "broken_links",
+        "invalid_frontmatter", "flagged", "read_only"}. "totals" counts every item per
+        category (the lists are cut at limit). Problems in read-only zones (broken links and
+        invalid frontmatter you cannot fix here) are not mixed in: they go under "read_only",
+        with their own "totals".
         """
         with engine.session():
-            return dump(memory.review(engine, path, project, limit))
+            return dump(memory.review(engine, path, project, limit, zone))
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def context(
@@ -312,10 +328,12 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     ) -> str:
         """Load project memory: the session welcome, or a context pack for a task.
 
-        welcome: overdue reminders, then the highest-scoring active memories.
-        task: decisions, constraints and lessons matching the task, within budget_tokens,
-        plus up to 5 related notes to open with read.
-        Returns JSON {"text", "entries": [...]} (welcome adds "already_sent").
+        welcome: overdue reminders, the active priority-5 norms, reminders due within 7 days,
+        then the highest-scoring active memories.
+        task: decisions, constraints and lessons matching the task (Spanish stopwords ignored,
+        weak matches dropped), within budget_tokens, plus up to 5 related notes to open with read.
+        Returns JSON {"text", "entries": [{"path", "score", "kind"}]} with every score on a 0-1
+        scale (welcome adds "already_sent").
         """
         hookmode.check(hook_event)
         with engine.session():
@@ -338,9 +356,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def surface(
-        file: FileArg,
+        file: FileArg = "",
         project_dir: ProjectDir = None,
         project: ProjectArg = None,
+        relative_path: RelativePathArg = None,
         limit: Annotated[int, Field(description="Maximum memories, 1-50.")] = 5,
         hook_event: HookEvent = None,
     ) -> str:
@@ -350,14 +369,15 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         hookmode.check(hook_event)
         with engine.session():
-            text, data = memory.surface(engine, file, project_dir, project, limit)
+            text, data = memory.surface(engine, file, project_dir, project, limit, relative_path)
         return hookmode.render(hook_event, text) if hook_event else dump(data)
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def constraints(
-        file: FileArg,
+        file: FileArg = "",
         project_dir: ProjectDir = None,
         project: ProjectArg = None,
+        relative_path: RelativePathArg = None,
         hook_event: HookEvent = None,
     ) -> str:
         """Active constraints whose files match a file. Warns before editing; never blocks.
@@ -366,7 +386,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         hookmode.check(hook_event)
         with engine.session():
-            text, data = memory.constraints(engine, file, project_dir, project)
+            text, data = memory.constraints(engine, file, project_dir, project, relative_path)
         return hookmode.render(hook_event, text) if hook_event else dump(data)
 
     @server.tool(structured_output=False)

@@ -30,8 +30,10 @@ async def test_tool_list_is_complete(vault: Path) -> None:
 async def test_case14_review_reports_invalid_frontmatter(vault: Path) -> None:
     async with mcp_client(vault) as c:
         res = await c.ok("review")
-        bad = {x["path"]: x["error"] for x in res["invalid_frontmatter"]}
+        bad = {x["path"]: x["error"] for x in res["read_only"]["invalid_frontmatter"]}
         assert README in bad and "mapping values" in bad[README]
+        assert res["read_only"]["totals"]["invalid_frontmatter"] == len(bad)
+        assert README not in {x["path"] for x in res["invalid_frontmatter"]}
         assert res["broken_links"] == []
         hits = await c.ok("search", query="Mapa Rápido por Objetivos")
         assert hits["results"][0]["path"] == README
@@ -66,9 +68,7 @@ async def test_review_categories(vault: Path) -> None:
             value="outdated",
         )
         res = await c.ok("review", project="fabrik")
-        assert [s["path"] for s in res["stale"]] == [
-            "memory/fabrik/insights/2026-01-01-vieja.md"
-        ]
+        assert [s["path"] for s in res["stale"]] == ["memory/fabrik/insights/2026-01-01-vieja.md"]
         assert res["stale"][0]["days"] == 291
         pair = res["contradictions"][0]
         assert {pair["a"], pair["b"]} == {
@@ -104,9 +104,7 @@ async def test_task_context(vault: Path) -> None:
         assert len(small["text"]) <= 240
         text = await c.error("context", mode="task")
         assert text.startswith("invalid_argument:")
-        hook = await c.call(
-            "context", mode="task", task="serena", hook_event="UserPromptSubmit"
-        )
+        hook = await c.call("context", mode="task", task="serena", hook_event="UserPromptSubmit")
         assert hook[0] is False and hook[1].startswith("episteme · contexto para: serena")
 
 
@@ -121,3 +119,35 @@ async def test_overdue_reminders_order(vault: Path) -> None:
             "memory/fabrik/reminders/2026-10-18-revisar-trigger-queries.md",
         ]
         assert "Futuro" not in res["text"]
+
+
+async def test_review_totals_and_zone_filter(vault: Path) -> None:
+    (vault / "plans").mkdir(exist_ok=True)
+    for i in range(3):
+        (vault / f"plans/p{i}.md").write_text(f"# P{i}\n\n[[missing-{i}]]\n")
+    async with mcp_client(vault) as c:
+        res = await c.ok("review", limit=2)
+        assert len(res["broken_links"]) == 2
+        assert res["totals"]["broken_links"] == 3
+        assert res["read_only"]["totals"]["invalid_frontmatter"] >= 1
+        plans = await c.ok("review", zone="plans")
+        assert plans["totals"]["broken_links"] == 3
+        assert plans["read_only"]["totals"]["invalid_frontmatter"] == 0
+        docs = await c.ok("review", zone="docs/claude-code")
+        assert docs["totals"]["broken_links"] == 0
+        assert docs["read_only"]["invalid_frontmatter"]
+        assert (await c.error("review", zone="nope")).startswith("invalid_argument:")
+
+
+async def test_same_folder_preferred_for_repeated_names(vault: Path) -> None:
+    (vault / "plans/a").mkdir(parents=True)
+    (vault / "plans/b").mkdir()
+    (vault / "plans/a/dup.md").write_text("# Dup A\n")
+    (vault / "plans/b/dup.md").write_text("# Dup B\n")
+    (vault / "plans/a/src.md").write_text("# Src\n\n[[dup]]\n")
+    (vault / "plans/other.md").write_text("# Other\n\n[[dup]]\n")
+    async with mcp_client(vault) as c:
+        res = await c.ok("review", zone="plans")
+        assert {(b["path"], b["target"]) for b in res["broken_links"]} == {
+            ("plans/other.md", "dup")
+        }
