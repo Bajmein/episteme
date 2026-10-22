@@ -1,6 +1,6 @@
 [project]
 name = "episteme"
-version = "0.3.0"
+version = "0.3.1"
 description = "MCP server that serves an Obsidian-compatible Markdown vault as project documentation and memory."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,7 @@ packages = ["src/episteme"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

@@ -130,6 +130,9 @@ async def test_review_totals_and_zone_filter(vault: Path) -> None:
         assert len(res["broken_links"]) == 2
         assert res["totals"]["broken_links"] == 3
         assert res["read_only"]["totals"]["invalid_frontmatter"] >= 1
+        # Same categories as the project's own, so nothing found in a read-only zone is lost.
+        assert set(res["read_only"]["totals"]) == set(res["totals"])
+        assert set(res["read_only"]) == {"totals", *res["totals"]}
         plans = await c.ok("review", zone="plans")
         assert plans["totals"]["broken_links"] == 3
         assert plans["read_only"]["totals"]["invalid_frontmatter"] == 0

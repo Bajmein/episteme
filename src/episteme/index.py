@@ -589,20 +589,24 @@ def normalize_tag(tag: str) -> str:
 def query_terms(query: str, drop_stopwords: bool = False) -> list[list[str]]:
     """Split a user query into terms (a quoted phrase is one term) of folded tokens.
 
-    Only word characters survive, so the query is never read as FTS5 syntax. A bare ``word*``
-    is a prefix term: its last token keeps a trailing ``*``. With ``drop_stopwords``, single
-    Spanish function words are dropped (phrases are kept).
+    Only word characters survive, so the query is never read as FTS5 syntax. A bare word
+    with hyphens (``save-clear``) gives one term per part; other punctuation (``ROADMAP.md``)
+    keeps the word as a phrase. A bare ``word*`` is a prefix term: its last token keeps a
+    trailing ``*``. With ``drop_stopwords``, single Spanish function words are dropped
+    (phrases are kept).
     """
     terms = []
     for phrase, word in re.findall(r'"([^"]*)"|(\S+)', query):
-        toks = re.findall(r"[^\W_]+", fold(phrase or word))
-        if not toks:
-            continue
-        if drop_stopwords and not phrase and len(toks) == 1 and toks[0] in STOPWORDS_ES:
-            continue
-        if word and word.endswith("*"):
-            toks[-1] += "*"
-        terms.append(toks)
+        parts = [phrase] if phrase else word.split("-")
+        for n, part in enumerate(parts, 1):
+            toks = re.findall(r"[^\W_]+", fold(part))
+            if not toks:
+                continue
+            if drop_stopwords and not phrase and len(toks) == 1 and toks[0] in STOPWORDS_ES:
+                continue
+            if word and n == len(parts) and word.endswith("*"):
+                toks[-1] += "*"
+            terms.append(toks)
     return terms
 
 

@@ -2,7 +2,7 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.3.0 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2 y vault global por defecto en `~/.episteme`).
+> Estado: v0.3.1 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2 y vault global por defecto en `~/.episteme`).
 
 ## Instalación
 
@@ -10,7 +10,7 @@ Se distribuye con `uvx` desde un tag de GitHub. El repo es privado, así que se 
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.3.0 episteme --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.3.1 episteme --project fabrik
 ```
 
 Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
@@ -68,7 +68,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 
 | Tool | Solo lectura | Para qué |
 | --- | --- | --- |
-| `search(query, path?, type?, tags?, project?, status?, limit=20)` | sí | Búsqueda de texto completo (AND, `"frases"`, sin distinguir mayúsculas ni tildes). Excluye por defecto las memorias `superseded` y `archived` (`status="any"` no filtra) |
+| `search(query, path?, type?, tags?, project?, status?, limit=20)` | sí | Búsqueda de texto completo (AND, `"frases"`, `a-b` como dos palabras, sin distinguir mayúsculas ni tildes). Excluye por defecto las memorias `superseded` y `archived` (`status="any"` no filtra) |
 | `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
 | `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`) |

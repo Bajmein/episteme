@@ -98,7 +98,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None,
             Field(
                 description='Words that must all appear (AND); "quoted text" is a phrase; '
-                "`word*` matches any word starting with it. Case and accents are ignored. "
+                "`a-b` is the words a and b; `word*` matches any word starting with it. "
+                "Case and accents are ignored. "
                 "Optional when tags or type is given."
             ),
         ] = None,
@@ -301,9 +302,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
 
         Returns JSON {"totals", "stale", "contradictions", "orphans", "broken_links",
         "invalid_frontmatter", "flagged", "read_only"}. "totals" counts every item per
-        category (the lists are cut at limit). Problems in read-only zones (broken links and
-        invalid frontmatter you cannot fix here) are not mixed in: they go under "read_only",
-        with their own "totals".
+        category (the lists are cut at limit). Problems in read-only zones (you cannot fix
+        them here; in practice broken links and invalid frontmatter, since memories live in
+        memory zones) are not mixed in: they go under "read_only", with the same categories
+        and their own "totals".
         """
         with engine.session():
             return dump(memory.review(engine, path, project, limit, zone))

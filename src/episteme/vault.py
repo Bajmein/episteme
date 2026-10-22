@@ -69,9 +69,7 @@ def load_config(root: Path) -> Config:
         seen.add(name)
         mode = value.get("mode") if isinstance(value, dict) else None
         if mode not in MODES:
-            raise StartupError(
-                f'zone "{name}" has mode {mode!r}; use one of {", ".join(MODES)}.'
-            )
+            raise StartupError(f'zone "{name}" has mode {mode!r}; use one of {", ".join(MODES)}.')
         zones.append(Zone(name, mode))
 
     state_glob = None

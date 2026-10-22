@@ -839,7 +839,6 @@ def task_context(
 # -- review --------------------------------------------------------------
 
 STALE_DAYS = 90
-READ_ONLY_CATEGORIES = ("broken_links", "invalid_frontmatter")
 
 
 def review(
@@ -959,14 +958,15 @@ def review(
     def path_of(item: Any) -> str:
         return item if isinstance(item, str) else item.get("path") or item["a"]
 
-    # Read-only zones are reported apart: they are not the project's to fix.
+    # Read-only zones are reported apart, with the same categories: they are not the
+    # project's to fix, but nothing found there is dropped.
     own = {k: [i for i in v if not is_read_only(path_of(i))] for k, v in found.items()}
     apart = {k: [i for i in v if is_read_only(path_of(i))] for k, v in found.items()}
     out: dict[str, Any] = {"totals": {k: len(v) for k, v in own.items()}}
     out.update({k: v[:limit] for k, v in own.items()})
     out["read_only"] = {
-        "totals": {k: len(v) for k, v in apart.items() if k in READ_ONLY_CATEGORIES},
-        **{k: v[:limit] for k, v in apart.items() if k in READ_ONLY_CATEGORIES},
+        "totals": {k: len(v) for k, v in apart.items()},
+        **{k: v[:limit] for k, v in apart.items()},
     }
     return out
 

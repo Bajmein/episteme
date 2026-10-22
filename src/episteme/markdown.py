@@ -274,7 +274,9 @@ def parse(text: str, rel: str) -> ParsedNote:
             in_indented = (prev_blank and not in_list) or in_indented
         else:
             in_indented = False
-            in_list = bool(LIST_ITEM_RE.match(line))
+            # A column-0 line right after a list line is a lazy continuation of the item.
+            lazy = in_list and not prev_blank and not h
+            in_list = bool(LIST_ITEM_RE.match(line)) or lazy
         prev_blank = False
         if in_indented:
             continue

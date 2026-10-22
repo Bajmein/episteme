@@ -30,9 +30,7 @@ async def test_case3_read_only_zone(vault: Path) -> None:
         ):
             text = await c.error("revise", note=HOOKS, action=action, **extra)
             assert text.startswith("read_only_zone:"), text
-        text = await c.error(
-            "remember", type="decision", title="t", body="b", supersedes=HOOKS
-        )
+        text = await c.error("remember", type="decision", title="t", body="b", supersedes=HOOKS)
         assert text.startswith(("read_only_zone:", "invalid_argument:")), text
     assert (vault / HOOKS).read_bytes() == before
 
@@ -81,9 +79,7 @@ async def test_case8_supersede(vault: Path) -> None:
             body="Se sube ty a 0.0.90 en `.serena/project.yml`.",
             priority=5,
         )
-        res = await c.ok(
-            "revise", note="2026-10-02-serena-ty", action="supersede", by=new["path"]
-        )
+        res = await c.ok("revise", note="2026-10-02-serena-ty", action="supersede", by=new["path"])
         assert res["by"] == new["path"] and "status" in res["changed"]
         old_fm = _fm(vault / "memory/fabrik/decisions/2026-10-02-serena-ty.md")
         assert old_fm["status"] == "superseded" and old_fm["priority"] == 5

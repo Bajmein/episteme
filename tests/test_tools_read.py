@@ -154,3 +154,17 @@ async def test_search_or_fallback_and_prefix(vault: Path) -> None:
         res = await c.ok("search", query="pretool*")
         assert any("hooks-reference" in r["path"] for r in res["results"])
         assert (await c.ok("search", query="pretool"))["total"] == 0
+
+
+async def test_search_hyphenated_word_is_its_parts(vault: Path) -> None:
+    (vault / "plans").mkdir()
+    (vault / "plans/both.md").write_text("# Both\n\nzorbsave the state, then zorbclear it\n")
+    (vault / "plans/one.md").write_text("# One\n\nonly zorbsave here, and qqqmissing\n")
+    async with mcp_client(vault) as c:
+        res = await c.ok("search", query="zorbsave-zorbclear")
+        assert [r["path"] for r in res["results"]] == ["plans/both.md"]
+        assert "match" not in res and "**zorbsave**" in res["results"][0]["snippet"]
+        assert (await c.ok("search", query='"zorbsave-zorbclear"'))["total"] == 0
+        res = await c.ok("search", query="qqqmissing-zorbclear")
+        assert res["match"] == "or"
+        assert {r["path"] for r in res["results"]} == {"plans/both.md", "plans/one.md"}
