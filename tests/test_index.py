@@ -139,3 +139,69 @@ def test_lock_at_open_is_retried_not_treated_as_corruption(
     assert calls["n"] == 2
     # the existing index (and what other processes wrote to it) survives
     assert not ix.mark_welcomed("s1")
+
+
+def _links(ix: Index) -> list[tuple[object, ...]]:
+    rows = ix.conn.execute("select src, dst_raw, dst_path, heading_missing from links order by 1,2")
+    return [tuple(r) for r in rows]
+
+
+def test_incremental_relink_matches_full_rebuild(vault: Path) -> None:
+    ix = _index(vault)
+    plans = vault / "plans"
+    plans.mkdir()
+    (plans / "src.md").write_text("# Src\n\n[[target]] [[target#Sec]] [[alias-x]] [[plans/gone]]\n")
+    ix.refresh()
+    assert {r["dst_raw"]: r["dst_path"] for r in ix.outgoing("plans/src.md")}["target"] is None
+    # create: the dangling links resolve
+    (plans / "target.md").write_text("---\naliases: [alias-x]\n---\n# Target\n\n## Sec\n")
+    (plans / "gone.md").write_text("# Gone\n")
+    ix.refresh()
+    out = {r["dst_raw"]: r for r in ix.outgoing("plans/src.md")}
+    assert out["target"]["dst_path"] == "plans/target.md"
+    assert out["alias-x"]["dst_path"] == "plans/target.md"
+    assert out["plans/gone"]["dst_path"] == "plans/gone.md"
+    assert out["target"]["heading_missing"] == 0
+    # edit: a heading disappears, an alias is lost
+    (plans / "target.md").write_text("# Target\n\n## Other\n")
+    os.utime(plans / "target.md", ns=(1, 1))
+    ix.refresh()
+    rows = [r for r in ix.outgoing("plans/src.md") if r["dst_raw"] in ("target", "alias-x")]
+    by = {(r["dst_raw"], r["heading"]): r for r in rows}
+    assert by[("target", "Sec")]["heading_missing"] == 1
+    assert by[("alias-x", None)]["dst_path"] is None
+    # delete
+    (plans / "gone.md").unlink()
+    ix.refresh()
+    assert {r["dst_raw"]: r["dst_path"] for r in ix.outgoing("plans/src.md")}["plans/gone"] is None
+    incremental = _links(ix)
+    ix.close()
+    (vault / ".index" / "index.db").unlink()
+    rebuilt = Index(Vault(vault))
+    rebuilt.refresh()
+    assert _links(rebuilt) == incremental
+
+
+def test_refresh_reuses_directory_listing_until_it_changes(vault: Path) -> None:
+    ix = _index(vault)
+    assert ix.refresh() is False
+    cached = dict(ix._dirs)
+    assert cached and ix.refresh() is False
+    assert ix._dirs["docs/claude-code"] is cached["docs/claude-code"]
+    (vault / "docs" / "claude-code" / "fresh.md").write_text("# Fresh\n")
+    assert ix.refresh() is True
+    assert ix.note("docs/claude-code/fresh.md") is not None
+    assert ix._dirs["docs/claude-code"] is not cached["docs/claude-code"]
+    (vault / "docs" / "claude-code" / "fresh.md").unlink()
+    assert ix.refresh() is True
+    assert ix.note("docs/claude-code/fresh.md") is None
+
+
+def test_welcomed_old_rows_are_pruned(vault: Path) -> None:
+    ix = _index(vault)
+    assert ix.mark_welcomed("old") is True
+    ix.conn.execute("update welcomed set at = '2020-01-01T00:00:00+00:00'")
+    assert ix.mark_welcomed("new") is True
+    ids = {r[0] for r in ix.conn.execute("select session_id from welcomed")}
+    assert ids == {"new"}
+    assert ix.mark_welcomed("new") is False
