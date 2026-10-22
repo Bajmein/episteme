@@ -73,6 +73,14 @@ def test_search_diacritics_and_syntax_escaping(vault: Path) -> None:
     assert query_terms('a "b c" -d') == [["a"], ["b", "c"], ["d"]]
 
 
+def test_query_terms_split_hyphens_only() -> None:
+    assert query_terms("save-clear") == [["save"], ["clear"]]
+    assert query_terms("save-cl*") == [["save"], ["cl*"]]
+    assert query_terms('"save-clear"') == [["save", "clear"]]
+    assert query_terms("ROADMAP.md .fabrik/x") == [["roadmap", "md"], ["fabrik", "x"]]
+    assert query_terms("fin-de-semana", drop_stopwords=True) == [["fin"], ["semana"]]
+
+
 def test_incremental_reindex(vault: Path) -> None:
     ix = _index(vault)
     assert ix.refresh() is False
@@ -179,6 +187,30 @@ def test_incremental_relink_matches_full_rebuild(vault: Path) -> None:
     (plans / "gone.md").unlink()
     ix.refresh()
     assert {r["dst_raw"]: r["dst_path"] for r in ix.outgoing("plans/src.md")}["plans/gone"] is None
+    incremental = _links(ix)
+    ix.close()
+    (vault / ".index" / "index.db").unlink()
+    rebuilt = Index(Vault(vault))
+    rebuilt.refresh()
+    assert _links(rebuilt) == incremental
+
+
+def test_moving_a_note_relinks_its_backlinks(vault: Path) -> None:
+    ix = _index(vault)
+    plans = vault / "plans"
+    (plans / "sub").mkdir(parents=True)
+    (plans / "src.md").write_text("# Src\n\n[[target#Sec]] [[plans/target]]\n")
+    (plans / "target.md").write_text("# Target\n\n## Sec\n")
+    ix.refresh()
+    assert {r["dst_path"] for r in ix.outgoing("plans/src.md")} == {"plans/target.md"}
+    # delete and create in the same refresh: the base name follows, the full path breaks
+    (plans / "target.md").rename(plans / "sub" / "target.md")
+    ix.refresh()
+    out = {r["dst_raw"]: r for r in ix.outgoing("plans/src.md")}
+    assert out["target"]["dst_path"] == "plans/sub/target.md"
+    assert out["target"]["heading_missing"] == 0
+    assert out["plans/target"]["dst_path"] is None
+    assert [r["src"] for r in ix.backlinks("plans/sub/target.md")] == ["plans/src.md"]
     incremental = _links(ix)
     ix.close()
     (vault / ".index" / "index.db").unlink()

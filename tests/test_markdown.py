@@ -123,6 +123,18 @@ def test_hex_letter_words_are_tags() -> None:
     assert set(parse(text, "a.md").tags) == {"bad", "cafe", "decade"}
 
 
+def test_lazy_continuation_keeps_the_list_open() -> None:
+    text = "# T\n\n- a\ncontinuación\n\n    - #nested\n"
+    assert parse(text, "a.md").tags == ["nested"]
+    # A blank line, a heading or a plain paragraph closes the list: indented text is code.
+    for text in (
+        "- a\n\nparagraph\n\n    #code\n",
+        "- a\n# Heading\n\n    #code\n",
+        "plain\n\n    #code\n",
+    ):
+        assert parse(text, "a.md").tags == [], text
+
+
 def test_indented_after_fence_is_not_stale_code() -> None:
     text = "# T\n\ntext\n\n```\ncode\n```\n    #after\n"
     assert "after" in parse(text, "a.md").tags

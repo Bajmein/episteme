@@ -68,7 +68,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 
 | Tool | Solo lectura | Para qué |
 | --- | --- | --- |
-| `search(query, path?, type?, tags?, project?, status?, limit=20)` | sí | Búsqueda de texto completo (AND, `"frases"`, sin distinguir mayúsculas ni tildes). Excluye por defecto las memorias `superseded` y `archived` (`status="any"` no filtra) |
+| `search(query, path?, type?, tags?, project?, status?, limit=20)` | sí | Búsqueda de texto completo (AND, `"frases"`, `a-b` como dos palabras, sin distinguir mayúsculas ni tildes). Excluye por defecto las memorias `superseded` y `archived` (`status="any"` no filtra) |
 | `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
 | `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`) |
