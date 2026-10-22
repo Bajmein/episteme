@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -124,8 +125,9 @@ async def test_case11_checkpoint_save_and_restore(vault: Path, project_dir: Path
         assert "## Siguientes pasos" in text
         assert "Bitácora" not in text and "salida larga de pytest" not in text
 
-        restored = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        restored = await c.ok("checkpoint", action="restore")
         assert restored["found"] is True and restored["path"] == saved["path"]
+        assert restored["source"] == "checkpoint"
         assert "Tests de error" in restored["content"]
         assert "Bitácora" not in restored["content"]
         hook = await c.call(
@@ -143,7 +145,7 @@ async def test_restore_ignores_expired(vault: Path, project_dir: Path) -> None:
     async with mcp_client(vault) as c:
         await c.ok("checkpoint", action="save", project_dir=str(project_dir))
     async with mcp_client(vault, today="2026-11-30") as c:
-        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        res = await c.ok("checkpoint", action="restore")
         assert res["found"] is False
 
 
@@ -162,6 +164,80 @@ async def test_checkpoint_without_state_glob(vault: Path, project_dir: Path) -> 
     async with mcp_client(vault) as c:
         text = await c.error("checkpoint", action="save", project_dir=str(project_dir))
         assert text.startswith("invalid_argument:") and "state_glob" in text
+
+
+def _change(project: Path, name: str, estado: str = "activo", etapa: str = "build") -> Path:
+    folder = project / ".fabrik/core" / name
+    folder.mkdir(parents=True)
+    (folder / "estado.md").write_text(
+        f"---\ntask_title: {name}\nestado: {estado}\netapa: {etapa}\n---\n"
+        f"# Estado · {name}\n\n## Progreso\n- trabajo de {name}\n\n"
+        "## Siguientes pasos\n1. seguir\n"
+    )
+    return folder
+
+
+def _branch(project: Path, ref: str) -> None:
+    (project / ".git").mkdir()
+    (project / ".git/HEAD").write_text(f"ref: refs/heads/{ref}\n")
+
+
+async def test_restore_live_state_of_branch(vault: Path, project_dir: Path) -> None:
+    other = _change(project_dir, "002-otro")
+    (other / "tasks.md").write_text("- [x] T1 a\n- [~] T2 b\n- [ ] T3 c\n")
+    _branch(project_dir, "feat/002-otro")
+    async with mcp_client(vault) as c:
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["source"] == "state" and res["task_title"] == "002-otro"
+        assert res["path"] == ".fabrik/core/002-otro/estado.md"
+        first = res["content"].splitlines()[0]
+        assert first == (
+            "Flujo fabrik: change 002-otro (core), etapa build, "
+            "tasks 1/3, en curso T2, siguiente T3"
+        )
+        assert "trabajo de 002-otro" in res["content"] and "001" not in res["content"]
+
+
+async def test_restore_newest_when_branch_is_not_a_change(vault: Path, project_dir: Path) -> None:
+    other = _change(project_dir, "002-otro")
+    old = project_dir / ".fabrik/core/001-demo/estado.md"
+    os.utime(old, (1, 1))
+    _branch(project_dir, "main")
+    async with mcp_client(vault) as c:
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["task_title"] == "002-otro" and other.is_dir()
+        assert "tasks" not in res["content"].splitlines()[0]
+
+
+async def test_restore_by_task_title(vault: Path, project_dir: Path) -> None:
+    _change(project_dir, "002-otro")
+    _branch(project_dir, "feat/001-demo")
+    async with mcp_client(vault) as c:
+        res = await c.ok(
+            "checkpoint", action="restore", project_dir=str(project_dir), task_title="002-otro"
+        )
+        assert res["task_title"] == "002-otro" and res["source"] == "state"
+        res = await c.ok(
+            "checkpoint", action="restore", project_dir=str(project_dir), task_title="nope"
+        )
+        assert res["found"] is False
+
+
+async def test_restore_falls_back_then_archives_stale(vault: Path, project_dir: Path) -> None:
+    async with mcp_client(vault) as c:
+        saved = await c.ok("checkpoint", action="save", project_dir=str(project_dir))
+        state = project_dir / ".fabrik/core/001-demo/estado.md"
+        state.write_text(state.read_text().replace("estado: activo", "estado: cerrado"))
+        # No active state: the saved checkpoint is the fallback.
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["source"] == "checkpoint" and res["path"] == saved["path"]
+        # Another task becomes active: the stale checkpoint is archived, not restored again.
+        _change(project_dir, "002-otro")
+        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
+        assert res["task_title"] == "002-otro"
+        assert "status: archived" in (vault / saved["path"]).read_text()
+        res = await c.ok("checkpoint", action="restore")
+        assert res["found"] is False
 
 
 async def test_surface_relative_path_and_empty_file(vault: Path) -> None:

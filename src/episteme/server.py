@@ -397,12 +397,21 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             Field(description="Absolute project directory (hooks pass ${cwd})."),
         ] = None,
         project: ProjectArg = None,
+        task_title: Annotated[
+            str | None,
+            Field(
+                description="restore only: resume this task (exact title) instead of the branch's."
+            ),
+        ] = None,
         hook_event: HookEvent = None,
     ) -> str:
         """Save the active task state (estado.md) as a session memory, or restore the latest.
 
         save: {"saved", "path", "task_title"}; saved is false when no state is active.
-        restore: {"found", "path", "task_title", "content"}. Never blocks compaction.
+        restore: {"found", "path", "task_title", "content", "source"}. It reads the live active
+        estado.md first (the branch's change, else the newest), with a flow line (etapa and
+        tasks.md progress); without one it falls back to the saved checkpoint. Saved checkpoints
+        of tasks with no active state are archived. Never blocks compaction.
         """
         hookmode.check(hook_event)
         with engine.session():
@@ -410,7 +419,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                 data = checkpoints.save(engine, project_dir, project)
                 text = f"episteme · checkpoint saved: {data['path']}" if data["saved"] else ""
             elif action == "restore":
-                data = checkpoints.restore(engine, project)
+                data = checkpoints.restore(engine, project, project_dir, task_title)
                 text = data["content"]
             else:
                 raise invalid(f'action must be "save" or "restore", got "{action}".')
