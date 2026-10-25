@@ -73,7 +73,7 @@ async def test_review_categories(vault: Path) -> None:
         pair = res["contradictions"][0]
         assert {pair["a"], pair["b"]} == {
             "memory/fabrik/decisions/2026-10-02-serena-ty.md",
-            "memory/fabrik/decisions/2026-10-19-serena-sin-lsp-para-markdown.md",
+            "memory/fabrik/decisions/2026-10-19-serena-lsp-markdown.md",
         }
         assert ".serena/project.yml" in pair["reason"]
         assert "memory/fabrik/lessons/2026-10-14-omega-rss-limit.md" in res["orphans"]

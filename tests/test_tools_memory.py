@@ -156,3 +156,15 @@ def test_case13_concurrent_writers(vault: Path) -> None:
 
     conn = sqlite3.connect(vault / ".index/index.db")
     assert conn.execute("pragma integrity_check").fetchone()[0] == "ok"
+
+
+async def test_remember_explicit_slug(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        res = await c.ok(
+            "remember",
+            type="lesson",
+            title="Checkpoint fuera de change",
+            body="El checkpoint se guarda aunque no haya change activo.",
+            slug="checkpoint-fuera-de-change",
+        )
+        assert res["path"].endswith("/2026-10-19-checkpoint-fuera-de-change.md")

@@ -7,6 +7,7 @@ import fnmatch
 import json
 import math
 import os
+import re
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -19,9 +20,9 @@ from episteme.markdown import (
     dump_frontmatter,
     find_section,
     first_sentence,
+    fold,
     load_frontmatter,
     parse,
-    slugify,
     split_frontmatter,
     tokens,
 )
@@ -242,6 +243,47 @@ class NoteFile:
 
 # -- remember ------------------------------------------------------------
 
+STOPWORDS_EN = frozenset(
+    """a an the and or of to in on at for with by from is are was be as it its this that into
+    about vs via not""".split()
+)
+SLUG_WORDS = 5
+SLUG_CHARS = 40
+_SLUG_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[a-z0-9]+")
+_SLUG_OK = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+_SLUG_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _join_slug(words: list[str]) -> str:
+    picked: list[str] = []
+    for word in words:
+        if len(picked) == SLUG_WORDS:
+            break
+        if len("-".join([*picked, word])) > SLUG_CHARS:
+            if not picked:
+                picked.append(word[:SLUG_CHARS].strip("-"))
+            break
+        picked.append(word)
+    return "-".join(picked)
+
+
+def memory_slug(title: str, project: str, type: str) -> str:
+    """Short file-name slug: up to 5 useful words, 40 characters, never cut mid-word."""
+    found = [re.sub(r"[.,]", "-", t) for t in _SLUG_TOKEN.findall(fold(title))]
+    in_path = {*re.findall(r"[a-z0-9]+", fold(project)), type, FOLDERS.get(type, type)}
+    skip = STOPWORDS_ES | STOPWORDS_EN | in_path
+    useful = [t for t in found if t not in skip and not (len(t) == 1 and t.isalpha())]
+    return _join_slug(useful) or _join_slug(found) or "note"
+
+
+def _check_slug(slug: str) -> str:
+    if not (_SLUG_OK.fullmatch(slug) and len(slug) <= SLUG_CHARS and not _SLUG_DATE.match(slug)):
+        raise invalid(
+            f'slug "{slug}" is not valid. Use 1-{SLUG_CHARS} lowercase ASCII letters, digits '
+            "and single hyphens, without the date, e.g. checkpoint-fuera-de-change."
+        )
+    return slug
+
 
 def remember(
     engine: Engine,
@@ -263,6 +305,7 @@ def remember(
     created: dt.date | None = None,
     helpful: int = 0,
     dry_run: bool = False,
+    slug: str | None = None,
 ) -> dict[str, Any]:
     """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration."""
     project = engine.need_project(project)
@@ -277,6 +320,7 @@ def remember(
     if not (body or "").strip():
         raise invalid("body is empty. Describe the memory and name the files or tools involved.")
 
+    slug = _check_slug(slug) if slug is not None else memory_slug(title, project, type)
     related_links = [wikilink(engine, engine.resolve_note(r)) for r in related or []]
     old_rel = None
     old_note = None
@@ -332,7 +376,7 @@ def remember(
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"
-    base = f"{created.isoformat()}-{slugify(title)}"
+    base = f"{created.isoformat()}-{slug}"
     engine.vault.check_writable(f"{folder}/{base}.md")
     n = 1
     if dry_run:

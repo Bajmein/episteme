@@ -177,7 +177,9 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                 "reminder | insight"
             ),
         ],
-        title: Annotated[str, Field(description="Short title; also names the file.")],
+        title: Annotated[
+            str, Field(description="Short title (5-8 words); the file name is derived from it.")
+        ],
         body: Annotated[
             str,
             Field(
@@ -218,8 +220,19 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         force: Annotated[
             bool, Field(description="Create it even if a near-duplicate exists.")
         ] = False,
+        slug: Annotated[
+            str | None,
+            Field(
+                description="File-name slug: 1-40 lowercase letters, digits and hyphens, without "
+                "the date. Derived from the title when omitted."
+            ),
+        ] = None,
     ) -> str:
         """Store a memory as memory/<project>/<type folder>/YYYY-MM-DD-<slug>.md.
+
+        The date is local. The slug is the title cut to its first 3-5 useful words (no stopwords,
+        nothing already in the path, at most 40 characters) unless you pass slug; the full title
+        stays in the H1. A name that already exists gets -2, -3...
 
         Validates the schema and looks for near-duplicates of the same project and type: at
         similarity >= 0.8 nothing is created (created: false) unless force=true.
@@ -243,6 +256,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                     valid_until,
                     status,
                     force,
+                    slug=slug,
                 )
             )
 

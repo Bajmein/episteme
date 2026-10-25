@@ -76,7 +76,7 @@ def test_remember_writes_schema(engine: Engine, vault: Path) -> None:
         source="abc123",
     )
     assert res["created"] is True
-    assert res["path"] == "memory/fabrik/decisions/2026-10-19-usar-uv-para-dependencias.md"
+    assert res["path"] == "memory/fabrik/decisions/2026-10-19-usar-uv-dependencias.md"
     text = (vault / res["path"]).read_text()
     fm = _fm(vault / res["path"])
     assert list(fm) == [
@@ -87,7 +87,7 @@ def test_remember_writes_schema(engine: Engine, vault: Path) -> None:
     assert fm["related"] == ["[[2026-10-02-serena-ty]]"]
     assert "\n# Usar ÚV para dependencias\n\nLas dependencias" in text
     again = memory.remember(engine, "decision", "Usar ÚV para dependencias", "Otra cosa distinta.")
-    assert again["path"].endswith("usar-uv-para-dependencias-2.md")
+    assert again["path"].endswith("usar-uv-dependencias-2.md")
 
 
 def test_remember_errors(engine: Engine) -> None:
@@ -218,3 +218,64 @@ def test_today_is_local(monkeypatch: pytest.MonkeyPatch) -> None:
     finally:
         monkeypatch.undo()
         time.tzset()
+
+
+@pytest.mark.parametrize(
+    ("title", "project", "type", "expected"),
+    [
+        (
+            "Revisar qué guarda y restaura el checkpoint de episteme al cambiar de sesión",
+            "fabrik", "decision", "revisar-guarda-restaura-checkpoint",
+        ),
+        (
+            "Driver headless de claude -p: trampas halladas al montar el benchmark",
+            "fabrik", "lesson", "driver-headless-claude-trampas-halladas",
+        ),
+        (
+            "Benchmark fabrik 0.4.0: episteme vs nativo, diseño, ubicación y métricas "
+            "(proyecto fabrik)",
+            "fabrik", "decision", "benchmark-0-4-0-episteme-nativo-diseno",
+        ),
+        (
+            "Migración a índices únicos en Postgres",
+            "fabrik", "decision", "migracion-indices-unicos-postgres",
+        ),
+        ("uv", "fabrik", "decision", "uv"),
+        ("Y de que", "fabrik", "decision", "y-de-que"),
+        ("¿?", "fabrik", "decision", "note"),
+        ("Serena usa ty 0.0.90", "fabrik", "lesson", "serena-usa-ty-0-0-90"),
+        (
+            "Decisión fabrik: lessons sobre episteme", "episteme", "lesson", "decision-fabrik",
+        ),
+    ],
+)  # fmt: skip
+def test_memory_slug(title: str, project: str, type: str, expected: str) -> None:
+    slug = memory.memory_slug(title, project, type)
+    assert slug == expected
+    assert len(slug) <= 40 and len(slug.split("-")) <= 8
+
+
+def test_memory_slug_never_cuts_a_word() -> None:
+    title = "Internacionalizacion institucional extraordinariamente interdisciplinaria total"
+    slug = memory.memory_slug(title, "x", "lesson")
+    assert slug == "internacionalizacion-institucional"
+    assert all(part in title.lower().split() for part in slug.split("-"))
+
+
+def test_remember_collision_and_explicit_slug(engine: Engine, vault: Path) -> None:
+    a = memory.remember(engine, "lesson", "Cosa uno", "Cuerpo alfa distinto.", force=True)
+    b = memory.remember(engine, "lesson", "Cosa uno", "Cuerpo alfa distinto.", force=True)
+    assert b["path"] == a["path"].replace(".md", "-2.md")
+    c = memory.remember(engine, "lesson", "T1", "Texto uno zeta.", slug="mi-slug")
+    d = memory.remember(engine, "lesson", "T2", "Texto dos omega.", slug="mi-slug")
+    assert c["path"].endswith("/2026-10-19-mi-slug.md")
+    assert d["path"].endswith("/2026-10-19-mi-slug-2.md")
+
+
+@pytest.mark.parametrize(
+    "slug", ["Mayúsculas", "con_guion_bajo", "--doble", "a" * 41, "2026-10-24-x", "a--b", ""]
+)
+def test_remember_invalid_slug(engine: Engine, slug: str) -> None:
+    with pytest.raises(EpistemeError) as err:
+        memory.remember(engine, "lesson", "T", "Cuerpo.", slug=slug)
+    assert str(err.value).startswith("invalid_argument:")
