@@ -35,7 +35,7 @@ Requiere Python 3.11 o superior con SQLite y FTS5 (el servidor lo comprueba al a
 
 Variables:
 
-- `EPISTEME_TODAY=AAAA-MM-DD` fija la fecha de hoy (por defecto, la fecha UTC). Existe para los tests.
+- `EPISTEME_TODAY=AAAA-MM-DD` fija la fecha de hoy (por defecto, la fecha local). Existe para los tests.
 
 El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Añade `.index/` al `.gitignore` del vault.
 

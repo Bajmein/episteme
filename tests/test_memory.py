@@ -204,3 +204,17 @@ def test_welcome_keeps_old_norm_and_lists_upcoming_reminders(engine: Engine, vau
     with pytest.raises(EpistemeError) as err:
         memory.revise(engine, norm, "dismiss")
     assert err.value.code == "invalid_argument"
+
+
+def test_today_is_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    monkeypatch.delenv("EPISTEME_TODAY", raising=False)
+    monkeypatch.setenv("TZ", "Etc/GMT+12")
+    time.tzset()
+    try:
+        expected = (dt.datetime.now(dt.UTC) - dt.timedelta(hours=12)).date()
+        assert today() == expected
+    finally:
+        monkeypatch.undo()
+        time.tzset()

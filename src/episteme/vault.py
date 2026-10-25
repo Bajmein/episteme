@@ -82,11 +82,11 @@ def load_config(root: Path) -> Config:
 
 
 def today() -> dt.date:
-    """Today's date in UTC, or ``EPISTEME_TODAY`` (YYYY-MM-DD) when set."""
+    """Today's local date, or ``EPISTEME_TODAY`` (YYYY-MM-DD) when set."""
     fixed = os.environ.get("EPISTEME_TODAY")
     if fixed:
         return dt.date.fromisoformat(fixed)
-    return dt.datetime.now(dt.UTC).date()
+    return dt.date.today()
 
 
 def is_ignored(rel: str) -> bool:
