@@ -12,3 +12,4 @@ paths:
 - Un duplicado nunca se fusiona en silencio: se devuelve en `similar` y no se crea salvo `force=true`.
 - `review` informa y nunca borra ni cambia nada.
 - `migrate_omega.py` reutiliza `memory.remember` (misma validación y detección de duplicados) y es idempotente: una segunda ejecución no duplica nada. No duplicar lógica del esquema en el script.
+- El nombre de archivo sale de `memory_slug` (≤ 5 palabras, ≤ 40 caracteres, sin palabras vacías ni lo que ya dice la ruta) o del parámetro `slug`; la colisión añade `-2`, `-3`… y nunca sobrescribe. `checkpoint` conserva `slugify` a propósito: su ruta debe ser estable para que se sobrescriba.

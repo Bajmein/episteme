@@ -71,7 +71,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `search(query, path?, type?, tags?, project?, status?, limit=20)` | sí | Búsqueda de texto completo (AND, `"frases"`, `a-b` como dos palabras, sin distinguir mayúsculas ni tildes). Excluye por defecto las memorias `superseded` y `archived` (`status="any"` no filtra) |
 | `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
-| `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`) |
+| `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false, slug?)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`). El nombre sale del título (ver «Memorias»); `slug` lo fija |
 | `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory`; `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
 | `review(path?, project?, limit=50, zone?)` | sí | Memorias viejas, contradicciones posibles, huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
@@ -83,7 +83,7 @@ Los nombres de nota aceptan una ruta relativa al vault (con o sin `.md`) o un no
 
 ### Memorias
 
-Viven en `memory/<proyecto>/<carpeta del tipo>/AAAA-MM-DD-<slug>.md` (`_shared` vale para todos los proyectos). Esquema:
+Viven en `memory/<proyecto>/<carpeta del tipo>/AAAA-MM-DD-<slug>.md` (`_shared` vale para todos los proyectos). La fecha es la local. El slug son las primeras 3 a 5 palabras útiles del título (sin palabras vacías en español ni inglés, sin lo que ya dice la ruta, hasta 40 caracteres y sin cortar palabras; una versión como `0.4.0` cuenta como una). El título completo queda en el H1. `slug` lo fija a mano (`[a-z0-9]` y guiones, sin la fecha). Si el nombre ya existe se añade `-2`, `-3`… Esquema:
 
 ```yaml
 type: decision          # decision | lesson | error | constraint | preference | session | reminder | insight
