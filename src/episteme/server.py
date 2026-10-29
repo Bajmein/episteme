@@ -290,7 +290,9 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """Change a note in a read-write or memory zone. Read-only zones are refused.
 
         supersede, feedback, archive and dismiss (archives a reminder) only apply to memories.
-        Memories are validated against the schema before anything is written.
+        Memories are validated against the schema before anything is written. set on a memory
+        that changes type or project moves the file to memory/<project>/<type folder>/ (same
+        name, so [[name]] links keep working) and returns the new path with "moved_from".
         Returns JSON {"path", "action", "changed"}.
         """
         with engine.session():

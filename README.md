@@ -2,7 +2,7 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.4.1 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2, vault global por defecto en `~/.episteme` y soporte de Windows nativo).
+> Estado: v0.5.0 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2, vault global por defecto en `~/.episteme` y soporte de Windows nativo).
 
 ## Instalación
 
@@ -16,7 +16,7 @@ Por `git+ssh`, con la misma clave que `git push`:
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.4.1 episteme --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.5.0 episteme --project fabrik
 ```
 
 Sin clave SSH, vale la URL de Windows (`git+https://…`). Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
@@ -41,15 +41,15 @@ winget install --id=astral-sh.uv -e
 Se instala por HTTPS, y la primera vez Git Credential Manager abre el navegador para iniciar sesión en GitHub:
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.4.1 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.5.0 episteme --project <proyecto>
 ```
 
 En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por defecto es `%USERPROFILE%\.episteme`; `--vault` acepta una ruta absoluta de Windows (`C:\Users\ana\notas`). El bloque de hooks es el mismo. Dentro de WSL, sigue la instalación de Linux.
 
 ### Después de registrar
 
-1. `claude mcp list` (o `/mcp` dentro de Claude Code) muestra `episteme` conectado. La primera vez tarda: uv descarga el repo y las dependencias.
-2. Copia en `.claude/settings.json` del proyecto el bloque de [Hooks](#hooks) y los permisos recomendados.
+1. `claude mcp list` (o `/mcp` dentro de Claude Code) muestra `episteme` conectado. La primera vez tarda: uv descarga el repo y las dependencias. Una sesión abierta antes del registro no ve los tools (ni sus subagentes) hasta reiniciar Claude Code.
+2. Copia el bloque de [Hooks](#hooks) y los permisos recomendados en `.claude/settings.local.json` del proyecto, o en `.claude/settings.json` si todo el equipo tiene episteme registrado (con el servidor en scope local, a quien no lo tenga le fallarían los hooks). En modo auto, Claude Code no deja que el agente edite estos archivos: lo hace la persona.
 3. Añade al `CLAUDE.md` del proyecto: «Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault.»
 
 ### La skill `episteme-setup`
@@ -122,8 +122,8 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
 | `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false, slug?)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`). El nombre sale del título (ver «Memorias»); `slug` lo fija |
-| `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory`; `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
-| `review(path?, project?, limit=50, zone?)` | sí | Memorias viejas, contradicciones posibles, huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
+| `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory` (en una memoria, un `set` que cambia `type` o `project` la mueve a la carpeta que le toca, con el mismo nombre, y devuelve `moved_from`; se niega si alguna nota la enlaza por ruta o si el nombre ya existe allí); `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
+| `review(path?, project?, limit=50, zone?)` | sí | Memorias viejas, contradicciones posibles (dos decisiones o constraints que comparten un archivo de `files` o 2 tags, salvo que una enlace a la otra con `supersedes`, `contradicts` o `related`), huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
 | `surface(file?, relative_path?, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin constraints, `session` ni `reminder`; el nombre base solo cuenta si es inequívoco; ignora las vencidas por `valid_until`. `relative_path` sustituye a `file` en las ediciones con Serena; sin ninguno, salida vacía |
 | `constraints(file?, relative_path?, project_dir?, project?, hook_event?)` | sí | Constraints activas (no vencidas) que aplican a un archivo. Avisa, no bloquea |
@@ -216,11 +216,13 @@ uv run scripts/migrate_omega.py --export /tmp/omega/omega-memories \
 Sin `--dry-run` escribe; `--dry-run` cuenta lo mismo que la ejecución real. Usa la misma validación y detección de duplicados que `remember`, así que una segunda ejecución no duplica nada. Qué hace con cada cosa:
 
 - Se descartan los `checkpoint`, los `project_status`, los «Edit pattern…», las capturas automáticas de sesión y las reemplazadas en OMEGA.
-- Se quitan los prefijos «fabrik (fecha):», «Decision:», «Lesson:» y «Assistant fix:».
-- Las etiquetas `dominio:x` pasan a `dominio/x`; las que son una ruta pasan a `files`; el resto se descarta. `helpful` queda en 0.
+- Se quitan los prefijos «fabrik (fecha):», «Decision:», «Lesson:» y «Assistant fix:». Del título (y por tanto del nombre del archivo) se quita además una etiqueta inicial entre corchetes, como `[MEMORIA GI - feedback]`; el cuerpo la conserva.
+- Las etiquetas `dominio:x` pasan a `dominio/x`; las que son una ruta (`/…` o `C:\…`) pasan a `files`, relativas al proyecto; el resto se descarta. `helpful` queda en 0.
+- Los tipos se traducen tal cual (`user_preference` → `preference`, `lesson_learned` → `lesson`…): OMEGA no distingue una preferencia de una decisión, así que conviene revisar las `preference` migradas y corregir el tipo con `revise(action="set", fields={"type": …})`, que mueve la nota a su carpeta.
 - `source` lleva el id de OMEGA (`omega:mem-…`): una memoria con ese `source` ya en el vault no se vuelve a crear. Entre duplicados del export se queda el más reciente por fecha.
 - `--omega-db` abre `omega.db` solo para lectura (`mode=ro`) y no toca nada de `~/.omega`. De ahí salen `priority` (el export no la trae) y los recordatorios: los `pending` pasan a `reminder` con `due` = `remind_at`; los `dismissed` no se migran.
-- `--map-project VIEJO=NUEVO` (repetible) lleva proyectos de OMEGA, por nombre o ruta, a uno de episteme. Lo que no sea `--project` ni esté mapeado se omite.
+- `--map-project VIEJO=NUEVO` (repetible) lleva proyectos de OMEGA, por nombre o ruta, a uno de episteme. Las rutas se comparan sin la barra final y, en Windows, sin distinguir mayúsculas ni `\` de `/`. Lo que no sea `--project` ni esté mapeado se omite, y la salida termina con `Proyectos omitidos: <proyecto> (n), …` para saber qué mapear. OMEGA suele guardar el mismo proyecto con el nombre y con la ruta; antes del ensayo, `select project, count(*) from memories group by project` sobre `omega.db` dice cuáles hay.
+- Las memorias sin proyecto en OMEGA entran en `--project` (la salida dice cuántas, para revisarlas); `--unassigned skip` las omite.
 
 ## Desarrollo
 

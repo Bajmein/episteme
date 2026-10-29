@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -18,10 +20,12 @@ EXPORT = FIXTURES / "omega-export/omega-memories"
 MAP = "/home/ana/src/fabrik=fabrik"
 
 
-def _run(vault: Path, *extra: str, mapped: bool = True) -> subprocess.CompletedProcess[str]:
+def _run(
+    vault: Path, *extra: str, mapped: bool = True, export: Path = EXPORT
+) -> subprocess.CompletedProcess[str]:
     args = ["--map-project", MAP] if mapped else []
     return subprocess.run(
-        [sys.executable, str(SCRIPT), "--export", str(EXPORT), "--vault", str(vault),
+        [sys.executable, str(SCRIPT), "--export", str(export), "--vault", str(vault),
          "--project", "fabrik", *args, *extra],
         capture_output=True, text=True, timeout=120,
         env={**os.environ, "EPISTEME_TODAY": "2026-10-19"},
@@ -199,3 +203,64 @@ def test_bad_db_and_map(vault: Path, tmp_path: Path) -> None:
     assert proc.returncode == 2 and "omega.db" in proc.stderr
     proc = _run(vault, "--map-project", "sin-igual")
     assert proc.returncode == 2 and "OLD=NEW" in proc.stderr
+
+
+def _script():
+    spec = importlib.util.spec_from_file_location("migrate_omega", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # @dataclass looks its module up there (Python < 3.14)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_windows_paths() -> None:
+    m = _script()
+    root = r"C:\Users\Ana\gam"
+    tags = ["dominio:auth", r"c:\users\ana\gam\src\app.py", r"C:\Users\Ana\gam", r"D:\x\y.py"]
+    assert m.split_tags(tags, (root,)) == (["dominio/auth"], ["src/app.py", "x/y.py"])
+    mapping = {m.path_key(r"c:\users\ana\gam"): "gam"}
+    assert m._project_for(r"C:\Users\Ana\gam\\", "otro", mapping) == "gam"
+    assert m._project_for("/home/ana/gam/", "otro", {m.path_key("/home/ana/gam"): "gam"}) == "gam"
+
+
+def test_title_label_is_dropped() -> None:
+    m = _script()
+
+    def title(text: str) -> str:
+        note = m.OmegaMemory(id="mem-x", omega_type="decision", tags=[], created=None, text=text)
+        return note.title
+
+    assert title("[MEMORIA GI - feedback] Feedback: claridad") == "Feedback: claridad"
+    assert title("[[nota]] sigue igual") == "[[nota]] sigue igual"
+    assert title("[guía](https://x.y) sigue igual") == "[guía](https://x.y) sigue igual"
+    assert title("[solo etiqueta]") == "[solo etiqueta]"
+
+
+def test_unassigned_and_skipped_projects(vault: Path, tmp_path: Path) -> None:
+    export = tmp_path / "export"
+    shutil.copytree(EXPORT, export)
+    notes = {
+        "mem-dddddddddddd": "",
+        "mem-eeeeeeeeeeee": "project: C:\\Users\\Ana\\gam\n",
+    }
+    for node_id, project in notes.items():
+        (export / "decisions" / f"{node_id}.md").write_text(
+            f"---\nid: {node_id}\ntype: decision\ntags: []\ncreated: 2026-10-06\n{project}---\n\n"
+            f"Decisión {node_id} sobre la arquitectura del cliente con colas.\n",
+            encoding="utf-8",
+        )
+    proc = _run(vault, "--dry-run", export=export)
+    assert proc.returncode == 0, proc.stderr
+    lines = proc.stdout.splitlines()
+    assert "Proyectos omitidos: vigilia (1), C:\\Users\\Ana\\gam (1)." in proc.stdout
+    assert "Sin proyecto en OMEGA: 1, migradas a fabrik." in proc.stdout
+    assert lines[-1].startswith("Resumen (dry-run):")
+
+    proc = _run(vault, "--dry-run", "--unassigned", "skip", export=export)
+    assert "(sin proyecto) mem-dddddddddddd" in proc.stdout
+    assert "omitida:sin-proyecto 1" in _summary(proc)
+    assert "Sin proyecto en OMEGA" not in proc.stdout
+
+    proc = _run(vault, "--dry-run", "--map-project", "c:\\users\\ana\\gam=fabrik", export=export)
+    assert "C:\\Users\\Ana\\gam (1)" not in proc.stdout

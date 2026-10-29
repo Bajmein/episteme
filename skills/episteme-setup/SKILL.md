@@ -39,10 +39,15 @@ claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajme
     uv run --directory '<ruta del clone>' episteme --project <p>
   ```
 - Comprueba con `claude mcp list` que `episteme` sale conectado. La primera vez tarda: uv descarga el repo y las dependencias.
+- **Los tools de episteme no aparecen en esta sesión hasta reiniciar Claude Code**, y los subagentes que lances tampoco los ven. Los pasos 2 a 4 no los necesitan; la comprobación (paso 5) y la migración (paso 6) sí, así que pide a la persona que reinicie antes de esos pasos.
 
-## 2. `settings.json` del proyecto
+## 2. Hooks y permisos del proyecto
 
-Fusiona en `.claude/settings.json` el contenido de [settings.json](settings.json) de esta skill, sin pisar lo que ya haya:
+Elige el archivo con la persona:
+- `.claude/settings.local.json` (no se versiona) si el resto del equipo no usa episteme. Es lo normal, porque el servidor está en scope local: con los hooks en el `settings.json` versionado, a quien no tenga el servidor le fallarían.
+- `.claude/settings.json` si todos los que trabajan en el repo tienen episteme registrado.
+
+Fusiona en ese archivo el contenido de [settings.json](settings.json) de esta skill, sin pisar lo que ya haya:
 - `allow` de los 7 tools de solo lectura (`remember`, `revise` y `checkpoint` siguen pidiendo permiso);
 - `deny` de `Read/Edit(~/.episteme/**)` (`Edit` ya cubre Write; una regla `Write(...)` nunca coincide), `Bash(obsidian *)` y `Bash(omega *)`: el acceso al vault se cierra con permisos, no con el prompt. Si el vault no es el de por defecto, cambia la ruta en las dos reglas;
 - los 5 hooks `mcp_tool`: bienvenida en `UserPromptSubmit`, `constraints` antes y `surface` después de `Edit|Write|mcp__serena__.*` (con Serena el tool no trae `file_path`: pasa `relative_path`), `checkpoint` save en `PreCompact` y restore en `SessionStart` (`compact|clear`).
@@ -50,6 +55,8 @@ Fusiona en `.claude/settings.json` el contenido de [settings.json](settings.json
 Si el proyecto se empaqueta como plugin, `"server": "episteme"` pasa a `"plugin:<plugin>:episteme"`.
 
 No añadas hooks en `SessionStart startup|resume` (Claude Code se salta ahí los `mcp_tool`) ni en `SessionEnd`.
+
+Claude Code puede negarse a que el agente escriba su propia configuración (en modo auto, el clasificador bloquea editar `.claude/settings*.json`). Si pasa, no lo intentes por otra vía: muestra a la persona el JSON fusionado completo y pídele que lo guarde ella.
 
 ## 3. `CLAUDE.md` del proyecto
 
@@ -74,24 +81,50 @@ Reinicia Claude Code en el proyecto. En `/mcp`, `episteme` sale conectado; el pr
 
 ## 6. Migrar desde OMEGA (solo si el proyecto lo usa)
 
-Necesita un clone de episteme (`<clone>`). En Linux:
+Necesita un clone de episteme (`<clone>`) y Claude Code reiniciado (paso 1). En Linux o macOS:
 
 ```bash
 # 1. Copia de OMEGA en reposo (sin sesiones abiertas): ~/.omega solo se lee.
 mkdir -p /tmp/omega-home && cp ~/.omega/{omega.db,omega.db-wal,omega.db-shm,.key} /tmp/omega-home/
 sqlite3 /tmp/omega-home/omega.db 'PRAGMA wal_checkpoint(TRUNCATE)'
-# 2. Exportar desde la copia, para que OMEGA no escriba en ~/.omega.
+# 2. Con qué etiquetas de proyecto guardó OMEGA las memorias (nombre, ruta o ninguna).
+sqlite3 /tmp/omega-home/omega.db 'select project, count(*) from memories group by project'
+# 3. Exportar desde la copia, para que OMEGA no escriba en ~/.omega.
 OMEGA_HOME=/tmp/omega-home omega export-obsidian --output-dir /tmp/omega --project <p> --limit 0
-# 3. Ensayo sobre el vault (el dry-run refresca el índice: mejor sobre una copia).
+# 4. Ensayo sobre el vault (el dry-run refresca el índice: mejor sobre una copia).
 cd <clone>
 uv run scripts/migrate_omega.py --export /tmp/omega/omega-memories \
-  --vault "$HOME/.episteme" --project <p> --omega-db /tmp/omega-home/omega.db --dry-run
+  --vault "$HOME/.episteme" --project <p> --omega-db /tmp/omega-home/omega.db \
+  --map-project '<ruta del proyecto en OMEGA>=<p>' --dry-run
 ```
 
+En Windows (PowerShell; sin la CLI de `sqlite3`, se usa la de Python a través de uv):
+
+```powershell
+# 1. Copia de OMEGA en reposo (sin sesiones abiertas).
+$omega = "$env:TEMP\omega-home"
+New-Item -ItemType Directory -Force $omega | Out-Null
+Copy-Item "$HOME\.omega\omega.db*", "$HOME\.omega\.key" $omega
+uv run --no-project python -c "import sqlite3,sys; sqlite3.connect(sys.argv[1]).execute('PRAGMA wal_checkpoint(TRUNCATE)')" "$omega\omega.db"
+# 2. Etiquetas de proyecto.
+uv run --no-project python -c "import sqlite3,sys; [print(*r) for r in sqlite3.connect(sys.argv[1]).execute('select project, count(*) from memories group by project')]" "$omega\omega.db"
+# 3. Exportar desde la copia.
+$env:OMEGA_HOME = $omega
+omega export-obsidian --output-dir "$env:TEMP\omega" --project <p> --limit 0
+Remove-Item Env:OMEGA_HOME
+# 4. Ensayo, en una sola línea.
+cd <clone>
+uv run scripts/migrate_omega.py --export "$env:TEMP\omega\omega-memories" --vault "$HOME\.episteme" --project <p> --omega-db "$omega\omega.db" --map-project '<ruta del proyecto en OMEGA>=<p>' --dry-run
+```
+
+- OMEGA suele etiquetar el mismo proyecto con el nombre y con la ruta (`/home/ana/app`, `C:\Users\ana\app`). Lo que no sea `--project` ni esté en un `--map-project` se omite: pasa un `--map-project` por cada ruta del paso 2. La salida del ensayo termina con `Proyectos omitidos: …` para comprobar que no queda ninguna del proyecto.
+- Las memorias sin proyecto (`NULL` en el paso 2) entran en `<p>` y la salida dice cuántas. Si pueden ser de otros proyectos, revísalas tras migrar o usa `--unassigned skip`.
 - Sin `--limit 0`, `export-obsidian` exporta solo 25 memorias.
 - Sin `--omega-db` se pierden la prioridad, los recordatorios y el filtro de superseded.
 - Revisa la salida del `--dry-run` con la persona y luego repite sin `--dry-run`. Es idempotente: una segunda ejecución no duplica.
 - Los tags pasan de `dominio:x` a `dominio/x`, los `checkpoint` se descartan y la prioridad sale de `omega.db` (`--omega-db`). Revisa con la persona las normas vigentes y las contradicciones que marca `review`.
+- El tipo sale tal cual de OMEGA, que guarda como `user_preference` muchas decisiones y hechos del proyecto. Repasa las `preference` migradas (`search(type="preference", project="<p>")`) y corrige el tipo con `revise(action="set", fields={"type": "decision"})`, que mueve la nota a su carpeta.
+- En `review`, dos decisiones que comparten un archivo de `files` salen como contradicción posible. Si de verdad no se contradicen, enlaza una a la otra con `related` (`revise(action="set", fields={"related": [...]})`, con los enlaces que ya tuviera más `[[otra]]`: `set` reemplaza la lista) y dejan de salir.
 
 Unas semanas en paralelo con OMEGA, comparando la bienvenida y lo que sale al tocar archivos. Después, retira del proyecto:
 - OMEGA: sus hooks (`omega.hooks.fast_hook`) en `.claude/settings.json` y `.claude/rules/omega.md`;

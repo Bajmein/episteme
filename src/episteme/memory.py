@@ -441,6 +441,14 @@ def revise(
             raise invalid('set needs fields, e.g. {"priority": 5}.')
         fields = {k: _coerce(k, v) for k, v in fields.items()}
         result["changed"] = nf.set_fields(fields)
+        if mode == MEMORY and {"type", "project"} & set(result["changed"]):
+            if "type" in result["changed"] and nf.fm.get("type") in TYPES:
+                result["changed"] += nf.set_fields({"kind": kind_for(nf.fm["type"])})
+            moved = _move_memory(engine, nf)
+            if moved != rel:
+                result["path"] = moved
+                result["moved_from"] = rel
+                return result
     elif action == "supersede":
         if not by:
             raise invalid("supersede needs by (the note that replaces this one).")
@@ -485,6 +493,46 @@ def revise(
 
     nf.save()
     return result
+
+
+def _move_memory(engine: Engine, nf: NoteFile) -> str:
+    """Save a memory whose type or project changed in ``<zone>/<project>/<type folder>/``.
+
+    The file name stays, so ``[[name]]`` links keep resolving. Links written as a path would
+    break, so they block the move, and so does a file with the same name in the new folder.
+    """
+    validate(nf.fm)
+    zone = engine.vault.memory_zone
+    assert zone is not None  # nf is in a memory zone
+    name = PurePosixPath(nf.rel).name
+    new_rel = f"{zone.path}/{nf.fm['project']}/{FOLDERS[nf.fm['type']]}/{name}"
+    if new_rel == nf.rel:
+        return nf.rel  # revise saves it in place
+    by_path = sorted(
+        {
+            r["src"]
+            for r in engine.index.conn.execute(
+                "select src, dst_raw from links where dst_path = ? and src != ?",
+                (nf.rel, nf.rel),
+            )
+            if "/" in (r["dst_raw"] or "")
+        }
+    )
+    if by_path:
+        raise invalid(
+            f"{', '.join(by_path)} link to {nf.rel} by path, and moving it to {new_rel} would "
+            f"break them. Change those links to [[{name.removesuffix('.md')}]] first."
+        )
+    engine.vault.check_writable(new_rel)
+    if not engine.vault.create_exclusive(new_rel, nf.text()):
+        raise invalid(
+            f"{new_rel} already exists, so {nf.rel} cannot move there. "
+            "Supersede one of them, or rename one in Obsidian."
+        )
+    engine.vault.remove(nf.rel)
+    engine.index.reindex(nf.rel)
+    engine.index.reindex(new_rel)
+    return new_rel
 
 
 def _coerce(key: str, value: Any) -> Any:
@@ -939,7 +987,7 @@ def review(
 
     linked: set[tuple[str, str]] = set()
     for row in engine.index.conn.execute(
-        "select src, dst_path from links where kind in ('supersedes', 'contradicts') "
+        "select src, dst_path from links where kind in ('supersedes', 'contradicts', 'related') "
         "and dst_path is not null"
     ):
         linked.add((row["src"], row["dst_path"]))
