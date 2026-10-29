@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -206,6 +207,7 @@ def test_welcome_keeps_old_norm_and_lists_upcoming_reminders(engine: Engine, vau
     assert err.value.code == "invalid_argument"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="time.tzset is POSIX only")
 def test_today_is_local(monkeypatch: pytest.MonkeyPatch) -> None:
     import time
 
