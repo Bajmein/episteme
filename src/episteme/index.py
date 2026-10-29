@@ -139,10 +139,15 @@ class Index:
         conn = sqlite3.connect(
             self.db_path, timeout=5.0, isolation_level=None, check_same_thread=False
         )
-        conn.row_factory = sqlite3.Row
-        conn.execute("pragma busy_timeout = 5000")
-        conn.execute("pragma journal_mode = wal")
-        conn.execute("pragma synchronous = normal")
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("pragma busy_timeout = 5000")
+            conn.execute("pragma journal_mode = wal")
+            conn.execute("pragma synchronous = normal")
+        except BaseException:
+            # On a corrupt file the pragmas raise; an open handle blocks the unlink on Windows.
+            conn.close()
+            raise
         return conn
 
     def _open(self) -> sqlite3.Connection:
