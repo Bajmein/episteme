@@ -649,7 +649,8 @@ def project_relative(file: str, project_dir: str | None) -> str:
             (os.path.normpath(project_dir), os.path.normpath(f)),
             (os.path.realpath(project_dir), os.path.realpath(f)),
         ):
-            if target.startswith(base.rstrip("/") + "/"):
+            # normcase: on Windows separators are "\" and the drive letter's case varies.
+            if os.path.normcase(target).startswith(os.path.normcase(os.path.join(base, ""))):
                 return os.path.relpath(target, base).replace("\\", "/")
     return f.removeprefix("./")
 
