@@ -54,6 +54,10 @@ AUTO_TEXT_RE = re.compile(r"^(?:Project:\s.*\|\s*Key decisions:|Session summary:
 HARNESS_TEXT_RE = re.compile(
     r"^<(?:agent-message|cross-session-message|system-reminder|task-notification)\b"
 )
+# A label before the title, «[MEMORIA GI - feedback] …»; not a wikilink or a Markdown link.
+LABEL_RE = re.compile(r"^\[[^\[\]\n]{1,60}\](?!\()\s*")
+DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
+UNASSIGNED = ("include", "skip")
 
 
 @dataclass
@@ -75,6 +79,7 @@ class OmegaMemory:
     def title(self) -> str:
         for line in self.text.splitlines():
             line = line.strip().lstrip("#").strip()
+            line = LABEL_RE.sub("", line, count=1) or line
             if line:
                 return line[:TITLE_MAX].rstrip()
         return self.id
@@ -100,26 +105,47 @@ def is_auto_capture(text: str, source: str | None) -> bool:
     return bool(AUTO_TEXT_RE.match(text.strip()))
 
 
+def is_path(value: str) -> bool:
+    """An absolute path, POSIX (``/home/…``) or Windows (``C:\\Users\\…``)."""
+    return value.startswith("/") or bool(DRIVE_RE.match(value))
+
+
+def path_key(value: str) -> str:
+    """A project name or path in a comparable form.
+
+    Paths use "/", lose the trailing separator and, on a Windows drive, the case.
+    """
+    value = value.strip()
+    if not is_path(value):
+        return value
+    out = value.replace("\\", "/").rstrip("/") or "/"
+    return out.casefold() if DRIVE_RE.match(out) else out
+
+
 def split_tags(tags: list[str], roots: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
     """Split OMEGA tags into episteme ``tags`` and ``files``.
 
-    ``dominio:auth`` becomes the tag ``dominio/auth``; a tag with a path (``/rules/x.md``)
-    becomes the project-relative file ``rules/x.md``; bare words are dropped.
+    ``dominio:auth`` becomes the tag ``dominio/auth``; a tag with a path (``/rules/x.md``,
+    ``C:\\app\\rules\\x.md``) becomes the project-relative file ``rules/x.md``; bare words
+    are dropped.
     """
     out: list[str] = []
     files: list[str] = []
+    keys = [path_key(root) for root in roots if is_path(root)]
     for tag in tags:
         tag = str(tag).strip()
-        if tag.startswith("/"):
-            path = tag.rstrip("/")
-            for root in roots:
-                root = root.rstrip("/")
-                if path == root:
+        if is_path(tag):
+            path = tag.replace("\\", "/").rstrip("/")
+            cmp = path_key(path)
+            for root in keys:
+                if cmp == root:
                     path = ""
                     break
-                if path.startswith(root + "/"):
-                    path = path[len(root) :]
+                if cmp.startswith(root.rstrip("/") + "/"):
+                    path = path[len(root.rstrip("/")) :]
                     break
+            if DRIVE_RE.match(path):
+                path = path[2:]
             path = path.lstrip("/")
             if path and path not in files:
                 files.append(path)
@@ -246,9 +272,9 @@ def _project_for(value: str | None, project: str, mapping: dict[str, str]) -> st
     """Destination project of a note; ``None`` when it is neither ``project`` nor mapped."""
     if not value:
         return project
-    value = value.rstrip("/") or value
-    if value in mapping:
-        return mapping[value]
+    key = path_key(value)
+    if key in mapping:
+        return mapping[key]
     return project if value == project else None
 
 
@@ -269,18 +295,24 @@ def migrate(
     *,
     omega_db: Path | None = None,
     project_map: dict[str, str] | None = None,
+    unassigned: str = "include",
 ) -> Counter[str]:
+    if unassigned not in UNASSIGNED:
+        raise ValueError(f"--unassigned must be include or skip, got {unassigned!r}.")
     engine = Engine(vault, project)
     engine.index.refresh()
-    mapping = {k.rstrip("/") or k: v for k, v in (project_map or {}).items()}
+    mapping = {path_key(k): v for k, v in (project_map or {}).items()}
     db = load_db(omega_db) if omega_db is not None else {}
     done: Counter[str] = Counter()
+    skipped_projects: Counter[str] = Counter()
+    unassigned_in = 0
     paths: dict[str, str] = {}
     candidates: list[tuple[str, str, OmegaMemory]] = []  # (destination project, type, note)
 
     def skip(note: OmegaMemory, reason: str, key: str | None = None) -> None:
         print(f"- {note.omega_type} ({reason}) {note.id}", file=out)
-        done[f"{'omitida' if key == 'proyecto' else 'descartada'}:{key or note.omega_type}"] += 1
+        kind = "omitida" if key in ("proyecto", "sin-proyecto") else "descartada"
+        done[f"{kind}:{key or note.omega_type}"] += 1
 
     notes = [n for n in load_export(export) if n.omega_type != "reminder"]
     notes += [n for n in db.values() if n.omega_type == "reminder"]
@@ -316,9 +348,15 @@ def migrate(
         if note.status == "superseded":
             skip(note, "reemplazada en OMEGA", "superseded")
             continue
+        if not note.project:
+            if unassigned == "skip":
+                skip(note, "sin proyecto", "sin-proyecto")
+                continue
+            unassigned_in += 1
         dest = _project_for(note.project, project, mapping)
         if dest is None:
             skip(note, f"proyecto {note.project}", "proyecto")
+            skipped_projects[note.project or ""] += 1
             continue
         note.text = clean_text(note.text)
         candidates.append((dest, type_, note))
@@ -352,9 +390,7 @@ def migrate(
     aliases = {k: v for k, v in paths.items()}
     paths.clear()
     for dest, type_, note in kept:
-        roots = tuple(
-            dict.fromkeys([r for r in [note.project, *mapping] if r and r.startswith("/")])
-        )
+        roots = tuple(dict.fromkeys([r for r in [note.project, *mapping] if r and is_path(r)]))
         tags, files = split_tags(note.tags, roots)
         source = f"{SOURCE_PREFIX}{note.id}"
         existing = _existing_by_source(engine, source)
@@ -413,6 +449,19 @@ def migrate(
             nf.set_fields({"related": links})
             nf.save()
 
+    if skipped_projects:
+        listed = ", ".join(f"{p} ({n})" for p, n in skipped_projects.most_common())
+        print(
+            f"Proyectos omitidos: {listed}. Para migrarlos, añade --map-project "
+            f"'<proyecto>={project}' (repetible).",
+            file=out,
+        )
+    if unassigned_in:
+        print(
+            f"Sin proyecto en OMEGA: {unassigned_in}, migradas a {project}. Revísalas, "
+            "u omítelas con --unassigned skip.",
+            file=out,
+        )
     summary = ", ".join(f"{k} {v}" for k, v in sorted(done.items())) or "nada"
     prefix = "Resumen (dry-run)" if dry_run else "Resumen"
     print(f"{prefix}: {summary}", file=out)
@@ -445,6 +494,12 @@ def main(argv: list[str] | None = None) -> int:
         metavar="OLD=NEW",
         help="OMEGA project (name or path) to destination project; repeatable",
     )
+    parser.add_argument(
+        "--unassigned",
+        choices=UNASSIGNED,
+        default="include",
+        help="memories without a project in OMEGA: migrate them to --project (default) or skip",
+    )
     parser.add_argument("--dry-run", action="store_true", help="show what would be done")
     args = parser.parse_args(argv)
     export = Path(args.export).expanduser()
@@ -461,7 +516,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         mapping = _parse_map(args.map_project)
-        migrate(export, vault, args.project, args.dry_run, omega_db=db, project_map=mapping)
+        migrate(
+            export,
+            vault,
+            args.project,
+            args.dry_run,
+            omega_db=db,
+            project_map=mapping,
+            unassigned=args.unassigned,
+        )
     except ValueError as exc:
         print(f"migrate_omega: {exc}", file=sys.stderr)
         return 2
