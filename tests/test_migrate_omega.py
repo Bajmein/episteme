@@ -209,6 +209,7 @@ def _script():
     spec = importlib.util.spec_from_file_location("migrate_omega", SCRIPT)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # @dataclass looks its module up there (Python < 3.14)
     spec.loader.exec_module(module)
     return module
 
