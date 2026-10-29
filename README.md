@@ -2,20 +2,26 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.3.3 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2 y vault global por defecto en `~/.episteme`).
+> Estado: v0.4.1 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2, vault global por defecto en `~/.episteme` y soporte de Windows nativo).
 
 ## Instalación
 
-Se distribuye con `uvx` desde un tag de GitHub. El repo es privado, así que se usa `git+ssh` (la misma clave que `git push`):
+Se distribuye con `uvx` desde un tag de GitHub. El repo es privado: hay que ser colaborador de `Bajmein/episteme`. Requiere [uv](https://docs.astral.sh/uv/) y git; uv consigue Python 3.11 o superior si falta (el servidor comprueba al arrancar que SQLite tiene FTS5).
+
+Lo más corto es instalar la skill `episteme-setup` (ver más abajo) y correr `/episteme-setup` en cada proyecto: registra el servidor, fusiona permisos y hooks en `.claude/settings.json` y añade la regla al `CLAUDE.md`. A mano, son estos pasos.
+
+### Linux y macOS
+
+Por `git+ssh`, con la misma clave que `git push`:
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.3.3 episteme --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.4.1 episteme --project fabrik
 ```
 
-Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
+Sin clave SSH, vale la URL de Windows (`git+https://…`). Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
 
-Actualizar es cambiar el tag. Para desarrollo, una entrada aparte que no fija versión:
+Actualizar es cambiar el tag (`claude mcp remove --scope local episteme` y otra vez el `add`). Para desarrollo, una entrada aparte que no fija versión:
 
 ```bash
 claude mcp add --scope local episteme-dev -- \
@@ -24,7 +30,51 @@ claude mcp add --scope local episteme-dev -- \
 
 Las comillas simples guardan `${HOME}/src` tal cual y Claude Code lo expande al arrancar el servidor, así la config no lleva la ruta de la máquina. Con comillas dobles la shell lo expande al registrar y queda la ruta completa.
 
-Requiere Python 3.11 o superior con SQLite y FTS5 (el servidor lo comprueba al arrancar).
+### Windows
+
+Requiere [Git for Windows](https://git-scm.com/download/win) (Claude Code ya lo pide) y uv:
+
+```powershell
+winget install --id=astral-sh.uv -e
+```
+
+Se instala por HTTPS, y la primera vez Git Credential Manager abre el navegador para iniciar sesión en GitHub:
+
+```powershell
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.4.1 episteme --project <proyecto>
+```
+
+En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por defecto es `%USERPROFILE%\.episteme`; `--vault` acepta una ruta absoluta de Windows (`C:\Users\ana\notas`). El bloque de hooks es el mismo. Dentro de WSL, sigue la instalación de Linux.
+
+### Después de registrar
+
+1. `claude mcp list` (o `/mcp` dentro de Claude Code) muestra `episteme` conectado. La primera vez tarda: uv descarga el repo y las dependencias.
+2. Copia en `.claude/settings.json` del proyecto el bloque de [Hooks](#hooks) y los permisos recomendados.
+3. Añade al `CLAUDE.md` del proyecto: «Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault.»
+
+### La skill `episteme-setup`
+
+Vive en [`skills/episteme-setup/`](skills/episteme-setup/SKILL.md) y se instala una vez, a nivel de usuario (en `~/.claude/skills/`), enlazada a un clone del repo para que `git pull` la actualice:
+
+```bash
+git clone git@github.com:Bajmein/episteme ~/src/episteme
+mkdir -p ~/.claude/skills
+ln -s ~/src/episteme/skills/episteme-setup ~/.claude/skills/episteme-setup
+```
+
+En Windows (PowerShell), con una unión de directorios, que no necesita el modo de desarrollador:
+
+```powershell
+git clone https://github.com/Bajmein/episteme "$HOME\src\episteme"
+New-Item -ItemType Directory -Force "$HOME\.claude\skills" | Out-Null
+New-Item -ItemType Junction -Path "$HOME\.claude\skills\episteme-setup" -Target "$HOME\src\episteme\skills\episteme-setup"
+```
+
+Se invoca a mano (`/episteme-setup`), desde la raíz del proyecto que se quiere conectar; Claude no la carga solo. Después de instalarla, reinicia Claude Code.
+
+### Uso
+
+Con el servidor conectado, Claude recibe las instrucciones de uso en el handshake de MCP: carga el contexto de la tarea con `context`, busca antes de decidir con `search` y guarda decisiones, lecciones y errores con `remember`. Los hooks hacen el resto: bienvenida al primer mensaje de cada sesión, `constraints` y `surface` al editar un archivo y `checkpoint` al compactar. Para que Claude guarde algo, basta con decirle «recuerda que…». El detalle de cada tool está en [Tools](#tools).
 
 ## Argumentos
 
@@ -151,7 +201,7 @@ Bloque para el `settings.json` del proyecto:
 
 Si el servidor va empaquetado en un plugin, `server` pasa a ser el nombre con scope (`plugin:fabrik:episteme`).
 
-Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`) y `deny` de `Read`, `Edit` y `Write` sobre la ruta del vault, para que el agente solo use los tools.
+Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`) y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El [`settings.json`](skills/episteme-setup/settings.json) de la skill `episteme-setup` trae los hooks y los permisos juntos, listos para fusionar.
 
 ## Migración de OMEGA
 

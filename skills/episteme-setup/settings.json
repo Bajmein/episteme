@@ -1,0 +1,106 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__episteme__search",
+      "mcp__episteme__read",
+      "mcp__episteme__links",
+      "mcp__episteme__review",
+      "mcp__episteme__context",
+      "mcp__episteme__surface",
+      "mcp__episteme__constraints"
+    ],
+    "deny": [
+      "Read(~/.episteme/**)",
+      "Edit(~/.episteme/**)",
+      "Bash(obsidian *)",
+      "Bash(omega *)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "context",
+            "input": {
+              "mode": "welcome",
+              "session": "${session_id}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|mcp__serena__.*",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "constraints",
+            "input": {
+              "file": "${tool_input.file_path}",
+              "relative_path": "${tool_input.relative_path}",
+              "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|mcp__serena__.*",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "surface",
+            "input": {
+              "file": "${tool_input.file_path}",
+              "relative_path": "${tool_input.relative_path}",
+              "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "checkpoint",
+            "input": {
+              "action": "save",
+              "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact|clear",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "checkpoint",
+            "input": {
+              "action": "restore",
+              "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
