@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -22,7 +23,8 @@ def _run(vault: Path, *extra: str, mapped: bool = True) -> subprocess.CompletedP
     return subprocess.run(
         [sys.executable, str(SCRIPT), "--export", str(EXPORT), "--vault", str(vault),
          "--project", "fabrik", *args, *extra],
-        capture_output=True, text=True, timeout=120, env={"EPISTEME_TODAY": "2026-10-19"},
+        capture_output=True, text=True, timeout=120,
+        env={**os.environ, "EPISTEME_TODAY": "2026-10-19"},
     )  # fmt: skip
 
 
