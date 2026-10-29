@@ -88,6 +88,18 @@ async def test_review_categories(vault: Path) -> None:
         scoped = await c.ok("review", path="plans")
         assert scoped["orphans"] == [] and len(scoped["broken_links"]) == 2
         assert (await c.error("review", path="../x")).startswith("outside_vault:")
+        # related between two decisions says they were compared: not a contradiction.
+        new = await c.ok(
+            "remember",
+            type="decision",
+            title="Serena con pyright desactivado",
+            body="En `.serena/project.yml` no se activa pyright.",
+            files=[".serena/project.yml"],
+            related=["2026-10-02-serena-ty"],
+        )
+        pairs = [{p["a"], p["b"]} for p in (await c.ok("review"))["contradictions"]]
+        assert {new["path"], "memory/fabrik/decisions/2026-10-02-serena-ty.md"} not in pairs
+        assert {new["path"], "memory/fabrik/decisions/2026-10-19-serena-lsp-markdown.md"} in pairs
 
 
 async def test_task_context(vault: Path) -> None:

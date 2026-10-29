@@ -258,3 +258,7 @@ class Vault:
             return True
         finally:
             os.unlink(tmp)
+
+    def remove(self, rel: str) -> None:
+        """Delete ``rel``. Only ``revise`` uses it, to move a memory to its new folder."""
+        os.unlink(self.resolve(rel))

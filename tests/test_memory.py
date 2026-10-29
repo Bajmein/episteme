@@ -157,6 +157,51 @@ def test_feedback_and_set(engine: Engine, vault: Path) -> None:
     assert _fm(vault / rel)["status"] == "archived"
 
 
+def test_set_type_moves_memory(engine: Engine, vault: Path) -> None:
+    a = memory.remember(engine, "preference", "Usar uv para las dependencias", "uv sync, uv add.")
+    b = memory.remember(
+        engine, "lesson", "pip suelto rompe el entorno", "Ver la otra.", related=[a["path"]]
+    )
+    rel = a["path"]
+    name = Path(rel).name
+    with pytest.raises(EpistemeError) as err:
+        memory.revise(engine, rel, "set", fields={"type": "norma"})
+    assert err.value.code == "invalid_schema"
+    assert (vault / rel).exists()
+
+    res = memory.revise(engine, rel, "set", fields={"type": "error"})
+    new = f"memory/fabrik/errors/{name}"
+    assert res["path"] == new and res["moved_from"] == rel
+    assert set(res["changed"]) == {"type", "kind"}
+    assert not (vault / rel).exists()
+    fm = _fm(vault / new)
+    assert (fm["type"], fm["kind"]) == ("error", "procedural")
+    dst = engine.index.conn.execute(
+        "select dst_path from links where src = ? and kind = 'related'", (b["path"],)
+    ).fetchone()
+    assert dst["dst_path"] == new
+
+    res = memory.revise(engine, new, "set", fields={"project": "vigilia"})
+    assert res["path"] == f"memory/vigilia/errors/{name}"
+
+    c = memory.remember(engine, "lesson", "Enlace por ruta", f"Ver [[{res['path'][:-3]}]].")
+    with pytest.raises(EpistemeError) as err:
+        memory.revise(engine, res["path"], "set", fields={"type": "constraint"})
+    assert err.value.code == "invalid_argument" and c["path"] in str(err.value)
+    assert (vault / res["path"]).exists()
+
+
+def test_set_type_refuses_name_taken(engine: Engine, vault: Path) -> None:
+    rel = memory.remember(engine, "lesson", "Nombre repetido", "Uno.", slug="repetido")["path"]
+    taken = vault / "memory/fabrik/errors" / Path(rel).name
+    taken.parent.mkdir(parents=True, exist_ok=True)
+    taken.write_text((vault / rel).read_text())
+    with pytest.raises(EpistemeError) as err:
+        memory.revise(engine, rel, "set", fields={"type": "error"})
+    assert err.value.code == "invalid_argument" and "already exists" in str(err.value)
+    assert _fm(vault / rel)["type"] == "lesson"
+
+
 def test_welcome_caps(engine: Engine) -> None:
     for i in range(15):
         memory.remember(
