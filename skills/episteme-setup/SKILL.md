@@ -33,6 +33,10 @@ claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajme
 - Sin `--vault` usa el vault global y lo crea si falta. Para otro vault, `--vault '<ruta absoluta>'` (en Windows vale `C:\Users\ana\notas`).
 - Comillas **simples** en `'${HOME}…'` (o en otra variable, como `'${HOME}/src…'`): Claude Code la expande al arrancar y la config no lleva la ruta de la máquina. Con comillas dobles, la shell la expande al registrar y queda la ruta absoluta.
 - Scope local porque el proyecto (`--project`) es de la máquina.
+- **Varias cuentas de Claude Code en la máquina** (`CLAUDE_CONFIG_DIR` definido, o lanzadores como `claude-gmail`): el scope local se guarda en el `.claude.json` de *una* cuenta, la del `claude` con que se registre. En una shell con lanzadores, `claude` a secas puede ser otra cuenta que la de la sesión: comprueba en la salida de `mcp add` qué archivo dice `File modified`.
+  - Si el proyecto solo se abre desde una cuenta, registra con su lanzador (`claude-<cuenta> mcp add --scope local …`).
+  - Si se abre desde varias, usa `--scope project` en vez de `--scope local`: queda en `.mcp.json` en la raíz del proyecto, que leen todas las cuentas (cada una pide aprobar el servidor la primera vez). Si los hooks del paso 2 van en `settings.local.json`, saca también `.mcp.json` de git con `.git/info/exclude`: si no, a quien clone el repo sin episteme le aparecería el servidor.
+  - Los hooks del paso 2 son de proyecto y se cargan en todas las cuentas: si el servidor solo está en una, en las demás fallan.
 - Opcional, para desarrollar el servidor desde un clone sin tocar la entrada fijada:
   ```bash
   claude mcp add --scope local episteme-dev -- \
@@ -135,7 +139,7 @@ Al empezar la convivencia, crea un recordatorio con `remember(type="reminder", p
 
 # Actualizar episteme
 
-En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1. La primera ejecución descarga; después tira de la caché de uv. Para actualizar esta skill, `git pull` en el clone del que se instaló (ver «La skill episteme-setup» en el `README.md`).
+En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1 (con el scope y el lanzador con que se registró: `--scope project` si está en `.mcp.json`). La primera ejecución descarga; después tira de la caché de uv. Para actualizar esta skill, `git pull` en el clone del que se instaló (ver «La skill episteme-setup» en el `README.md`).
 
 # Publicar una versión de episteme (mantenedor)
 
