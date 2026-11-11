@@ -43,7 +43,9 @@ async def test_case9_welcome_once_per_session(vault: Path) -> None:
         second = await c.ok("context", mode="welcome", session="s1")
         assert second == {"text": "", "entries": [], "already_sent": True}
         hook = await c.call("context", mode="welcome", session="s2", hook_event="UserPromptSubmit")
-        assert hook[0] is False and hook[1].startswith("episteme · memoria de fabrik")
+        assert hook[0] is False
+        welcome = json.loads(hook[1])["hookSpecificOutput"]["additionalContext"]
+        assert welcome.startswith("episteme · memoria de fabrik")
         again = await c.call("context", mode="welcome", session="s2", hook_event="UserPromptSubmit")
         assert again == (False, "")
 
@@ -133,7 +135,8 @@ async def test_case11_checkpoint_save_and_restore(vault: Path, project_dir: Path
         hook = await c.call(
             "checkpoint", action="restore", project_dir=str(project_dir), hook_event="SessionStart"
         )
-        assert hook[0] is False and "## Plan" in hook[1]
+        restore = json.loads(hook[1])["hookSpecificOutput"]["additionalContext"]
+        assert hook[0] is False and "## Plan" in restore
 
         state = project_dir / ".fabrik/core/001-demo/estado.md"
         state.write_text(state.read_text().replace("estado: activo", "estado: cerrado"))
