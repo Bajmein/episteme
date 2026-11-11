@@ -53,7 +53,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|mcp__serena__.*",
+        "matcher": "Read|Edit|Write|mcp__serena__.*",
         "hooks": [
           {
             "type": "mcp_tool",
@@ -63,7 +63,8 @@
               "file": "${tool_input.file_path}",
               "relative_path": "${tool_input.relative_path}",
               "project_dir": "${cwd}",
-              "hook_event": "${hook_event_name}"
+              "hook_event": "${hook_event_name}",
+              "session": "${session_id}"
             }
           }
         ]

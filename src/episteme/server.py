@@ -468,6 +468,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         relative_path: RelativePathArg = None,
         limit: Annotated[int, Field(description="Maximum memories, 1-50.")] = 5,
         hook_event: HookEvent = None,
+        session: Annotated[
+            str | None,
+            Field(
+                description="Hooks pass ${session_id}: the same memories about a file are not"
+                " repeated within 30 minutes."
+            ),
+        ] = None,
     ) -> str:
         """Memories (not constraints) about a file: listed in its files, or mentioned in the body.
 
@@ -476,6 +483,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         hookmode.check(hook_event)
         with engine.session():
             text, data = memory.surface(engine, file, project_dir, project, limit, relative_path)
+        if hook_event and session and text:
+            paths = [m["path"] for m in data["memories"]]
+            if memory.surface_repeated(session, data["file"], paths):
+                text = ""
         return hookmode.render(hook_event, text) if hook_event else dump(data)
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
