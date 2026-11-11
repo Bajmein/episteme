@@ -1,0 +1,102 @@
+"""remember: keywords, cross-scope similar, new_tags and link_candidates."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+import yaml
+from conftest import mcp_client
+
+pytestmark = pytest.mark.anyio
+
+BODY = "Usamos zorbfoo para sincronizar los catalogos de productos con el almacen central."
+
+
+def hook_text(raw: str) -> str:
+    """Text a hook call delivers: the plain string or the additionalContext of the JSON envelope."""
+    if raw.startswith("{"):
+        return json.loads(raw)["hookSpecificOutput"]["additionalContext"]
+    return raw
+
+
+def _fm(path: Path) -> dict:
+    return yaml.safe_load(path.read_text().split("---\n")[1])
+
+
+async def test_keywords_order_and_search(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        res = await c.ok(
+            "remember", type="insight", title="Campana de marketing", body="Nada especial aqui.",
+            tags=["a/b"], files=["x.py"], keywords=["  zorbmkt ", "marketing"],
+        )  # fmt: skip
+        fm = _fm(vault / res["path"])
+        keys = list(fm)
+        assert keys.index("keywords") == keys.index("tags") + 1
+        assert fm["keywords"] == ["zorbmkt", "marketing"]
+        found = await c.ok("search", query="zorbmkt")
+        assert [r["path"] for r in found["results"]] == [res["path"]]
+
+
+async def test_revise_set_keywords_makes_findable(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        res = await c.ok("remember", type="insight", title="Otra nota", body="Contenido neutro.")
+        assert (await c.ok("search", query="zorbsyn"))["total"] == 0
+        await c.ok("revise", note=res["path"], action="set", fields={"keywords": ["zorbsyn"]})
+        assert (await c.ok("search", query="zorbsyn"))["total"] == 1
+        err = await c.error("revise", note=res["path"], action="set", fields={"keywords": "x"})
+        assert "keywords" in err
+
+
+async def test_keywords_validation(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        for bad in (["x" * 61], [str(i) for i in range(13)], [" "]):
+            err = await c.error(
+                "remember", type="insight", title="Mala", body="Cuerpo.", keywords=bad
+            )
+            assert err.startswith("invalid_schema") and "keywords" in err
+
+
+async def test_similar_across_type_and_project(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        first = await c.ok("remember", type="insight", title="Sincronizar catalogos", body=BODY)
+        other = await c.ok("remember", type="lesson", title="Sincronizar catalogos", body=BODY)
+        assert other["created"] is True
+        top = other["similar"][0]
+        assert top["path"] == first["path"]
+        assert top["type"] == "insight" and top["project"] == "fabrik"
+        shared = await c.ok(
+            "remember", type="insight", title="Sincronizar catalogos", body=BODY, project="_shared"
+        )
+        assert shared["created"] is True
+        assert {s["project"] for s in shared["similar"]} == {"fabrik"}
+        dup = await c.ok("remember", type="insight", title="Sincronizar catalogos", body=BODY)
+        assert dup["created"] is False
+        assert dup["similar"][0]["path"] == first["path"]
+        assert {s["path"] for s in dup["similar"]} >= {other["path"], shared["path"]}
+
+
+async def test_new_tags_and_link_candidates(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        a = await c.ok(
+            "remember", type="insight", title="Primera", body="Uno distinto.",
+            tags=["tema/pricing", "pieza/qq"], files=["src/a.py"],
+        )  # fmt: skip
+        assert a["new_tags"][0]["tag"] == "tema/pricing"
+        b = await c.ok(
+            "remember", type="insight", title="Segunda", body="Dos diferente totalmente.",
+            tags=["tema/pricin", "pieza/qq", "tema/pricing"], files=["src/a.py"],
+        )  # fmt: skip
+        assert b["new_tags"] == [{"tag": "tema/pricin", "similar": ["tema/pricing"]}]
+        assert b["link_candidates"][0]["path"] == a["path"]
+        assert "src/a.py" in b["link_candidates"][0]["reason"]
+        c3 = await c.ok(
+            "remember", type="insight", title="Tercera", body="Tres otra cosa.",
+            tags=["tema/pricing", "pieza/qq"], related=[a["path"]],
+        )  # fmt: skip
+        assert [x["path"] for x in c3["link_candidates"]] == [b["path"]]
+        assert "tema/pricing" in c3["link_candidates"][0]["reason"]
+        assert "new_tags" not in c3
+        plain = await c.ok("remember", type="insight", title="Cuarta", body="Cuatro sin nada.")
+        assert "new_tags" not in plain and "link_candidates" not in plain

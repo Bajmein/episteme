@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import difflib
 import fnmatch
 import json
 import math
@@ -52,6 +53,7 @@ KEY_ORDER = (
     "created",
     "valid_until",
     "tags",
+    "keywords",
     "files",
     "supersedes",
     "related",
@@ -69,9 +71,13 @@ OMIT_WHEN_EMPTY = {
     "related",
     "contradicts",
     "tags",
+    "keywords",
     "files",
 }
 DUPLICATE = 0.8
+SHARED = "_shared"
+KEYWORD_CHARS = 60
+KEYWORDS_MAX = 12
 SIMILAR = 0.5
 MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left out
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
@@ -125,12 +131,19 @@ def validate(fm: dict[str, Any]) -> None:
             raise schema_error(f"{key} must be a date YYYY-MM-DD, got {fm[key]!r}.")
     if type_ == "reminder" and fm.get("due") is None:
         raise schema_error("reminder needs due (YYYY-MM-DD).")
-    for key in ("files", "tags"):
+    for key in ("files", "tags", "keywords"):
         value = fm.get(key)
         if value is not None and (
             not isinstance(value, list) or not all(isinstance(v, str) for v in value)
         ):
             raise schema_error(f"{key} must be a list of strings.")
+    keywords = fm.get("keywords") or []
+    if any(not k.strip() or len(k) > KEYWORD_CHARS for k in keywords):
+        raise schema_error(
+            f"keywords must be non-empty strings of at most {KEYWORD_CHARS} characters."
+        )
+    if len(keywords) > KEYWORDS_MAX:
+        raise schema_error(f"keywords has {len(keywords)} items; the limit is {KEYWORDS_MAX}.")
     for tag in fm.get("tags") or []:
         if not tag or any(c in tag for c in ": #\t"):
             raise schema_error(
@@ -285,6 +298,53 @@ def _check_slug(slug: str) -> str:
     return slug
 
 
+def _new_tags(engine: Engine, tags: list[str]) -> list[dict[str, Any]]:
+    """Tags no other note has, each with up to 3 close existing spellings."""
+    existing = {r["tag"] for r in engine.index.conn.execute("select distinct tag from tags")}
+    return [
+        {"tag": t, "similar": difflib.get_close_matches(t, sorted(existing), n=3, cutoff=0.75)}
+        for t in dict.fromkeys(tags)
+        if t not in existing
+    ]
+
+
+def _link_candidates(
+    engine: Engine, project: str, fm: dict[str, Any], skip: set[str]
+) -> list[dict[str, str]]:
+    """Up to 5 active memories sharing a ``files`` value or 2+ tags with the new one."""
+    my_files = set(fm.get("files") or [])
+    my_tags = set(fm.get("tags") or [])
+    if not my_files and len(my_tags) < 2:
+        return []
+    if project == SHARED:
+        rows = engine.index.memories("status = 'active'")
+    else:
+        rows = engine.index.memories(
+            "status = 'active' and project in (?, ?)", (project, SHARED)
+        )
+    files = _files_of(engine)
+    found = []
+    for row in rows:
+        if row["path"] in skip:
+            continue
+        shared_files = sorted(my_files & set(files.get(row["path"], [])))
+        raw_tags = engine.index.props(row["path"]).get("tags")
+        shared_tags = sorted(my_tags & set(_as_list(raw_tags)))
+        if shared_files:
+            reason = f"shares file {shared_files[0]}"
+        elif len(shared_tags) >= 2:
+            reason = f"shares tags {', '.join(shared_tags)}"
+        else:
+            continue
+        found.append(
+            (row["priority"] or 0, row["created"] or "", row["path"], row["title"], reason)
+        )
+    found.sort(key=lambda f: f[2])
+    found.sort(key=lambda f: f[1], reverse=True)
+    found.sort(key=lambda f: f[0], reverse=True)
+    return [{"path": p, "title": t, "reason": r} for _, _, p, t, r in found[:5]]
+
+
 def remember(
     engine: Engine,
     type: str,
@@ -306,6 +366,7 @@ def remember(
     helpful: int = 0,
     dry_run: bool = False,
     slug: str | None = None,
+    keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration."""
     project = engine.need_project(project)
@@ -343,6 +404,7 @@ def remember(
             "created": created,
             "valid_until": _date_arg("valid_until", valid_until),
             "tags": [t.strip().lstrip("#") for t in tags or []],
+            "keywords": [k.strip() if isinstance(k, str) else k for k in keywords or []],
             "files": list(files or []),
             "supersedes": wikilink(engine, old_rel) if old_rel else None,
             "related": related_links,
@@ -359,20 +421,46 @@ def remember(
         text_body = body_without_title(text_body)
     mine = dedup_tokens(title, text_body)
     similar = []
-    for row in engine.index.memories(
-        "project = ? and type = ? and status = 'active'", (project, type)
-    ):
+    blocking = None
+    if project == SHARED:
+        rows = engine.index.memories("status = 'active'")
+    else:
+        rows = engine.index.memories("status = 'active' and project in (?, ?)", (project, SHARED))
+    for row in rows:
         if row["path"] == old_rel:
             continue
         theirs = dedup_tokens(row["title"] or "", body_without_title(row["body"]))
         score = similarity(mine, theirs)
         if score >= SIMILAR:
-            similar.append(
-                {"path": row["path"], "title": row["title"], "similarity": round(score, 3)}
-            )
+            item = {
+                "path": row["path"],
+                "title": row["title"],
+                "similarity": round(score, 3),
+                "type": row["type"],
+                "project": row["project"],
+            }
+            similar.append(item)
+            if score >= DUPLICATE and row["project"] == project and row["type"] == type:
+                if blocking is None or (-item["similarity"], item["path"]) < (
+                    -blocking["similarity"],
+                    blocking["path"],
+                ):
+                    blocking = item
     similar.sort(key=lambda s: (-s["similarity"], s["path"]))
-    if similar and similar[0]["similarity"] >= DUPLICATE and not force:
+    if blocking is not None and not force:
+        similar.remove(blocking)
+        similar.insert(0, blocking)
         return {"created": False, "path": None, "similar": similar}
+    extras: dict[str, Any] = {}
+    new_tags = _new_tags(engine, fm.get("tags") or [])
+    if new_tags:
+        extras["new_tags"] = new_tags
+    skip = {engine.resolve_note(r) for r in related or []}
+    if old_rel:
+        skip.add(old_rel)
+    candidates = _link_candidates(engine, project, fm, skip)
+    if candidates:
+        extras["link_candidates"] = candidates
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"
@@ -383,7 +471,7 @@ def remember(
         while engine.vault.resolve(f"{folder}/{base}{'' if n == 1 else f'-{n}'}.md").exists():
             n += 1
         path = f"{folder}/{base}{'' if n == 1 else f'-{n}'}.md"
-        return {"created": True, "path": path, "similar": similar, "dry_run": True}
+        return {"created": True, "path": path, "similar": similar, "dry_run": True, **extras}
     while True:
         rel = f"{folder}/{base}.md" if n == 1 else f"{folder}/{base}-{n}.md"
         if not engine.vault.resolve(rel).exists() and engine.vault.create_exclusive(rel, content):
@@ -393,7 +481,7 @@ def remember(
 
     if old_note is not None:
         old_note.save()
-    return {"created": True, "path": rel, "similar": similar}
+    return {"created": True, "path": rel, "similar": similar, **extras}
 
 
 # -- revise --------------------------------------------------------------
