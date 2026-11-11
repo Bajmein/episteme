@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -13,6 +14,7 @@ from pydantic import Field, ValidationError
 
 from episteme import checkpoint as checkpoints
 from episteme import hookmode, memory
+from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError, invalid
 
@@ -71,11 +73,14 @@ def _validation_message(exc: ValidationError) -> str:
 class EpistemeServer(MCPServer):
     """MCPServer whose tool errors read ``<code>: <what failed>. <what to do>``."""
 
+    activity: Activity | None = None
+
     async def call_tool(
         self, name: str, arguments: dict[str, Any], context: Context | None = None
     ) -> Any:
+        start = time.perf_counter()
         try:
-            return await super().call_tool(name, arguments, context)
+            result = await super().call_tool(name, arguments, context)
         except ToolError as exc:
             cause = exc.__cause__
             if isinstance(cause, EpistemeError):
@@ -84,13 +89,23 @@ class EpistemeServer(MCPServer):
                 text = _validation_message(cause)
             else:
                 raise
+            self._log(name, arguments, text, start, False)
             return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)
+        text = "".join(getattr(b, "text", "") for b in getattr(result, "content", None) or [])
+        self._log(name, arguments, text, start, True)
+        return result
+
+    def _log(self, name: str, arguments: Any, text: str, start: float, ok: bool) -> None:
+        if self.activity is not None:
+            ms = round((time.perf_counter() - start) * 1000)
+            self.activity.record(name, arguments, text, ms, ok)
 
 
 def build_server(vault: Path, project: str | None = None) -> MCPServer:
     """Create the MCP server for ``vault``; raises StartupError on a bad episteme.toml."""
     engine = Engine(vault, project)
     server = EpistemeServer("episteme", instructions=INSTRUCTIONS)
+    server.activity = Activity(engine.vault.root)
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def search(
