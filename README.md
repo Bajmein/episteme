@@ -2,7 +2,7 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.5.0 (10 tools, índice SQLite con caché incremental, modo hook, búsqueda en español, checkpoint por rama, migración de OMEGA v2, vault global por defecto en `~/.episteme` y soporte de Windows nativo).
+> Estado: v0.6.0 (10 tools, índice SQLite con caché incremental, modo hook con `additionalContext`, búsqueda en español con filtros y pistas, sugerencias de memorias por mensaje, registro de actividad, mantención asistida con `review`, checkpoint por rama, migración de OMEGA v2, vault global por defecto en `~/.episteme` y soporte de Windows nativo).
 
 ## Instalación
 
@@ -16,7 +16,7 @@ Por `git+ssh`, con la misma clave que `git push`:
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.5.0 episteme --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.6.0 episteme --project fabrik
 ```
 
 Sin clave SSH, vale la URL de Windows (`git+https://…`). Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
@@ -41,7 +41,7 @@ winget install --id=astral-sh.uv -e
 Se instala por HTTPS, y la primera vez Git Credential Manager abre el navegador para iniciar sesión en GitHub:
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.5.0 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.6.0 episteme --project <proyecto>
 ```
 
 En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por defecto es `%USERPROFILE%\.episteme`; `--vault` acepta una ruta absoluta de Windows (`C:\Users\ana\notas`). El bloque de hooks es el mismo. Dentro de WSL, sigue la instalación de Linux.
@@ -74,7 +74,7 @@ Se invoca a mano (`/episteme-setup`), desde la raíz del proyecto que se quiere 
 
 ### Uso
 
-Con el servidor conectado, Claude recibe las instrucciones de uso en el handshake de MCP: carga el contexto de la tarea con `context`, busca antes de decidir con `search` y guarda decisiones, lecciones y errores con `remember`. Los hooks hacen el resto: bienvenida al primer mensaje de cada sesión, `constraints` y `surface` al editar un archivo y `checkpoint` al compactar. Para que Claude guarde algo, basta con decirle «recuerda que…». El detalle de cada tool está en [Tools](#tools).
+Con el servidor conectado, Claude recibe las instrucciones de uso en el handshake de MCP: carga el contexto de la tarea con `context`, busca antes de decidir con `search` y guarda decisiones, lecciones y errores con `remember`. Los hooks hacen el resto: bienvenida al primer mensaje de cada sesión y otra vez tras compactar, recordatorios vencidos y memorias que vienen al caso según cada mensaje, `constraints` antes de editar un archivo, `surface` después de leerlo o editarlo (sin repetir lo ya mostrado en la sesión) y `checkpoint` al compactar. Para que Claude guarde algo, basta con decirle «recuerda que…». El detalle de cada tool está en [Tools](#tools).
 
 ## Argumentos
 
@@ -127,12 +127,12 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | Tool | Solo lectura | Para qué |
 | --- | --- | --- |
 | `search(query, path?, type?, tags?, project?, status?, zone?, limit=20, facets=false)` | sí | Búsqueda de texto completo (AND, `"frases"`, `a-b` como dos palabras, sin distinguir mayúsculas ni tildes). Excluye por defecto las memorias `superseded` y `archived` (`status="any"` no filtra). `project` incluye las memorias `_shared`; `zone` filtra por zona de `episteme.toml`. Cada fila trae `path`, `title`, `line`, `snippet`, `score` y, si tienen valor, `zone`, `type`, `status`, `project`, `created`, `priority`, `heading` y `superseded_by`. Con pocos aciertos, `partial` lista notas con solo algunas palabras; sin ninguno, `hints` explica qué filtro no existe y qué hay en el vault. `facets=true` añade recuentos por zona, proyecto, tipo, estado y tag (solo, lista lo que hay en el vault) |
-| `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
+| `read(note, heading?, lines?, outline?, content=true)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter. El esquema de encabezados (cada uno con `line` y `end`) solo viene con la nota entera o con `outline=true`; `content=false` devuelve solo frontmatter y esquema, para elegir sección sin leer la nota; con `heading` o `lines` añade `range` |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
 | `remember(type, title, body, project?, priority?, tags, keywords, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false, slug?)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 del mismo proyecto y tipo no crea salvo `force`; las parecidas de otros tipos y de `_shared` solo avisan, con `type` y `project`). `keywords` (sinónimos, siglas) se buscan con el peso del título. Devuelve además `new_tags` (tags que ninguna otra nota tiene, con grafías cercanas) y `link_candidates` (hasta 5 memorias que comparten un archivo o 2 tags), solo si hay. El nombre sale del título (ver «Memorias»); `slug` lo fija |
 | `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory` (en una memoria, un `set` que cambia `type` o `project` la mueve a la carpeta que le toca, con el mismo nombre, y devuelve `moved_from`; se niega si alguna nota la enlaza por ruta o si el nombre ya existe allí); `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
 | `review(path?, project?, limit=50, zone?)` | sí | `project="*"` revisa todos los proyectos. Memorias viejas, grupos de memorias parecidas (`similar`: activas de cualquier tipo o proyecto, salvo `session` y `reminder`, con similitud ≥ 0,4), títulos cortados y repetidos en el cuerpo (`cut_titles`), contradicciones posibles con su `similarity` (dos decisiones o constraints que comparten un archivo de `files` o 2 tags, salvo que una enlace a la otra con `supersedes`, `contradicts` o `related`), huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
-| `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
+| `context(mode="welcome"\|"task", session?, project?, task?, prompt?, budget_tokens=2000, hook_event?)` | sí | `welcome`: bienvenida al primer mensaje de cada `session` (como mucho 3 memorias de `_shared`, más solo si sobra sitio) y otra vez en `SessionStart` (`compact\|clear`); en los mensajes siguientes, los recordatorios vencidos cada 10 mensajes, hasta 5 memorias cuyo título, tags o `keywords` tienen una palabra poco frecuente de `prompt`, y un aviso si en 8 mensajes no se ha guardado ninguna memoria. `task`: memorias que casan con la tarea (con 3 palabras o más, deben tener 2; las constraints con `files` entran siempre), «Memorias enlazadas» por `related` y notas relacionadas. Cada entrada lleva `score` (0-1, o `null` en normas, recordatorios, sugeridas y enlazadas) y `kind` |
 | `surface(file?, relative_path?, project_dir?, project?, limit=5, session?, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin constraints, `session` ni `reminder`; el nombre base solo cuenta si es inequívoco; ignora las vencidas por `valid_until`. `relative_path` sustituye a `file` en las ediciones con Serena; sin ninguno, salida vacía. En modo hook, con `session`, no repite las mismas memorias sobre un archivo en 30 minutos (salida vacía); en modo agente nunca se suprime |
 | `constraints(file?, relative_path?, project_dir?, project?, hook_event?)` | sí | Constraints activas (no vencidas) que aplican a un archivo. Avisa, no bloquea |
 | `checkpoint(action="save"\|"restore", project_dir?, project?, task_title?, hook_event?)` | no | `save` guarda el `estado.md` activo (sin la Bitácora) como memoria de sesión. `restore` lee primero el `estado.md` activo vivo (el de la rama `<tipo>/<ID>-<change>`, si no el más reciente) con una línea de flujo (`etapa` y avance de `tasks.md`); sin estado activo cae al último checkpoint vigente. `task_title` retoma esa tarea. Archiva los checkpoints de tareas sin estado activo |

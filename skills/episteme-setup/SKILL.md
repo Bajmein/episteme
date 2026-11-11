@@ -54,7 +54,7 @@ Elige el archivo con la persona:
 Fusiona en ese archivo el contenido de [settings.json](settings.json) de esta skill, sin pisar lo que ya haya:
 - `allow` de los 7 tools de solo lectura (`remember`, `revise` y `checkpoint` siguen pidiendo permiso);
 - `deny` de `Read/Edit(~/.episteme/**)` (`Edit` ya cubre Write; una regla `Write(...)` nunca coincide), `Bash(obsidian *)` y `Bash(omega *)`: el acceso al vault se cierra con permisos, no con el prompt. Si el vault no es el de por defecto, cambia la ruta en las dos reglas;
-- los 5 hooks `mcp_tool`: bienvenida en `UserPromptSubmit`, `constraints` antes y `surface` después de `Edit|Write|mcp__serena__.*` (con Serena el tool no trae `file_path`: pasa `relative_path`), `checkpoint` save en `PreCompact` y restore en `SessionStart` (`compact|clear`).
+- los 6 hooks `mcp_tool`: bienvenida, recordatorios y sugerencias por mensaje en `UserPromptSubmit` (con `${prompt}`), `constraints` antes de `Edit|Write|mcp__serena__.*` y `surface` después de `Read|Edit|Write|mcp__serena__.*` (con Serena el tool no trae `file_path`: pasa `relative_path`), `checkpoint` save en `PreCompact`, y en `SessionStart` (`compact|clear`) `checkpoint` restore y la bienvenida otra vez. Todos devuelven `hookSpecificOutput.additionalContext`.
 
 Si el proyecto se empaqueta como plugin, `"server": "episteme"` pasa a `"plugin:<plugin>:episteme"`.
 

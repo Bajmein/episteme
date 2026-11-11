@@ -442,15 +442,17 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """Load project memory: the session welcome, or a context pack for a task.
 
         welcome: overdue reminders, the active priority-5 norms, reminders due within 7 days,
-        then the highest-scoring active memories; sent once per session (not repeated on
-        --resume, whose context already has it; resent on SessionStart compact|clear). With
-        session, later calls add: overdue reminders every 10 messages; with prompt, up to 5
-        memories whose title, tags or keywords hold a rare word of the message; and a nudge to
-        save when the session has written no memory.
-        task: decisions, constraints and lessons matching the task (Spanish stopwords ignored,
-        weak matches dropped), within budget_tokens, plus up to 5 related notes to open with read.
-        Returns JSON {"text", "entries": [{"path", "score", "kind"}]} with every score on a 0-1
-        scale (welcome adds "already_sent").
+        then the highest-scoring active memories (at most 3 from _shared); sent once per session
+        (not repeated on --resume, whose context already has it; resent on SessionStart
+        compact|clear). With session, later calls add: overdue reminders every 10 messages; with
+        prompt, up to 5 memories whose title, tags or keywords hold a rare word of the message;
+        and a nudge to save when the session has written no memory.
+        task: decisions, constraints and lessons matching the task (Spanish and English stopwords
+        ignored; with 3+ words a memory must hold 2 of them and score >= 25% of the best hit;
+        constraints on files always enter), up to 3 memories linked to them by related, and up
+        to 5 related notes to open with read, within budget_tokens.
+        Returns JSON {"text", "entries": [{"path", "score", "kind"}]}; score is 0-1, or null for
+        norms, reminders, recalled and linked memories (welcome adds "already_sent").
         """
         hookmode.check(hook_event)
         with engine.session():
@@ -466,6 +468,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                     resend = hook_event == "SessionStart"
                     fresh = engine.index.mark_welcomed(session)
                     st = prompting.reset(session) if resend else prompting.state(session)
+                    if resend:
+                        memory.surface_forget(session)
                     if st.baseline is None:
                         st.baseline = prompting.stamp(engine, project)
                     if not resend:
