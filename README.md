@@ -234,3 +234,15 @@ uv run python -m episteme --vault "$PWD/tests/fixtures/vault" --project fabrik
 ```
 
 Los tests copian `tests/fixtures/vault/` a un directorio temporal antes de escribir y arrancan el servidor por stdio con el cliente del SDK de MCP.
+
+### Medir variantes de búsqueda
+
+Para decidir con números si conviene un lematizador de español o los trigramas de SQLite, corre el script sobre tu vault. Es de solo lectura: recorre las notas con el parser, no abre ni crea el índice y no escribe nada en el vault.
+
+```bash
+uv run scripts/measure_recall.py --vault ~/.episteme [--zone memory] [--terms a,b,c] [--terms-file t.txt] [--top 200] [--min-len 4] [--examples 15]
+```
+
+Sin `--terms`, mide los `--top` tokens alfabéticos de `--min-len` letras o más con más documentos. Por término compara cuatro conjuntos de documentos: `exact` (el token), `prefix` (tokens que empiezan por él), `stem` (misma raíz según `snowballstemmer` en español) y `trigram` (el texto plegado lo contiene como subcadena). La salida trae las familias de raíz, la tabla de los términos con mayor ganancia, la ganancia relativa media y mediana de cada estrategia y el «ruido estimado del trigrama» (documentos que solo añade el trigrama, con ejemplos `término → token que lo contiene` para juzgar a ojo).
+
+Criterio: adoptar el lematizador si une variantes que hoy se pierden (ganancia de `stem` sobre `exact`) sin el ruido del trigrama; si casi todo lo que añade el trigrama son coincidencias dentro de otras palabras, no compensa.
