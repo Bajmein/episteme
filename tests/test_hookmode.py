@@ -15,11 +15,10 @@ from episteme.memory import file_matches, project_relative
 
 
 def test_render_per_event() -> None:
-    assert hookmode.render("UserPromptSubmit", "hello") == "hello"
-    assert hookmode.render("SessionStart", "hello") == "hello"
-    out = json.loads(hookmode.render("PreToolUse", "warn"))
-    expected = {"hookEventName": "PreToolUse", "additionalContext": "warn"}
-    assert out == {"hookSpecificOutput": expected}
+    for event in ("UserPromptSubmit", "SessionStart", "PreToolUse"):
+        out = json.loads(hookmode.render(event, "warn"))
+        expected = {"hookEventName": event, "additionalContext": "warn"}
+        assert out == {"hookSpecificOutput": expected}
     assert hookmode.render("PreCompact", "anything") == ""
     for event in hookmode.EVENTS:
         assert hookmode.render(event, "") == ""
@@ -28,9 +27,17 @@ def test_render_per_event() -> None:
     assert err.value.code == "invalid_argument"
 
 
+def test_context_events_emit_single_json_object() -> None:
+    for event in hookmode.CONTEXT_EVENTS:
+        out = json.loads(hookmode.render(event, "hello"))
+        assert list(out) == ["hookSpecificOutput"]
+        assert out["hookSpecificOutput"]["hookEventName"] == event
+
+
 def test_render_caps_at_newline() -> None:
     text = "\n".join("x" * 99 for _ in range(300))
-    plain = hookmode.render("UserPromptSubmit", text)
+    raw = hookmode.render("UserPromptSubmit", text)
+    plain = json.loads(raw)["hookSpecificOutput"]["additionalContext"]
     assert len(plain) <= 10_000 and plain.endswith("x")
     ctx = json.loads(hookmode.render("PostToolUse", text))["hookSpecificOutput"]
     assert len(ctx["additionalContext"]) <= 10_000

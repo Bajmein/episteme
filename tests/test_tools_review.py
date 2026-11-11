@@ -117,7 +117,8 @@ async def test_task_context(vault: Path) -> None:
         text = await c.error("context", mode="task")
         assert text.startswith("invalid_argument:")
         hook = await c.call("context", mode="task", task="serena", hook_event="UserPromptSubmit")
-        assert hook[0] is False and hook[1].startswith("episteme · contexto para: serena")
+        assert hook[0] is False
+        assert '"additionalContext": "episteme · contexto para: serena' in hook[1]
 
 
 async def test_overdue_reminders_order(vault: Path) -> None:

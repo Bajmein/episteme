@@ -8,8 +8,7 @@ paths:
 
 Los hooks `type: "mcp_tool"` de Claude Code tratan lo que devuelve el tool como el stdout de un hook de comando. La salida depende de `hook_event`:
 
-- `UserPromptSubmit` y `SessionStart`: texto plano, que entra al contexto.
-- `PreToolUse` y `PostToolUse`: un único objeto `{"hookSpecificOutput": {"hookEventName": …, "additionalContext": …}}`. En esos eventos el texto plano solo va al debug log y el modelo no lo ve.
+- `UserPromptSubmit`, `SessionStart`, `PreToolUse` y `PostToolUse`: un único objeto `{"hookSpecificOutput": {"hookEventName": …, "additionalContext": …}}`. No se usa texto plano: Claude Code 2.1.322 no lo entrega al modelo en hooks `mcp_tool` (comprobado el 11-11-2026).
 - `PreCompact`: cadena vacía.
 - Cualquier otro evento: `invalid_argument`.
 
