@@ -386,7 +386,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         path: Annotated[str | None, Field(description="Path prefix to limit the review.")] = None,
         project: Annotated[
             str | None,
-            Field(description="Limit memory checks to this project (and _shared)."),
+            Field(
+                description="Limit memory checks to this project (and _shared). "
+                '"*" reviews every project.'
+            ),
         ] = None,
         limit: Annotated[int, Field(description="Maximum items per category.")] = 50,
         zone: Annotated[
@@ -394,11 +397,15 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             Field(description='Only notes of this zone, as in episteme.toml (e.g. "memory").'),
         ] = None,
     ) -> str:
-        """Vault health: stale memories, possible contradictions, orphans, broken links,
-        invalid frontmatter and memories flagged as outdated.
+        """Vault health: stale memories, possible contradictions, groups of similar
+        memories, cut titles, orphans, broken links, invalid frontmatter and memories
+        flagged as outdated.
 
-        Returns JSON {"totals", "stale", "contradictions", "orphans", "broken_links",
-        "invalid_frontmatter", "flagged", "read_only"}. "totals" counts every item per
+        Returns JSON {"totals", "stale", "contradictions", "similar", "cut_titles",
+        "orphans", "broken_links", "invalid_frontmatter", "flagged", "read_only"}.
+        "similar" lists groups {"paths", "similarity"} of active memories (any type or
+        project, not session or reminder) to merge; "cut_titles" lists memories whose
+        first body line repeats the title and goes on. "totals" counts every item per
         category (the lists are cut at limit). Problems in read-only zones (you cannot fix
         them here; in practice broken links and invalid frontmatter, since memories live in
         memory zones) are not mixed in: they go under "read_only", with the same categories
