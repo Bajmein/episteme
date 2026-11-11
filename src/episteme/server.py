@@ -142,15 +142,31 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         lines: Annotated[
             str | None, Field(description='1-based inclusive line range of the file, "10-40".')
         ] = None,
+        outline: Annotated[
+            bool | None,
+            Field(
+                description="Include the heading outline. "
+                "Default: only when reading the whole note."
+            ),
+        ] = None,
+        content: Annotated[
+            bool,
+            Field(
+                description="false returns only frontmatter and outline (each heading with its "
+                "line and end), to pick a section before reading."
+            ),
+        ] = True,
     ) -> str:
         """Read a note: frontmatter, outline and body (or one section / line range).
 
         The whole body is cut at 20,000 characters (truncated: true); then use heading or lines.
-        Returns JSON {"path", "frontmatter", "fm_valid", "outline", "content", "truncated",
-        "total_lines"}.
+        The outline (each heading with "line" and "end") comes only with the whole note, or
+        always with outline=true; content=false returns just frontmatter and outline.
+        Returns JSON {"path", "frontmatter", "fm_valid", "outline" (when included), "content",
+        "truncated", "total_lines", "range" (with heading or lines: "first-last" file lines)}.
         """
         with engine.session():
-            return dump(engine.read(note, heading, lines))
+            return dump(engine.read(note, heading, lines, outline, content))
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def links(

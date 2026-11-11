@@ -130,13 +130,28 @@ class Engine:
 
     # -- read --------------------------------------------------------------
 
-    def read(self, note: str, heading: str | None = None, lines: str | None = None) -> dict:
+    def read(
+        self,
+        note: str,
+        heading: str | None = None,
+        lines: str | None = None,
+        outline: bool | None = None,
+        content: bool = True,
+    ) -> dict:
         if heading is not None and lines is not None:
             raise invalid("pass heading or lines, not both.")
+        if not content and (heading is not None or lines is not None or outline is False):
+            raise invalid(
+                "content=false returns only the outline. Drop heading, lines and outline=false."
+            )
         rel = self.resolve_note(note)
         parsed = self.load(rel)
         total = len(parsed.lines)
-        if heading is not None:
+        partial = heading is not None or lines is not None
+        if not content:
+            start = end = 0
+            cap = READ_CAP
+        elif heading is not None:
             rng = find_section(parsed, heading)
             if rng is None:
                 names = clip(", ".join(f'"{h.text}"' for h in parsed.headings), 4000)
@@ -150,28 +165,32 @@ class Engine:
             cap = SECTION_CAP
         else:
             start, end, cap = parsed.fm_end, total, READ_CAP
-        content = "\n".join(parsed.lines[start:end])
-        truncated = len(content) > cap
+        text = "\n".join(parsed.lines[start:end])
+        truncated = len(text) > cap
+        shown_end = end
         if truncated:
             notice_room = 200
-            kept = clip_at_newline(content, cap - notice_room)
+            kept = clip_at_newline(text, cap - notice_room)
             shown = kept.count("\n") + 1
             missing = (end - start) - shown
-            content = (
+            shown_end = start + shown
+            text = (
                 f"{kept}\n[truncated: {missing} more lines (file lines {start + shown + 1}-{end}). "
                 "Use heading or lines to read the rest.]"
             )
-        return {
+        out: dict[str, Any] = {
             "path": rel,
             "frontmatter": jsonable(parsed.frontmatter),
             "fm_valid": parsed.fm_valid,
-            "outline": [
-                {"level": h.level, "text": h.text, "line": h.line} for h in parsed.headings
-            ],
-            "content": content,
-            "truncated": truncated,
-            "total_lines": total,
         }
+        if outline is True or (outline is None and not partial):
+            out["outline"] = _outline(parsed)
+        out["content"] = text
+        out["truncated"] = truncated
+        out["total_lines"] = total
+        if partial:
+            out["range"] = f"{start + 1}-{shown_end}"
+        return out
 
     # -- links -------------------------------------------------------------
 
@@ -227,3 +246,16 @@ def _parse_range(spec: str, total: int) -> tuple[int, int]:
     if first > total:
         raise invalid(f'lines "{spec}" starts after the end of the note ({total} lines).')
     return first - 1, min(last, total)
+
+
+def _outline(parsed) -> list[dict]:
+    """Headings with `end`, the last 1-based line of each section (same rule as find_section)."""
+    out = []
+    for idx, h in enumerate(parsed.headings):
+        end = len(parsed.lines)
+        for nxt in parsed.headings[idx + 1 :]:
+            if nxt.level <= h.level:
+                end = nxt.line - 1
+                break
+        out.append({"level": h.level, "text": h.text, "line": h.line, "end": end})
+    return out
