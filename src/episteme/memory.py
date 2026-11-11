@@ -754,6 +754,28 @@ def _by_priority(rows: list[Any]) -> list[Any]:
     return sorted(rows, key=lambda r: (-(r["priority"] or 0), _neg_date(r["created"]), r["path"]))
 
 
+SURFACE_REPEAT_SECONDS = 1800
+_SURFACED: dict[tuple[str, str], tuple[float, tuple[str, ...]]] = {}
+
+
+def surface_repeated(session: str, rel: str, paths: list[str], now: float | None = None) -> bool:
+    """True if the same set of paths was already surfaced for (session, rel) within the window."""
+    if now is None:
+        import time
+
+        now = time.monotonic()
+    key = (session, rel)
+    shown = tuple(sorted(paths))
+    prev = _SURFACED.get(key)
+    if prev is not None and prev[1] == shown and now - prev[0] < SURFACE_REPEAT_SECONDS:
+        return True
+    _SURFACED[key] = (now, shown)
+    if len(_SURFACED) > 500:
+        for k in [k for k, (t, _) in _SURFACED.items() if now - t >= SURFACE_REPEAT_SECONDS]:
+            del _SURFACED[k]
+    return False
+
+
 def surface(
     engine: Engine,
     file: str,
