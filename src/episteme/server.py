@@ -339,6 +339,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         task: Annotated[
             str | None, Field(description="task: what you are about to do, in a few words.")
         ] = None,
+        prompt: Annotated[
+            str | None,
+            Field(
+                description="welcome, from the UserPromptSubmit hook: the user's message "
+                "(${prompt}); adds up to 5 memories that match its rare words."
+            ),
+        ] = None,
         budget_tokens: Annotated[
             int, Field(description="task: size of the context pack (1 token ~ 4 chars).")
         ] = 2000,
@@ -347,7 +354,11 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """Load project memory: the session welcome, or a context pack for a task.
 
         welcome: overdue reminders, the active priority-5 norms, reminders due within 7 days,
-        then the highest-scoring active memories.
+        then the highest-scoring active memories; sent once per session (not repeated on
+        --resume, whose context already has it; resent on SessionStart compact|clear). With
+        session, later calls add: overdue reminders every 10 messages; with prompt, up to 5
+        memories whose title, tags or keywords hold a rare word of the message; and a nudge to
+        save when the session has written no memory.
         task: decisions, constraints and lessons matching the task (Spanish stopwords ignored,
         weak matches dropped), within budget_tokens, plus up to 5 related notes to open with read.
         Returns JSON {"text", "entries": [{"path", "score", "kind"}]} with every score on a 0-1
@@ -356,13 +367,49 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         hookmode.check(hook_event)
         with engine.session():
             if mode == "welcome":
-                text, entries = memory.welcome(engine, project)
-                sent = bool(session) and not engine.index.mark_welcomed(session)
-                if sent:
-                    text, entries = "", []
+                from episteme import prompting
+
+                project = engine.need_project(project)
+                blocks: list[str] = []
+                entries: list[dict[str, Any]] = []
+                already_sent = False
+                welcomed = True
+                if session:
+                    resend = hook_event == "SessionStart"
+                    fresh = engine.index.mark_welcomed(session)
+                    st = prompting.reset(session) if resend else prompting.state(session)
+                    if st.baseline is None:
+                        st.baseline = prompting.stamp(engine, project)
+                    if not resend:
+                        st.prompts += 1
+                    welcomed = fresh or resend
+                    if welcomed:
+                        st.reminded_at = st.prompts
+                    else:
+                        already_sent = True
+                else:
+                    st = prompting.SessionState()
+                if welcomed:
+                    text, found = memory.welcome(engine, project)
+                    blocks.append(text)
+                    entries += found
+                elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:
+                    text, found = prompting.overdue_block(engine, project)
+                    blocks.append(text)
+                    entries += found
+                    st.reminded_at = st.prompts
+                if prompt:
+                    text, found = prompting.recall(
+                        engine, prompt, project, st, {e["path"] for e in entries}
+                    )
+                    blocks.append(text)
+                    entries += found
+                if session and not welcomed:
+                    blocks.append(prompting.nudge(engine, project, st))
+                text = "\n\n".join(b for b in blocks if b)
                 if hook_event:
                     return hookmode.render(hook_event, text)
-                return dump({"text": text, "entries": entries, "already_sent": sent})
+                return dump({"text": text, "entries": entries, "already_sent": already_sent})
             if mode == "task":
                 if not task or not task.strip():
                     raise invalid('mode "task" needs task.')

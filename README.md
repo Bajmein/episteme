@@ -166,6 +166,7 @@ Bloque para el `settings.json` del proyecto:
     "UserPromptSubmit": [
       { "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "context",
                     "input": { "mode": "welcome", "session": "${session_id}",
+                               "prompt": "${prompt}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PreToolUse": [
@@ -193,6 +194,9 @@ Bloque para el `settings.json` del proyecto:
       { "matcher": "compact|clear",
         "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "checkpoint",
                     "input": { "action": "restore", "project_dir": "${cwd}",
+                               "hook_event": "${hook_event_name}" } },
+                  { "type": "mcp_tool", "server": "episteme", "tool": "context",
+                    "input": { "mode": "welcome", "session": "${session_id}",
                                "hook_event": "${hook_event_name}" } }] }
     ]
   }
