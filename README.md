@@ -123,7 +123,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
 | `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false, slug?)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`). El nombre sale del título (ver «Memorias»); `slug` lo fija |
 | `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory` (en una memoria, un `set` que cambia `type` o `project` la mueve a la carpeta que le toca, con el mismo nombre, y devuelve `moved_from`; se niega si alguna nota la enlaza por ruta o si el nombre ya existe allí); `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
-| `review(path?, project?, limit=50, zone?)` | sí | Memorias viejas, contradicciones posibles (dos decisiones o constraints que comparten un archivo de `files` o 2 tags, salvo que una enlace a la otra con `supersedes`, `contradicts` o `related`), huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
+| `review(path?, project?, limit=50, zone?)` | sí | `project="*"` revisa todos los proyectos. Memorias viejas, grupos de memorias parecidas (`similar`: activas de cualquier tipo o proyecto, salvo `session` y `reminder`, con similitud ≥ 0,4), títulos cortados y repetidos en el cuerpo (`cut_titles`), contradicciones posibles con su `similarity` (dos decisiones o constraints que comparten un archivo de `files` o 2 tags, salvo que una enlace a la otra con `supersedes`, `contradicts` o `related`), huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
 | `surface(file?, relative_path?, project_dir?, project?, limit=5, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin constraints, `session` ni `reminder`; el nombre base solo cuenta si es inequívoco; ignora las vencidas por `valid_until`. `relative_path` sustituye a `file` en las ediciones con Serena; sin ninguno, salida vacía |
 | `constraints(file?, relative_path?, project_dir?, project?, hook_event?)` | sí | Constraints activas (no vencidas) que aplican a un archivo. Avisa, no bloquea |
@@ -153,6 +153,15 @@ helpful: 0
 due:                    # obligatorio en reminder
 flagged: false
 ```
+
+### Mantención
+
+episteme no fusiona ni borra nada por su cuenta; `review` solo da los candidatos. El ciclo, siempre con la aprobación de la persona y grupo por grupo:
+
+1. `review(project="*", zone="memory")`.
+2. Por cada grupo de `similar`: leer las memorias, guardar la unificada con `remember` y marcar cada antigua con `revise(action="supersede", by=…)`.
+3. Archivar lo que ya no aplica con `revise(action="archive")` (reversible).
+4. Corregir los `cut_titles` (el título quedó cortado y repetido en la primera línea del cuerpo).
 
 ## Hooks
 

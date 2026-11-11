@@ -932,6 +932,7 @@ def task_context(
 # -- review --------------------------------------------------------------
 
 STALE_DAYS = 90
+REVIEW_SIMILAR = 0.4  # wider than remember's 0.5: review only reports
 
 
 def review(
@@ -951,7 +952,7 @@ def review(
     if path:
         engine.check_path(path.strip().rstrip("/") or "/")
         prefix = path.strip().strip("/")
-    project = project or engine.project
+    project = "*" if project == "*" else (project or engine.project)
 
     def in_scope(rel: str) -> bool:
         if prefix is not None and rel != prefix and not rel.startswith(prefix + "/"):
@@ -965,7 +966,7 @@ def review(
     def in_project(r: Any) -> bool:
         # A memory with a missing or invalid project is matched by its folder, so that
         # the schema validation below reports it instead of the filter hiding it.
-        if project is None or r["project"] in (project, "_shared"):
+        if project in (None, "*") or r["project"] in (project, "_shared"):
             return True
         return r["path"].startswith((f"{r['zone']}/{project}/", f"{r['zone']}/_shared/"))
 
@@ -992,6 +993,10 @@ def review(
     ):
         linked.add((row["src"], row["dst_path"]))
         linked.add((row["dst_path"], row["src"]))
+    toks = {
+        r["path"]: dedup_tokens(r["title"] or "", body_without_title(r["body"] or ""))
+        for r in active
+    }
     contradictions = []
     decisions = [r for r in active if r["type"] in ("decision", "constraint")]
     for i, a in enumerate(decisions):
@@ -1008,7 +1013,25 @@ def review(
             elif len(tags_a & tags_b) >= 2:
                 reason = f"share tags: {', '.join(sorted(tags_a & tags_b))}"
             if reason:
-                contradictions.append({"a": a["path"], "b": b["path"], "reason": reason})
+                contradictions.append(
+                    {
+                        "a": a["path"],
+                        "b": b["path"],
+                        "reason": reason,
+                        "similarity": round(similarity(toks[a["path"]], toks[b["path"]]), 3),
+                    }
+                )
+
+    similar = _similar_groups(
+        [r for r in active if r["type"] not in ("session", "reminder")], toks
+    )
+
+    cut_titles = []
+    for r in mems:
+        title = (r["title"] or "").strip()
+        first = (body_without_title(r["body"] or "").split("\n", 1)[0]).strip()
+        if title and first.startswith(title) and len(first) > len(title):
+            cut_titles.append(r["path"])
 
     orphans = []
     for r in mems:
@@ -1042,6 +1065,8 @@ def review(
     found: dict[str, list[Any]] = {
         "stale": stale,
         "contradictions": contradictions,
+        "similar": similar,
+        "cut_titles": cut_titles,
         "orphans": orphans,
         "broken_links": broken,
         "invalid_frontmatter": invalid_fm,
@@ -1049,7 +1074,9 @@ def review(
     }
 
     def path_of(item: Any) -> str:
-        return item if isinstance(item, str) else item.get("path") or item["a"]
+        if isinstance(item, str):
+            return item
+        return item.get("path") or (item["paths"][0] if "paths" in item else item["a"])
 
     # Read-only zones are reported apart, with the same categories: they are not the
     # project's to fix, but nothing found there is dropped.
@@ -1076,3 +1103,36 @@ def _target(row: Any) -> str:
     if row["heading"]:
         target += f"#{row['heading']}"
     return target
+
+
+def _similar_groups(rows: list[Any], token_sets: dict[str, set[str]]) -> list[dict[str, Any]]:
+    """Connected components of memories whose dedup tokens reach REVIEW_SIMILAR."""
+    toks = [token_sets[r["path"]] for r in rows]
+    parent = list(range(len(rows)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    best: dict[int, float] = {}
+    pairs = []
+    for i in range(len(rows)):
+        for j in range(i + 1, len(rows)):
+            sim = similarity(toks[i], toks[j])
+            if sim >= REVIEW_SIMILAR:
+                pairs.append((i, j, sim))
+                parent[find(i)] = find(j)
+    for i, _, sim in pairs:
+        root = find(i)
+        best[root] = max(best.get(root, 0.0), sim)
+    members: dict[int, list[str]] = {}
+    for i in {k for p in pairs for k in p[:2]}:
+        members.setdefault(find(i), []).append(rows[i]["path"])
+    groups = [
+        {"paths": sorted(paths), "similarity": round(best[root], 3)}
+        for root, paths in members.items()
+    ]
+    groups.sort(key=lambda g: (-g["similarity"], g["paths"][0]))
+    return groups
