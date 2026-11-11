@@ -118,6 +118,12 @@ class Hit:
     line: int
     snippet: str
     score: float
+    zone: str | None = None
+    type: str | None = None
+    status: str | None = None
+    project: str | None = None
+    created: str | None = None
+    priority: int | None = None
 
 
 class Index:
@@ -478,6 +484,123 @@ class Index:
             "select * from links where dst_path = ? and src != ? order by src, line", (rel, rel)
         ).fetchall()
 
+    def _where(
+        self,
+        query: str | None,
+        *,
+        any_term: bool = False,
+        drop_stopwords: bool = False,
+        path: str | None = None,
+        type: str | None = None,
+        tags: list[str] | None = None,
+        project: str | list[str] | None = None,
+        status: str | None = None,
+        mode: str | None = None,
+        zone: str | None = None,
+    ) -> tuple[str, str, list[Any], list[list[str]]] | None:
+        """The ``(source, clause, params, terms)`` of a search; None if the query has no terms."""
+        terms: list[list[str]] = []
+        where: list[str] = []
+        params: list[Any] = []
+        if query is not None:
+            terms = query_terms(query, drop_stopwords=drop_stopwords)
+            if not terms:
+                return None
+            joiner = " OR " if any_term else " AND "
+            match = joiner.join(_fts_term(t) for t in terms)
+            where.append("fts match ?")
+            params.append(match)
+        if path:
+            prefix = path.strip().strip("/")
+            where.append("(n.path = ? or n.path like ? escape '\\')")
+            params += [prefix, _like_prefix(prefix) + "/%"]
+        if type:
+            where.append("n.type = ?")
+            params.append(type)
+        if project:
+            projects = [project] if isinstance(project, str) else project
+            where.append(f"n.project in ({','.join('?' * len(projects))})")
+            params += projects
+        if mode:
+            where.append("n.mode = ?")
+            params.append(mode)
+        if zone:
+            where.append("n.zone = ?")
+            params.append(zone)
+        if status is None:
+            where.append(
+                "not (n.mode = ? and coalesce(n.status, '') in ('superseded', 'archived'))"
+            )
+            params.append(MEMORY)
+        elif status != "any":
+            where.append("n.status = ?")
+            params.append(status)
+        for tag in tags or []:
+            where.append("n.path in (select path from tags where tag = ?)")
+            params.append(normalize_tag(tag))
+        source = (
+            "from fts join notes n on n.id = fts.rowid" if query is not None else "from notes n"
+        )
+        return source, " and ".join(where) or "1", params, terms
+
+    def facets(self, query: str | None = None, **filters: Any) -> dict[str, dict[str, int]]:
+        """Counts by zone, project, type, status and tag over the notes the filters select."""
+        built = self._where(query, **filters)
+        out: dict[str, dict[str, int]] = {
+            k: {} for k in ("zone", "project", "type", "status", "tags")
+        }
+        if built is None:
+            return out
+        source, clause, params, _ = built
+        # Columns come from a closed list; user values are bound parameters.
+        for col in ("zone", "project", "type", "status"):
+            rows = self.conn.execute(
+                f"select n.{col} as v, count(*) as c {source} "  # nosec B608
+                f"where {clause} and n.{col} is not null group by n.{col} order by c desc, v",
+                params,
+            ).fetchall()
+            out[col] = {r["v"]: r["c"] for r in rows}
+        rows = self.conn.execute(
+            f"select t.tag as v, count(*) as c from tags t where t.path in "  # nosec B608
+            f"(select n.path {source} where {clause}) group by t.tag order by c desc, v limit 30",
+            params,
+        ).fetchall()
+        out["tags"] = {r["v"]: r["c"] for r in rows}
+        return out
+
+    def known(self, column: str) -> list[str]:
+        """Distinct non-null values of a ``notes`` column (zone, type, status or project)."""
+        if column not in ("zone", "type", "status", "project"):
+            raise ValueError(f"unknown column {column!r}")
+        rows = self.conn.execute(
+            f"select distinct {column} as v from notes where {column} is not null "  # nosec B608
+            "order by v"
+        ).fetchall()
+        return [r["v"] for r in rows]
+
+    def known_tags(self) -> list[str]:
+        rows = self.conn.execute("select distinct tag from tags order by tag").fetchall()
+        return [r["tag"] for r in rows]
+
+    def heading_at(self, path: str, line: int) -> str | None:
+        """Text of the closest heading at or before ``line``; None if none or it is an H1."""
+        row = self.conn.execute(
+            "select level, text from headings where path = ? and line <= ? "
+            "order by line desc, rowid desc limit 1",
+            (path, line),
+        ).fetchone()
+        if row is None or row["level"] == 1:
+            return None
+        return row["text"]
+
+    def superseded_by(self, path: str) -> str | None:
+        row = self.conn.execute(
+            "select src from links where kind = 'supersedes' and dst_path = ? "
+            "order by src, line limit 1",
+            (path,),
+        ).fetchone()
+        return row["src"] if row else None
+
     def mark_welcomed(self, session: str) -> bool:
         """Record that ``session`` got its welcome. False if it already had."""
 
@@ -507,71 +630,53 @@ class Index:
         status: str | None = None,
         mode: str | None = None,
         limit: int = 20,
+        zone: str | None = None,
     ) -> tuple[list[Hit], int]:
         """Full-text search. Returns the hits (after ``limit``) and the total before it.
 
         Without ``query`` the filters alone select the notes (ordered by priority, then path).
         ``term*`` is a prefix match; ``drop_stopwords`` ignores Spanish function words.
         """
-        terms: list[list[str]] = []
-        where: list[str] = []
-        params: list[Any] = []
+        built = self._where(
+            query,
+            any_term=any_term,
+            drop_stopwords=drop_stopwords,
+            path=path,
+            type=type,
+            tags=tags,
+            project=project,
+            status=status,
+            mode=mode,
+            zone=zone,
+        )
+        if built is None:
+            return [], 0
+        source, clause, params, terms = built
         if query is not None:
-            terms = query_terms(query, drop_stopwords=drop_stopwords)
-            if not terms:
-                return [], 0
-            joiner = " OR " if any_term else " AND "
-            match = joiner.join(_fts_term(t) for t in terms)
-            where.append("fts match ?")
-            params.append(match)
-        if path:
-            prefix = path.strip().strip("/")
-            where.append("(n.path = ? or n.path like ? escape '\\')")
-            params += [prefix, _like_prefix(prefix) + "/%"]
-        if type:
-            where.append("n.type = ?")
-            params.append(type)
-        if project:
-            projects = [project] if isinstance(project, str) else project
-            where.append(f"n.project in ({','.join('?' * len(projects))})")
-            params += projects
-        if mode:
-            where.append("n.mode = ?")
-            params.append(mode)
-        if status is None:
-            where.append(
-                "not (n.mode = ? and coalesce(n.status, '') in ('superseded', 'archived'))"
-            )
-            params.append(MEMORY)
-        elif status != "any":
-            where.append("n.status = ?")
-            params.append(status)
-        for tag in tags or []:
-            where.append("n.path in (select path from tags where tag = ?)")
-            params.append(normalize_tag(tag))
-        # Every clause in ``where`` is a literal; user values are bound parameters.
-        if query is not None:
-            source = "from fts join notes n on n.id = fts.rowid"
             cols = "bm25(fts, 5.0, 1.0, 1.0) as rank"
             order = "order by rank, coalesce(n.priority, 0) desc, n.path"
         else:
-            source = "from notes n"
             cols = "0.0 as rank"
             order = "order by coalesce(n.priority, 0) desc, n.path"
-        clause = " and ".join(where) or "1"
         total = self.conn.execute(
             f"select count(*) {source} where {clause}",  # nosec B608
             params,
         ).fetchone()[0]
         rows = self.conn.execute(
-            f"select n.path, n.title, n.search_text, {cols} {source} "  # nosec B608
+            "select n.path, n.title, n.search_text, n.zone, n.type, n.status, n.project, "  # nosec B608
+            f"n.created, n.priority, {cols} {source} "
             f"where {clause} {order} limit ?",
             [*params, limit],
         ).fetchall()
         hits = []
         for r in rows:
             line, snippet = locate(r["search_text"], terms)
-            hits.append(Hit(r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0))
+            hits.append(
+                Hit(
+                    r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0,
+                    r["zone"], r["type"], r["status"], r["project"], r["created"], r["priority"],
+                )
+            )  # fmt: skip
         return hits, total
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import re
 import threading
 from collections.abc import Generator
@@ -17,6 +18,8 @@ from episteme.vault import Vault, is_ignored
 
 READ_CAP = 20_000
 SECTION_CAP = 60_000
+PARTIAL_BELOW = 3
+PARTIAL_MAX = 5
 
 
 class Engine:
@@ -74,6 +77,80 @@ class Engine:
             ) from exc
         return parse(text, rel)
 
+    def _row(self, h: Any) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "path": h.path,
+            "title": h.title,
+            "line": h.line,
+            "snippet": h.snippet,
+            "score": h.score,
+        }
+        for key in ("zone", "type", "status", "project", "created", "priority"):
+            value = getattr(h, key)
+            if value is not None:
+                row[key] = value
+        heading = self.index.heading_at(h.path, h.line)
+        if heading:
+            row["heading"] = heading
+        if h.status == "superseded":
+            newer = self.index.superseded_by(h.path)
+            if newer:
+                row["superseded_by"] = newer
+        return row
+
+    def _hints(
+        self,
+        query: str | None,
+        path: str | None,
+        type: str | None,
+        tags: list[str] | None,
+        project: str | None,
+        status: str | None,
+    ) -> list[str]:
+        from episteme.index import normalize_tag
+
+        hints: list[str] = []
+        idx = self.index
+        for label, value in (("type", type), ("project", project)):
+            if value:
+                known = idx.known(label)
+                if value not in known:
+                    hints.append(
+                        f'no note has {label} "{value}". '
+                        f"{label.capitalize()}s in the vault: {', '.join(known)}."
+                    )
+        if status and status != "any":
+            known = idx.known("status")
+            if status not in known:
+                hints.append(
+                    f'no note has status "{status}". Statuses in the vault: {", ".join(known)}. '
+                    '"any" includes superseded and archived.'
+                )
+        if tags:
+            known_tags = idx.known_tags()
+            for tag in tags:
+                norm = normalize_tag(tag)
+                if norm in known_tags:
+                    continue
+                similar = difflib.get_close_matches(norm, known_tags, n=5, cutoff=0.6)
+                text = f'no note has tag "{tag}".'
+                if similar:
+                    text += f" Similar tags: {', '.join(similar)}."
+                hints.append(text)
+        if path:
+            prefix = path.strip().strip("/")
+            hits, _ = idx.search(None, path=prefix, status="any", limit=1)
+            if not hits:
+                zones = ", ".join(sorted(z.path for z in self.vault.config.zones))
+                hints.append(f'no note under "{path}". Zones: {zones}.')
+        if not hints and query is not None:
+            hints.append(
+                "Nothing matches. search is literal: try the plural, the abbreviation or the "
+                "proper name, or drop a filter. If you find the answer elsewhere, save it "
+                "with remember."
+            )
+        return hints
+
     # -- search ------------------------------------------------------------
 
     def search(
@@ -85,47 +162,72 @@ class Engine:
         project: str | None = None,
         status: str | None = None,
         limit: int = 20,
+        zone: str | None = None,
+        facets: bool = False,
     ) -> dict[str, Any]:
         if not (1 <= limit <= 100):
             raise invalid(f"limit must be 1-100, got {limit}.")
         if query is not None and not query.strip():
             query = None
         if query is None:
-            if not (tags or type):
-                raise invalid("query has no words. Pass the words to look for, or tags or type.")
+            if not (tags or type or project or zone or facets):
+                raise invalid(
+                    "query has no words. "
+                    "Pass the words to look for, or tags, type, project or zone."
+                )
         elif not re.search(r"[^\W_]", query):
             raise invalid("query has no words. Pass the words to look for.")
         if path:
             self.check_path(path.strip().rstrip("/") or "/")
+        zone = zone.strip().strip("/") if zone else None
+        if zone and zone not in {z.path for z in self.vault.config.zones}:
+            known = ", ".join(sorted(z.path for z in self.vault.config.zones))
+            raise invalid(f'unknown zone "{zone}". Use one of: {known}.')
+        projects: str | list[str] | None = project
+        if project and project != "_shared":
+            projects = [project, "_shared"]
         kwargs: dict[str, Any] = {
             "path": path,
             "type": type,
             "tags": tags,
-            "project": project,
+            "project": projects,
             "status": status,
-            "limit": limit,
+            "zone": zone,
         }
-        hits, total = self.index.search(query, **kwargs)
+        index = self.index
+        if query is None and facets and not (path or type or tags or project or zone or status):
+            hits: list[Any] = []
+            total = index.search(None, limit=1, **kwargs)[1]
+        else:
+            hits, total = index.search(query, limit=limit, **kwargs)
         fallback = False
-        if not hits and query is not None and len(query_terms(query)) > 1:
-            hits, total = self.index.search(query, any_term=True, **kwargs)
+        if total == 0 and query is not None and len(query_terms(query)) > 1:
+            hits, total = index.search(query, any_term=True, limit=limit, **kwargs)
             fallback = bool(hits)
-        out: dict[str, Any] = {
-            "results": [
-                {
-                    "path": h.path,
-                    "title": h.title,
-                    "line": h.line,
-                    "snippet": h.snippet,
-                    "score": h.score,
-                }
-                for h in hits
-            ],
-            "total": total,
-        }
+        out: dict[str, Any] = {"results": [self._row(h) for h in hits], "total": total}
         if fallback:
             out["match"] = "or"
             out["note"] = "No note has all the words; showing notes with any of them (OR)."
+        elif (
+            query is not None
+            and 1 <= total < PARTIAL_BELOW
+            and total == len(hits)
+            and len(query_terms(query)) > 1
+        ):
+            seen = {h.path for h in hits}
+            more, _ = index.search(
+                query, any_term=True, limit=PARTIAL_MAX + len(seen), **kwargs
+            )
+            extra = [self._row(h) for h in more if h.path not in seen][:PARTIAL_MAX]
+            if extra:
+                out["partial"] = extra
+                out["note"] = "Few notes have all the words; partial lists notes with some of them."
+        if total == 0:
+            hints = self._hints(query, path, type, tags, project, status)
+            if hints:
+                out["hints"] = hints
+        if facets:
+            out["facets"] = index.facets(query, any_term=fallback, **kwargs)
         return out
 
     # -- read --------------------------------------------------------------

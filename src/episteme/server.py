@@ -100,38 +100,70 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                 description='Words that must all appear (AND); "quoted text" is a phrase; '
                 "`a-b` is the words a and b; `word*` matches any word starting with it. "
                 "Case and accents are ignored. "
-                "Optional when tags or type is given."
+                "Optional when tags, type, project, zone or facets is given."
             ),
         ] = None,
         path: Annotated[
             str | None, Field(description="Path prefix, e.g. docs/claude-code.")
         ] = None,
         type: Annotated[
-            str | None, Field(description="Frontmatter type, e.g. decision or reference.")
+            str | None,
+            Field(
+                description="Frontmatter type. Memories: decision, lesson, error, constraint, "
+                "preference, session, reminder, insight. Documentation uses others, "
+                "e.g. reference."
+            ),
         ] = None,
         tags: Annotated[
             list[str] | None,
-            Field(description="Tags the note must all have; `dominio:x` is read as `dominio/x`."),
+            Field(
+                description="Tags the note must all have; `dominio:x` is read as `dominio/x`. "
+                "Tags span projects: use them without project to follow a topic across projects."
+            ),
         ] = None,
-        project: Annotated[str | None, Field(description="Frontmatter project.")] = None,
+        project: Annotated[
+            str | None,
+            Field(description='Frontmatter project; "_shared" memories are included. Optional.'),
+        ] = None,
         status: Annotated[
             str | None,
             Field(
-                description="Frontmatter status. By default superseded and archived memories "
-                'are left out; "any" disables the filter.'
+                description="active, speculative, superseded or archived. Default: everything "
+                "except superseded and archived memories; \"any\" includes them "
+                "(rows then carry status and superseded_by)."
             ),
         ] = None,
         limit: Annotated[int, Field(description="1-100.")] = 20,
+        zone: Annotated[
+            str | None,
+            Field(
+                description="Only notes of this zone, as in episteme.toml, "
+                'e.g. "memory" (memories) or "docs/claude-code".'
+            ),
+        ] = None,
+        facets: Annotated[
+            bool,
+            Field(
+                description="Also return counts by zone, project, type, status and tag; "
+                "alone, it lists what the vault has."
+            ),
+        ] = False,
     ) -> str:
         """Full-text search over the vault (notes and memories), best matches first.
 
-        With no query, lists the notes matching tags and/or type. If no note has all the words,
-        retries with any of them and says so ("match": "or", "note").
-        Returns JSON {"results": [{"path", "title", "line", "snippet", "score"}], "total"}.
-        `line` is the 1-based line of the first match; open it with read(path, lines=...).
+        With no query, lists the notes matching the filters. If no note has all the words,
+        retries with any of them ("match": "or", "note"); with 1-2 hits and 2+ words,
+        "partial" lists up to 5 more notes with some of the words.
+        Returns JSON {"results": [{"path", "title", "line", "snippet", "score", and when set
+        "zone", "type", "status", "project", "created", "priority", "heading",
+        "superseded_by"}], "total"}. `line` is the 1-based line of the first match; open it
+        with read(path, lines=...). With no results, "hints" says which filter matches nothing.
+        facets=true adds "facets": counts by zone, project, type, status and tags.
         """
         with engine.session():
-            return dump(engine.search(query, path, type, tags, project, status, limit))
+            return dump(
+                engine.search(query, path, type, tags, project, status, limit, zone, facets)
+            )
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def read(
