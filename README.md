@@ -86,6 +86,14 @@ Con el servidor conectado, Claude recibe las instrucciones de uso en el handshak
 Variables:
 
 - `EPISTEME_TODAY=AAAA-MM-DD` fija la fecha de hoy (por defecto, la fecha local). Existe para los tests.
+- `EPISTEME_ACTIVITY=0` desactiva el registro de actividad (no se crea `activity.db`).
+
+Cada llamada a un tool deja una fila en `<vault>/.index/activity.db`: tool, hook y sesión, proyecto, argumentos de orientación (consulta, ruta, modo; nunca el cuerpo de las notas ni los mensajes), rutas de las notas que devolvió, tamaño de la respuesta, milisegundos y si fue bien. Sirve para diagnosticar y como señal de uso. No se borra al reconstruir el índice, y se descartan las filas de más de 180 días.
+
+```sh
+sqlite3 <vault>/.index/activity.db "select at, tool, hook_event, ok, ms from calls order by id desc limit 20"
+sqlite3 <vault>/.index/activity.db "select tool, count(*) from calls where at >= date('now') group by tool"
+```
 
 El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Añade `.index/` al `.gitignore` del vault.
 
