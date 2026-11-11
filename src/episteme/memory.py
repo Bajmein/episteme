@@ -686,6 +686,9 @@ def entry_line(row: Any) -> str:
     return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']}){tail}"
 
 
+SHARED_MAX = 3  # welcome: most `_shared` memories listed ahead of the project's own
+
+
 def welcome(
     engine: Engine, project: str | None, upcoming_days: int = UPCOMING_DAYS
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -693,7 +696,9 @@ def welcome(
 
     Sections, in order: overdue reminders, "Normas" (every active priority-5 memory, whatever
     its age), "Vencen pronto" (reminders due within ``upcoming_days``) and "Memorias" (the
-    10 best by score, without the norms already listed).
+    10 best by score, without the norms already listed). At most ``SHARED_MAX`` of those are
+    ``_shared`` ones (when the project is not ``_shared``); the extra ``_shared`` memories only
+    fill the slots left once the others are listed.
     """
     project = engine.need_project(project)
     now = today()
@@ -756,7 +761,21 @@ def welcome(
         entries.append({"path": r["path"], "score": None, "kind": "norm"})
     reminder_lines(upcoming, f"Vencen pronto ({upcoming_days} días):")
     first = True
+    shared_used = 0
+    spill: list[tuple[float, Any]] = []
+    full = False
     for score, r in scored:
+        if project != "_shared" and r["project"] == "_shared":
+            if shared_used >= SHARED_MAX:
+                spill.append((score, r))
+                continue
+            shared_used += 1
+        if not add(entry_line(r), "Memorias:" if first else None, True):
+            full = True
+            break
+        first = False
+        entries.append({"path": r["path"], "score": round(score, 4), "kind": "memory"})
+    for score, r in [] if full else spill:
         if not add(entry_line(r), "Memorias:" if first else None, True):
             break
         first = False
@@ -939,16 +958,50 @@ def constraints(
 # -- task context --------------------------------------------------------
 
 
+MIN_RELEVANCE = 0.25  # task context: a memory's score relative to the best hit
+LINKED_MAX = 3  # task context: memories listed under "Memorias enlazadas:"
+
+
+def _matched(engine: Engine, path: str, terms: list[list[str]]) -> int:
+    """How many distinct ``terms`` occur in the title or text of ``path`` (at least 1)."""
+    from episteme.index import _term_regex
+
+    row = engine.index.note(path)
+    text = ""
+    if row is not None:
+        tags = [t["tag"] for t in engine.index.conn.execute(
+            "select tag from tags where path = ?", (path,)
+        )]  # fmt: skip
+        text = fold("\n".join([row["title"], row["search_text"], *tags]))
+    return max(1, sum(1 for t in terms if _term_regex(t).search(text)))
+
+
 def task_context(
     engine: Engine, task: str, project: str | None, budget_tokens: int
 ) -> tuple[str, list[dict[str, Any]]]:
-    """A context pack for ``task``: matching memories by score, then related notes."""
+    """A context pack for ``task``: relevant memories, linked memories, then related notes.
+
+    English stopwords are dropped from ``task`` first (Spanish ones by the search). With N
+    remaining terms a hit must match ``need`` of them (2 if N >= 3, else 1). A memory is listed
+    if it is a constraint with ``files``, or if its score relative to the best hit is at least
+    ``MIN_RELEVANCE``, it matches ``need`` terms and ``0.5*relevance + 0.3*priority +
+    0.2*recency`` is at least ``MIN_CONTEXT_SCORE``. "Memorias enlazadas:" adds up to
+    ``LINKED_MAX`` active memories one ``related`` link away from the first five listed. Notes
+    need relevance >= 0.5 (relative to the best note) and ``need`` terms; their score is
+    ``0.5*relevance``; at most 5.
+    """
+    from episteme.index import query_terms
+
     if budget_tokens < 1:
         raise invalid(f"budget_tokens must be positive, got {budget_tokens}.")
     project = engine.need_project(project)
     now = today()
+    kept = [w for w in task.split() if fold(w).strip(".,;:!?()[]\"'") not in STOPWORDS_EN]
+    query = " ".join(kept) if kept else task
+    terms = query_terms(query, drop_stopwords=True)
+    need = 2 if len(terms) >= 3 else 1
     hits, _ = engine.index.search(
-        task,
+        query,
         any_term=True,
         drop_stopwords=True,
         mode=MEMORY,
@@ -958,20 +1011,23 @@ def task_context(
     )
     rows = {h.path: row for h in hits if (row := engine.index.note(h.path)) is not None}
     hits = [h for h in hits if h.path in rows]
-    raw = [h.score for h in hits]
-    lo, hi = (min(raw), max(raw)) if raw else (0.0, 0.0)
+    hi = max((h.score for h in hits), default=0.0)
     scored = []
     files = _files_of(engine)
     for h in hits:
         row = rows[h.path]
-        relevance = 1.0 if hi == lo else (h.score - lo) / (hi - lo)
+        relevance = h.score / hi if hi > 0 else 1.0
         score = (
             0.5 * relevance
             + 0.3 * ((row["priority"] or 1) - 1) / 4
             + 0.2 * recency(row["created"], now)
         )
         pinned = row["type"] == "constraint" and bool(files.get(h.path))
-        if pinned or score >= MIN_CONTEXT_SCORE:
+        if pinned or (
+            relevance >= MIN_RELEVANCE
+            and _matched(engine, h.path, terms) >= need
+            and score >= MIN_CONTEXT_SCORE
+        ):
             scored.append((pinned, score, row))
     scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
 
@@ -980,6 +1036,7 @@ def task_context(
     parts = [header]
     used = len(header)
     entries: list[dict[str, Any]] = []
+    chosen: list[str] = []
     for _, score, row in scored:
         excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), 300)
         block = f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']})\n  {excerpt}"
@@ -988,16 +1045,49 @@ def task_context(
         parts.append(block)
         used += len(block) + 1
         entries.append({"path": row["path"], "score": round(score, 4), "kind": "memory"})
+        chosen.append(row["path"])
 
-    found, _ = engine.index.search(task, any_term=True, drop_stopwords=True, limit=50)
+    listed = set(chosen)
+    iso = now.isoformat()
+    linked: list[Any] = []
+    for path in chosen[:5]:
+        near = [x["dst_path"] for x in engine.index.outgoing(path) if x["kind"] == "related"]
+        near += [x["src"] for x in engine.index.backlinks(path) if x["kind"] == "related"]
+        for other in near:
+            if other is None or other in listed:
+                continue
+            r = engine.index.note(other)
+            if (
+                r is None
+                or r["mode"] != MEMORY
+                or r["status"] != "active"
+                or r["project"] not in (project, "_shared")
+                or (r["valid_until"] and r["valid_until"] < iso)
+            ):
+                continue
+            listed.add(other)
+            linked.append(r)
+    first = True
+    for r in linked[:LINKED_MAX]:
+        line = f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})"
+        extra = len(line) + 1 + (len("Memorias enlazadas:") + 1 if first else 0)
+        if used + extra > budget:
+            break
+        if first:
+            parts.append("Memorias enlazadas:")
+            first = False
+        parts.append(line)
+        used += extra
+        entries.append({"path": r["path"], "score": None, "kind": "linked"})
+
+    found, _ = engine.index.search(query, any_term=True, drop_stopwords=True, limit=50)
     found = [n for n in found if engine.vault.mode_for(n.path) != MEMORY]
-    # Same scale as the memories (0-1): the relevance part of their formula, min-max over the hits.
-    note_raw = [n.score for n in found]
-    nlo, nhi = (min(note_raw), max(note_raw)) if note_raw else (0.0, 0.0)
+    nhi = max((n.score for n in found), default=0.0)
     notes = []
     for n in found:
-        n.score = round(0.5 * (1.0 if nhi == nlo else (n.score - nlo) / (nhi - nlo)), 4)
-        if n.score >= MIN_CONTEXT_SCORE:
+        relevance = n.score / nhi if nhi > 0 else 1.0
+        if relevance >= 0.5 and _matched(engine, n.path, terms) >= need:
+            n.score = round(0.5 * relevance, 4)
             notes.append(n)
     notes = notes[:5]
     first = True
