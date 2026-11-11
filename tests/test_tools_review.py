@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -118,7 +119,9 @@ async def test_task_context(vault: Path) -> None:
         assert text.startswith("invalid_argument:")
         hook = await c.call("context", mode="task", task="serena", hook_event="UserPromptSubmit")
         assert hook[0] is False
-        assert '"additionalContext": "episteme · contexto para: serena' in hook[1]
+        out = json.loads(hook[1])["hookSpecificOutput"]
+        assert out["hookEventName"] == "UserPromptSubmit"
+        assert out["additionalContext"].startswith("episteme · contexto para: serena")
 
 
 async def test_overdue_reminders_order(vault: Path) -> None:

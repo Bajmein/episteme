@@ -883,6 +883,12 @@ def surface_repeated(session: str, rel: str, paths: list[str], now: float | None
     return False
 
 
+def surface_forget(session: str) -> None:
+    """Drop what was surfaced to a session: after compact or clear its context lost it."""
+    for key in [k for k in _SURFACED if k[0] == session]:
+        del _SURFACED[key]
+
+
 def surface(
     engine: Engine,
     file: str,

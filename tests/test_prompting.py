@@ -87,6 +87,13 @@ def test_recall_tag_and_keywords_count_as_title(engine: Engine) -> None:
     assert kw in text
 
 
+def test_recall_word_only_in_keywords(engine: Engine) -> None:
+    # keywords go into the FTS title column, so a word that is nowhere else still counts
+    path = _remember(engine, "Nota sin la palabra", keywords=["zorbkwonly"])
+    text, _ = prompting.recall(engine, "zorbkwonly", "fabrik", SessionState(), set())
+    assert path in text
+
+
 def test_recall_no_repeat_skip_command_and_literal(engine: Engine) -> None:
     path = _remember(engine, "Zorbflux dicta el formato")
     st = SessionState()
