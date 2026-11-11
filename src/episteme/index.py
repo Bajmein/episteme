@@ -345,9 +345,17 @@ class Index:
             ),
         )
         rowid = cur.lastrowid
+        keywords = fm.get("keywords")
+        if not isinstance(keywords, list) or not all(isinstance(k, str) for k in keywords):
+            keywords = []
         self.conn.execute(
             "insert into fts(rowid, title, tags, body) values (?,?,?,?)",
-            (rowid, note.title, " ".join(note.tags), note.search_text),
+            (
+                rowid,
+                f"{note.title} {' '.join(keywords)}".strip(),
+                " ".join(note.tags),
+                note.search_text,
+            ),
         )
         self.conn.executemany(
             "insert into tags(path, tag) values (?,?)", [(rel, t) for t in note.tags]

@@ -199,7 +199,19 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             ),
         ] = None,
         tags: Annotated[
-            list[str], Field(description='Nested with "/", e.g. dominio/auth; no ":".')
+            list[str],
+            Field(
+                description='Nested with "/", e.g. dominio/auth; no ":". Use persona/<surname> '
+                "for people and tema/<topic> for a subject that spans projects."
+            ),
+        ] = [],  # noqa: B006
+        keywords: Annotated[
+            list[str],
+            Field(
+                description="Other words people use for this: synonyms, abbreviations, full "
+                'names (mkt, marketing, "Ana Pérez"). Searched with the weight of the '
+                "title."
+            ),
         ] = [],  # noqa: B006
         files: Annotated[
             list[str],
@@ -235,8 +247,12 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         stays in the H1. A name that already exists gets -2, -3...
 
         Validates the schema and looks for near-duplicates of the same project and type: at
-        similarity >= 0.8 nothing is created (created: false) unless force=true.
-        Returns JSON {"created", "path", "similar": [{"path", "title", "similarity"}]}.
+        similarity >= 0.8 nothing is created (created: false) unless force=true. `similar` also
+        lists active memories of any type in the project or _shared (they only warn).
+        Returns JSON {"created", "path", "similar": [{"path", "title", "similarity", "type",
+        "project"}], "new_tags": [{"tag", "similar"}] (tags no other note has, with close
+        spellings), "link_candidates": [{"path", "title", "reason"}] (up to 5 memories sharing
+        a file or 2 tags; consider related)}. The last two appear only when non-empty.
         """
         with engine.session():
             return dump(
@@ -257,6 +273,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                     status,
                     force,
                     slug=slug,
+                    keywords=keywords,
                 )
             )
 

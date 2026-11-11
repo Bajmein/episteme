@@ -121,7 +121,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `search(query, path?, type?, tags?, project?, status?, limit=20)` | sí | Búsqueda de texto completo (AND, `"frases"`, `a-b` como dos palabras, sin distinguir mayúsculas ni tildes). Excluye por defecto las memorias `superseded` y `archived` (`status="any"` no filtra) |
 | `read(note, heading?, lines?)` | sí | Nota entera (cortada a 20 000 caracteres), una sección o un rango de líneas, con frontmatter y esquema de encabezados |
 | `links(note, direction="both", depth=1)` | sí | Enlaces salientes, backlinks y notas alcanzables (hasta 3 saltos) |
-| `remember(type, title, body, project?, priority?, tags, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false, slug?)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 no crea salvo `force`). El nombre sale del título (ver «Memorias»); `slug` lo fija |
+| `remember(type, title, body, project?, priority?, tags, keywords, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false, slug?)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 del mismo proyecto y tipo no crea salvo `force`; las parecidas de otros tipos y de `_shared` solo avisan, con `type` y `project`). `keywords` (sinónimos, siglas) se buscan con el peso del título. Devuelve además `new_tags` (tags que ninguna otra nota tiene, con grafías cercanas) y `link_candidates` (hasta 5 memorias que comparten un archivo o 2 tags), solo si hay. El nombre sale del título (ver «Memorias»); `slug` lo fija |
 | `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory` (en una memoria, un `set` que cambia `type` o `project` la mueve a la carpeta que le toca, con el mismo nombre, y devuelve `moved_from`; se niega si alguna nota la enlaza por ruta o si el nombre ya existe allí); `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
 | `review(path?, project?, limit=50, zone?)` | sí | Memorias viejas, contradicciones posibles (dos decisiones o constraints que comparten un archivo de `files` o 2 tags, salvo que una enlace a la otra con `supersedes`, `contradicts` o `related`), huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
 | `context(mode="welcome"\|"task", session?, project?, task?, budget_tokens=2000, hook_event?)` | sí | Bienvenida de la sesión (una vez por `session`) o paquete de contexto para una tarea |
@@ -144,6 +144,7 @@ status: active          # active | superseded | speculative | archived
 created: 2026-10-19
 valid_until:
 tags: [dominio/explore, pieza/serena_guard]
+keywords: [mkt, marketing]   # sinónimos y siglas; pesan como el título en search
 files: [.claude/hooks/serena_guard.py]
 supersedes: "[[2026-09-12-serena-pyright]]"
 related: ["[[...]]"]
