@@ -66,7 +66,9 @@ Claude Code puede negarse a que el agente escriba su propia configuración (en m
 
 Añade (o cambia la regla que hubiera sobre Obsidian/mcpvault por) esta línea:
 
-> Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault.
+> Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` no están disponibles en la sesión, dilo antes de seguir.
+
+El aviso existe porque sin servidor los hooks no corren y nada lo delata.
 
 ## 4. `episteme.toml` del vault
 
