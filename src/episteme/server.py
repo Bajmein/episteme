@@ -20,8 +20,8 @@ from episteme.errors import INVALID_ARGUMENT, EpistemeError, invalid
 
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.
-- Look before you answer or act. When you start work, call context(mode="task", task="<what you are about to do>"). When the user asks what is known about a person, a client, a decision or a past event, call search, even if they did not mention the vault; then read the best hits.
-- search is literal: it matches whole words. If it finds little, try the plural, the abbreviation and the proper name (mkt and marketing, a surname) before concluding nothing is stored. tags follow a topic across projects; project is optional.
+- Look before you answer or act. When you start work, call context(mode="task", task="<what you are about to do>"). When the user asks what is known about a person, a client, a decision or a past event, call search, even if they did not mention the vault; then read the best hits in one call with read(notes=[...]).
+- search is literal: it matches whole words. To look up several names, or a word with its plural, abbreviation and proper name (mkt marketing, a surname), put them in one query with match="any" instead of one search per word; add zone="memory" when you want memories, not documentation. tags follow a topic across projects; project is optional.
 - Before deciding something that may already have been decided, call search, then read the best hit.
 - Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact from another source because the vault did not have it; or the user says "remember". Name the files, tools, commands and people involved in the body: that is what is searched later.
 - When a memory is wrong or replaced, call revise (action="supersede" or "archive"), never remember a contradiction next to it.
