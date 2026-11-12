@@ -282,3 +282,15 @@ uv run scripts/measure_recall.py --vault ~/.episteme [--zone memory] [--terms a,
 Sin `--terms`, mide los `--top` tokens alfabéticos de `--min-len` letras o más con más documentos. Por término compara cuatro conjuntos de documentos: `exact` (el token), `prefix` (tokens que empiezan por él), `stem` (misma raíz según `snowballstemmer` en español) y `trigram` (el texto plegado lo contiene como subcadena). La salida trae las familias de raíz, la tabla de los términos con mayor ganancia, la ganancia relativa media y mediana de cada estrategia y el «ruido estimado del trigrama» (documentos que solo añade el trigrama, con ejemplos `término → token que lo contiene` para juzgar a ojo).
 
 Criterio: adoptar el lematizador si une variantes que hoy se pierden (ganancia de `stem` sobre `exact`) sin el ruido del trigrama; si casi todo lo que añade el trigrama son coincidencias dentro de otras palabras, no compensa.
+
+### Medir llamadas por ráfaga
+
+Para ver cuántas llamadas hace un agente al consultar el vault y cuánto ahorran los lotes (`search(match="any")` y `read(notes=[…])`), el script lee el registro de actividad. Es de solo lectura: abre `.index/activity.db` con `mode=ro` y trabaja sobre una copia temporal de las notas; el índice del vault real no se abre ni se crea.
+
+```bash
+uv run scripts/bench_calls.py replay --vault ~/.episteme [--pid N] [--gap 60] [--show]
+uv run scripts/bench_calls.py ab --vault ~/.episteme --project <proyecto> --prompt-file <archivo> [--runs 5] [--out <dir>] [--model <m>] [--claude-bin claude] [--baseline-cmd "<cmd>"]
+```
+
+- `replay` toma la ráfaga más larga de `search` y `read` del registro (llamadas del mismo proceso separadas por menos de `--gap` segundos; `--pid` la limita a un proceso) y la repite dos veces sobre la copia: tal como quedó registrada y por lotes (las búsquedas de una palabra con los mismos filtros, en un `search` con `match="any"`; las lecturas de nota entera, en `read(notes=[…])`). Imprime llamadas, caracteres y milisegundos de cada variante, las rutas únicas que devuelve `search` y cuántas de las notas leídas salen en el `search` por lote. Las consultas y las rutas solo se imprimen con `--show`.
+- `ab` lanza `claude -p` con el mismo prompt contra dos servidores, cada uno con su copia del vault: el de referencia (`--baseline-cmd`, por defecto el tag `v0.6.0`) y el de este checkout. Alterna `--runs` corridas por variante y cuenta lo que cada una deja en el registro de su copia: llamadas por tool, cuántas usan `match="any"` (`search_any`) y `notes` (`read_batch`), caracteres, turnos y coste. Las respuestas quedan en `--out` (por defecto `~/.cache/episteme-bench/<fecha>/`) para juzgar la calidad a mano.
