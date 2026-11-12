@@ -113,7 +113,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         query: Annotated[
             str | None,
             Field(
-                description='Words that must all appear (AND); "quoted text" is a phrase; '
+                description='Words that must all appear (AND; any of them with match="any"); '
+                '"quoted text" is a phrase; '
                 "`a-b` is the words a and b; `word*` matches any word starting with it. "
                 "Case and accents are ignored. "
                 "Optional when tags, type, project, zone or facets is given."
@@ -164,12 +165,21 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                 "alone, it lists what the vault has."
             ),
         ] = False,
+        match: Annotated[
+            str,
+            Field(
+                description='"all" (default): every word must appear. "any": notes with any of '
+                'the words, best first, each row listing the ones it has in "matched". Use "any" '
+                "to look up several names or variants of a word in one call."
+            ),
+        ] = "all",
     ) -> str:
         """Full-text search over the vault (notes and memories), best matches first.
 
         With no query, lists the notes matching the filters. If no note has all the words,
         retries with any of them ("match": "or", "note"); with 1-2 hits and 2+ words,
         "partial" lists up to 5 more notes with some of the words.
+        With match="any" or after that retry, each row carries "matched": the words it has.
         Returns JSON {"results": [{"path", "title", "line", "snippet", "score", and when set
         "zone", "type", "status", "project", "created", "priority", "heading",
         "superseded_by"}], "total"}. `line` is the 1-based line of the first match; open it
@@ -178,7 +188,9 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         with engine.session():
             return dump(
-                engine.search(query, path, type, tags, project, status, limit, zone, facets)
+                engine.search(
+                    query, path, type, tags, project, status, limit, zone, facets, match
+                )
             )
 
     @server.tool(annotations=READ_ONLY, structured_output=False)

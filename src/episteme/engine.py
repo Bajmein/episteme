@@ -98,6 +98,17 @@ class Engine:
                 row["superseded_by"] = newer
         return row
 
+    def _rows(self, hits: list[Any], query: str | None = None) -> list[dict[str, Any]]:
+        """Result rows; with ``query`` (an OR search) each row lists the terms it has."""
+        matched = self.index.matched_terms(query, [h.path for h in hits]) if query else {}
+        rows = []
+        for h in hits:
+            row = self._row(h)
+            if query:
+                row["matched"] = matched.get(h.path, [])
+            rows.append(row)
+        return rows
+
     def _hints(
         self,
         query: str | None,
@@ -146,8 +157,8 @@ class Engine:
         if not hints and query is not None:
             hints.append(
                 "Nothing matches. search is literal: try the plural, the abbreviation or the "
-                "proper name, or drop a filter. If you find the answer elsewhere, save it "
-                "with remember."
+                'proper name, all in one query with match="any", or drop a filter. '
+                "If you find the answer elsewhere, save it with remember."
             )
         return hints
 
@@ -164,11 +175,15 @@ class Engine:
         limit: int = 20,
         zone: str | None = None,
         facets: bool = False,
+        match: str = "all",
     ) -> dict[str, Any]:
+        if match not in ("all", "any"):
+            raise invalid(f'match must be "all" or "any", got "{match}".')
         if not (1 <= limit <= 100):
             raise invalid(f"limit must be 1-100, got {limit}.")
         if query is not None and not query.strip():
             query = None
+        any_mode = match == "any" and query is not None
         if query is None:
             if not (tags or type or project or zone or facets):
                 raise invalid(
@@ -199,17 +214,21 @@ class Engine:
             hits: list[Any] = []
             total = index.search(None, limit=1, snippets=False, **kwargs)[1]
         else:
-            hits, total = index.search(query, limit=limit, **kwargs)
+            hits, total = index.search(query, any_term=any_mode, limit=limit, **kwargs)
         fallback = False
-        if total == 0 and query is not None and len(query_terms(query)) > 1:
+        if not any_mode and total == 0 and query is not None and len(query_terms(query)) > 1:
             hits, total = index.search(query, any_term=True, limit=limit, **kwargs)
             fallback = bool(hits)
-        out: dict[str, Any] = {"results": [self._row(h) for h in hits], "total": total}
+        out: dict[str, Any] = {
+            "results": self._rows(hits, query if (any_mode or fallback) else None),
+            "total": total,
+        }
         if fallback:
             out["match"] = "or"
             out["note"] = "No note has all the words; showing notes with any of them (OR)."
         elif (
-            query is not None
+            not any_mode
+            and query is not None
             and 1 <= total < PARTIAL_BELOW
             and total == len(hits)
             and len(query_terms(query)) > 1
@@ -218,16 +237,16 @@ class Engine:
             more, _ = index.search(
                 query, any_term=True, limit=PARTIAL_MAX + len(seen), **kwargs
             )
-            extra = [self._row(h) for h in more if h.path not in seen][:PARTIAL_MAX]
+            extra = [h for h in more if h.path not in seen][:PARTIAL_MAX]
             if extra:
-                out["partial"] = extra
+                out["partial"] = self._rows(extra, query)
                 out["note"] = "Few notes have all the words; partial lists notes with some of them."
         if total == 0:
             hints = self._hints(query, path, type, tags, project, status)
             if hints:
                 out["hints"] = hints
         if facets:
-            out["facets"] = index.facets(query, any_term=fallback, **kwargs)
+            out["facets"] = index.facets(query, any_term=fallback or any_mode, **kwargs)
         return out
 
     # -- read --------------------------------------------------------------

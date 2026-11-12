@@ -601,6 +601,24 @@ class Index:
             return None
         return row["text"]
 
+    def matched_terms(self, query: str, paths: list[str]) -> dict[str, list[str]]:
+        """For each path, the terms of ``query`` its note matches in the full-text index."""
+        out: dict[str, list[str]] = {p: [] for p in paths}
+        if not paths:
+            return out
+        marks = ",".join("?" * len(paths))
+        for term in query_terms(query):
+            label = " ".join(term)
+            rows = self.conn.execute(
+                "select n.path from fts join notes n on n.id = fts.rowid "  # nosec B608
+                f"where fts match ? and n.path in ({marks})",
+                [_fts_term(term), *paths],
+            )
+            for r in rows:
+                if label not in out[r["path"]]:
+                    out[r["path"]].append(label)
+        return out
+
     def superseded_by(self, path: str) -> str | None:
         row = self.conn.execute(
             "select src from links where kind = 'supersedes' and dst_path = ? "
