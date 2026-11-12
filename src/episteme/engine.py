@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
-from episteme.index import Index, jsonable, query_terms
+from episteme.index import Index, jsonable, query_terms, to_json
 from episteme.links import reachable
 from episteme.markdown import ParsedNote, clip, clip_at_newline, find_section, parse
 from episteme.vault import Vault, is_ignored
 
 READ_CAP = 20_000
+BATCH_MAX = 20
+BATCH_CAP = 50_000
 SECTION_CAP = 60_000
 PARTIAL_BELOW = 3
 PARTIAL_MAX = 5
@@ -311,6 +313,56 @@ class Engine:
         out["total_lines"] = total
         if partial:
             out["range"] = f"{start + 1}-{shown_end}"
+        return out
+
+    def read_many(
+        self,
+        notes: list[str],
+        heading: str | None = None,
+        lines: str | None = None,
+        outline: bool | None = None,
+        content: bool = True,
+    ) -> dict[str, Any]:
+        """Several whole notes in one call; a note that fails is reported, not raised."""
+        if heading is not None or lines is not None:
+            raise invalid("heading and lines apply to one note. Use note, or drop them.")
+        if not content and outline is False:
+            raise invalid("content=false returns only the outline. Drop outline=false.")
+        if not isinstance(notes, list) or not notes:
+            raise invalid("notes is empty. Pass 1-20 paths or note names.")
+        if len(notes) > BATCH_MAX:
+            raise invalid(
+                f"notes takes at most {BATCH_MAX} notes, got {len(notes)}. Split the list."
+            )
+        wanted = None if not content else bool(outline)
+        out_notes: list[dict[str, Any]] = []
+        pending: list[str] = []
+        seen: set[str] = set()
+        used = 0
+        for raw in notes:
+            if pending:
+                pending.append(raw)
+                continue
+            try:
+                item = self.read(raw, None, None, wanted, content)
+            except EpistemeError as exc:
+                out_notes.append({"note": raw, "error": str(exc)})
+                continue
+            if item["path"] in seen:
+                continue
+            # The cap is on the JSON of each note, not on its body: with content=false or
+            # outline=true the outline is what weighs.
+            size = len(to_json(item))
+            if seen and used + size > BATCH_CAP:
+                pending.append(raw)
+                continue
+            seen.add(item["path"])
+            used += size
+            out_notes.append(item)
+        out: dict[str, Any] = {"notes": out_notes}
+        if pending:
+            out["pending"] = pending
+            out["note"] = "Output limit reached; call read again with the notes in pending."
         return out
 
     # -- links -------------------------------------------------------------

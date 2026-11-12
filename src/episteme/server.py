@@ -195,7 +195,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def read(
-        note: NoteArg,
+        note: Annotated[
+            str | None,
+            Field(
+                description="Vault-relative path (with or without .md) or a note name / alias. "
+                "For several notes use notes."
+            ),
+        ] = None,
         heading: Annotated[
             str | None, Field(description="Return only this section (case-insensitive).")
         ] = None,
@@ -216,6 +222,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                 "line and end), to pick a section before reading."
             ),
         ] = True,
+        notes: Annotated[
+            list[str] | None,
+            Field(
+                description="Several notes to read whole in one call (up to 20), instead of "
+                "note. heading and lines do not apply."
+            ),
+        ] = None,
     ) -> str:
         """Read a note: frontmatter, outline and body (or one section / line range).
 
@@ -224,8 +237,17 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         always with outline=true; content=false returns just frontmatter and outline.
         Returns JSON {"path", "frontmatter", "fm_valid", "outline" (when included), "content",
         "truncated", "total_lines", "range" (with heading or lines: "first-last" file lines)}.
+        With notes, returns JSON {"notes": [one object per note as above, without outline
+        unless outline=true; a note that fails is {"note", "error"}], "pending": [notes left
+        out once the output passes 50,000 characters; call read again with them]}.
         """
         with engine.session():
+            if notes is not None:
+                if note is not None:
+                    raise invalid("pass note or notes, not both.")
+                return dump(engine.read_many(notes, heading, lines, outline, content))
+            if note is None:
+                raise invalid("pass note (one note) or notes (several).")
             return dump(engine.read(note, heading, lines, outline, content))
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
