@@ -918,7 +918,12 @@ def surface(
     name = PurePosixPath(rel).name
     query = f'"{rel}"' + (f' "{name}"' if _name_is_unambiguous(rel, name, files) else "")
     hits, _ = engine.index.search(
-        query, any_term=True, mode=MEMORY, project=[project, "_shared"], limit=1000
+        query,
+        any_term=True,
+        mode=MEMORY,
+        project=[project, "_shared"],
+        limit=1000,
+        snippets=False,
     )
     hit_paths = {h.path for h in hits}
     by_mention = _by_priority([r for r in rows if r["path"] in hit_paths and r["path"] not in seen])
@@ -1036,6 +1041,7 @@ def task_context(
         project=[project, "_shared"],
         status="active",
         limit=200,
+        snippets=False,
     )
     rows = {h.path: row for h in hits if (row := engine.index.note(h.path)) is not None}
     hits = [h for h in hits if h.path in rows]
@@ -1108,7 +1114,9 @@ def task_context(
         used += extra
         entries.append({"path": r["path"], "score": None, "kind": "linked"})
 
-    found, _ = engine.index.search(query, any_term=True, drop_stopwords=True, limit=50)
+    found, _ = engine.index.search(
+        query, any_term=True, drop_stopwords=True, limit=50, snippets=False
+    )
     found = [n for n in found if engine.vault.mode_for(n.path) != MEMORY]
     nhi = max((n.score for n in found), default=0.0)
     notes = []

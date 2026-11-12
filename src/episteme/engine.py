@@ -139,7 +139,7 @@ class Engine:
                 hints.append(text)
         if path:
             prefix = path.strip().strip("/")
-            hits, _ = idx.search(None, path=prefix, status="any", limit=1)
+            hits, _ = idx.search(None, path=prefix, status="any", limit=1, snippets=False)
             if not hits:
                 zones = ", ".join(sorted(z.path for z in self.vault.config.zones))
                 hints.append(f'no note under "{path}". Zones: {zones}.')
@@ -197,7 +197,7 @@ class Engine:
         index = self.index
         if query is None and facets and not (path or type or tags or project or zone or status):
             hits: list[Any] = []
-            total = index.search(None, limit=1, **kwargs)[1]
+            total = index.search(None, limit=1, snippets=False, **kwargs)[1]
         else:
             hits, total = index.search(query, limit=limit, **kwargs)
         fallback = False
