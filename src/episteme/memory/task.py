@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import invalid
@@ -90,12 +91,42 @@ def _query_terms(task: str) -> tuple[str, list[list[str]]]:
     return query, query_terms(query, drop_stopwords=True)
 
 
+def _context_score(row: Any, relevance: float, now: dt.date) -> float:
+    """The blend of relevance, priority and recency that ranks a memory."""
+    return (
+        0.5 * relevance
+        + 0.3 * ((row["priority"] or 1) - 1) / 4
+        + 0.2 * recency(row["created"], now)
+    )
+
+
+def _is_pinned(row: Any, files: dict[str, Any]) -> bool:
+    """Whether ``row`` is a constraint tied to files (always listed)."""
+    return row["type"] == "constraint" and bool(files.get(row["path"]))
+
+
+def _qualifies(
+    engine: Engine, path: str, terms: list[list[str]], relevance: float, score: float
+) -> bool:
+    """Whether a memory clears the relevance, term-match and score thresholds."""
+    return (
+        relevance >= MIN_RELEVANCE
+        and score >= MIN_CONTEXT_SCORE
+        and _matched(engine, path, terms) >= _need(terms)
+    )
+
+
+def _rank(scored: list[tuple[bool, float, Any]]) -> list[tuple[float, Any]]:
+    """Order ``(pinned, score, row)`` pinned first, then by score and path."""
+    scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
+    return [(score, row) for _, score, row in scored]
+
+
 def _relevant_memories(
     engine: Engine, query: str, terms: list[list[str]], project: str
 ) -> list[tuple[float, Any]]:
     """The memories to list, as ``(score, row)``: pinned constraints first, then by score."""
     now = today()
-    need = _need(terms)
     hits, _ = engine.index.search(
         query,
         any_term=True,
@@ -109,25 +140,32 @@ def _relevant_memories(
     rows = {h.path: row for h in hits if (row := engine.index.note(h.path)) is not None}
     hits = [h for h in hits if h.path in rows]
     hi = max((h.score for h in hits), default=0.0)
-    scored = []
+    scored: list[tuple[bool, float, Any]] = []
     files = _files_of(engine)
     for h in hits:
         row = rows[h.path]
         relevance = _relevance(h.score, hi)
-        score = (
-            0.5 * relevance
-            + 0.3 * ((row["priority"] or 1) - 1) / 4
-            + 0.2 * recency(row["created"], now)
-        )
-        pinned = row["type"] == "constraint" and bool(files.get(h.path))
-        if pinned or (
-            relevance >= MIN_RELEVANCE
-            and _matched(engine, h.path, terms) >= need
-            and score >= MIN_CONTEXT_SCORE
-        ):
+        score = _context_score(row, relevance, now)
+        pinned = _is_pinned(row, files)
+        if pinned or _qualifies(engine, h.path, terms, relevance, score):
             scored.append((pinned, score, row))
-    scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
-    return [(score, row) for _, score, row in scored]
+    return _rank(scored)
+
+
+def _related_paths(engine: Engine, path: str) -> list[str | None]:
+    """The paths one ``related`` link away from ``path``, outgoing then backlinks."""
+    near = [x["dst_path"] for x in engine.index.outgoing(path) if x["kind"] == "related"]
+    near += [x["src"] for x in engine.index.backlinks(path) if x["kind"] == "related"]
+    return near
+
+
+def _is_linkable(r: Any, project: str, iso: str) -> bool:
+    """Whether ``r`` is an active, unexpired memory of ``project`` or ``_shared``."""
+    if r is None or r["mode"] != MEMORY or r["status"] != "active":
+        return False
+    if r["project"] not in (project, "_shared"):
+        return False
+    return not (r["valid_until"] and r["valid_until"] < iso)
 
 
 def _linked_memories(engine: Engine, chosen: list[str], project: str) -> list[Any]:
@@ -136,19 +174,11 @@ def _linked_memories(engine: Engine, chosen: list[str], project: str) -> list[An
     listed = set(chosen)
     linked: list[Any] = []
     for path in chosen[:LINK_SEEDS]:
-        near = [x["dst_path"] for x in engine.index.outgoing(path) if x["kind"] == "related"]
-        near += [x["src"] for x in engine.index.backlinks(path) if x["kind"] == "related"]
-        for other in near:
+        for other in _related_paths(engine, path):
             if other is None or other in listed:
                 continue
             r = engine.index.note(other)
-            if (
-                r is None
-                or r["mode"] != MEMORY
-                or r["status"] != "active"
-                or r["project"] not in (project, "_shared")
-                or (r["valid_until"] and r["valid_until"] < iso)
-            ):
+            if not _is_linkable(r, project, iso):
                 continue
             listed.add(other)
             linked.append(r)
@@ -172,6 +202,35 @@ def _related_notes(engine: Engine, query: str, terms: list[list[str]]) -> list[A
     return notes[:NOTES_MAX]
 
 
+def _memory_block(row: Any) -> str:
+    """The listing of a memory: header line plus a clipped excerpt of its body."""
+    excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), EXCERPT_CHARS)
+    return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']})\n  {excerpt}"
+
+
+def _linked_group(
+    engine: Engine, chosen: list[str], project: str
+) -> list[tuple[str, dict[str, Any]]]:
+    """``(line, entry)`` items for the linked memories, at most ``LINKED_MAX``."""
+    return [
+        (
+            f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})",
+            {"path": r["path"], "score": None, "kind": "linked"},
+        )
+        for r in _linked_memories(engine, chosen, project)[:LINKED_MAX]
+    ]
+
+
+def _notes_group(
+    engine: Engine, query: str, terms: list[list[str]]
+) -> list[tuple[str, dict[str, Any]]]:
+    """``(line, entry)`` items for the related documentation notes."""
+    return [
+        (f"- {n.path} — {n.title}", {"path": n.path, "score": n.score, "kind": "note"})
+        for n in _related_notes(engine, query, terms)
+    ]
+
+
 def task_context(
     engine: Engine, task: str, project: str | None, budget_tokens: int
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -193,28 +252,11 @@ def task_context(
     pack = _Pack(f"episteme · contexto para: {' '.join(task.split())}", budget_tokens * 4)
     chosen: list[str] = []
     for score, row in _relevant_memories(engine, query, terms, project):
-        excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), EXCERPT_CHARS)
-        block = f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']})\n  {excerpt}"
         entry = {"path": row["path"], "score": round(score, 4), "kind": "memory"}
-        if pack.add_memory(block, entry):
+        if pack.add_memory(_memory_block(row), entry):
             chosen.append(row["path"])
-    pack.add_group(
-        "Memorias enlazadas:",
-        [
-            (
-                f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})",
-                {"path": r["path"], "score": None, "kind": "linked"},
-            )
-            for r in _linked_memories(engine, chosen, project)[:LINKED_MAX]
-        ],
-    )
-    pack.add_group(
-        "Notas relacionadas:",
-        [
-            (f"- {n.path} — {n.title}", {"path": n.path, "score": n.score, "kind": "note"})
-            for n in _related_notes(engine, query, terms)
-        ],
-    )
+    pack.add_group("Memorias enlazadas:", _linked_group(engine, chosen, project))
+    pack.add_group("Notas relacionadas:", _notes_group(engine, query, terms))
     if not pack.entries:
         return "", []
     return "\n".join(pack.parts), pack.entries

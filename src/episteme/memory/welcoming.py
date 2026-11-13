@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from episteme.memory.schema import UPCOMING_DAYS
 from episteme.memory.scoring import _neg_date, entry_line, welcome_score
@@ -30,9 +30,15 @@ class _Page:
         self.ranked = 0
         self.missed = {"norms": 0, "reminders": 0}
 
+    def _fits(self, extra: int, ranked_entry: bool) -> bool:
+        """Whether ``extra`` chars (and a ranked slot, if needed) are still available."""
+        if ranked_entry and self.ranked >= RANKED_MAX:
+            return False
+        return extra <= self.budget
+
     def _add(self, line: str, section: str | None, ranked_entry: bool) -> bool:
         extra = len(line) + 1 + (len(section) + 1 if section else 0)
-        if (ranked_entry and self.ranked >= RANKED_MAX) or extra > self.budget:
+        if not self._fits(extra, ranked_entry):
             return False
         if section:
             self.lines.append(section)
@@ -106,6 +112,64 @@ def welcome_notice(project: str, norms: int, reminders: int) -> str:
 SHARED_MAX = 3  # welcome: most `_shared` memories listed ahead of the project's own
 
 
+class _Buckets(NamedTuple):
+    """The rows of the welcome, split by section."""
+
+    overdue: list[Any]
+    upcoming: list[Any]
+    norms: list[Any]
+    scored: list[tuple[float, Any]]
+
+
+def _is_candidate(r: Any, iso: str) -> bool:
+    """Whether ``r`` can be listed under "Normas" or "Memorias"."""
+    if r["type"] in ("session", "reminder"):
+        return False
+    return not (r["valid_until"] and r["valid_until"] < iso)
+
+
+def _bucket(rows: list[Any], now: dt.date, upcoming_days: int) -> _Buckets:
+    """Split ``rows`` into overdue and upcoming reminders, norms and scored memories."""
+    iso = now.isoformat()
+    soon = (now + dt.timedelta(days=upcoming_days)).isoformat()
+    reminders = sorted(
+        (r for r in rows if r["type"] == "reminder" and r["due"]),
+        key=lambda r: (r["due"], r["path"]),
+    )
+    overdue = [r for r in reminders if r["due"] <= iso]
+    upcoming = [r for r in reminders if iso < r["due"] <= soon]
+    candidates = [r for r in rows if _is_candidate(r, iso)]
+    norms = sorted(
+        (r for r in candidates if r["priority"] == 5),
+        key=lambda r: (_neg_date(r["created"]), r["path"]),
+    )
+    scored = sorted(
+        ((welcome_score(r, now), r) for r in candidates if r["priority"] != 5),
+        key=lambda x: (-x[0], _neg_date(x[1]["created"]), x[1]["path"]),
+    )
+    return _Buckets(overdue, upcoming, norms, scored)
+
+
+def _fill_page(page: _Page, buckets: _Buckets, project: str, upcoming_days: int) -> None:
+    """List the groups: overdue, norms, then (reserve released) upcoming and memories."""
+    page.missed["reminders"] = page.add_group(
+        [(r, None) for r in buckets.overdue], "Recordatorios vencidos:", "reminder", _reminder_line
+    )
+    page.missed["norms"] = page.add_group(
+        [(r, None) for r in buckets.norms], "Normas:", "norm", entry_line
+    )
+    page.release_reserve()
+    page.add_group(
+        [(r, None) for r in buckets.upcoming],
+        f"Vencen pronto ({upcoming_days} días):",
+        "reminder",
+        _reminder_line,
+    )
+    page.add_group(
+        _memory_order(buckets.scored, project), "Memorias:", "memory", entry_line, ranked=True
+    )
+
+
 def welcome(
     engine: Engine, project: str | None, upcoming_days: int = UPCOMING_DAYS
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -122,44 +186,12 @@ def welcome(
     """
     project = engine.need_project(project)
     now = today()
-    iso = now.isoformat()
-    soon = (now + dt.timedelta(days=upcoming_days)).isoformat()
     rows = engine.index.memories("project in (?, '_shared') and status = 'active'", (project,))
-    reminders = sorted(
-        (r for r in rows if r["type"] == "reminder" and r["due"]),
-        key=lambda r: (r["due"], r["path"]),
-    )
-    overdue = [r for r in reminders if r["due"] <= iso]
-    upcoming = [r for r in reminders if iso < r["due"] <= soon]
-    candidates = [
-        r
-        for r in rows
-        if r["type"] not in ("session", "reminder")
-        and not (r["valid_until"] and r["valid_until"] < iso)
-    ]
-    norms = sorted(
-        (r for r in candidates if r["priority"] == 5),
-        key=lambda r: (_neg_date(r["created"]), r["path"]),
-    )
-    scored = sorted(
-        ((welcome_score(r, now), r) for r in candidates if r["priority"] != 5),
-        key=lambda x: (-x[0], _neg_date(x[1]["created"]), x[1]["path"]),
-    )
+    buckets = _bucket(rows, now, upcoming_days)
     header = f"episteme · memoria de {project}"
     reserve = max(WELCOME_RESERVE, len(welcome_notice(project, 99999, 99999)) + 1)
     page = _Page(header, 4000 - len(header) - 1 - reserve, reserve)
-    page.missed["reminders"] = page.add_group(
-        [(r, None) for r in overdue], "Recordatorios vencidos:", "reminder", _reminder_line
-    )
-    page.missed["norms"] = page.add_group([(r, None) for r in norms], "Normas:", "norm", entry_line)
-    page.release_reserve()
-    page.add_group(
-        [(r, None) for r in upcoming],
-        f"Vencen pronto ({upcoming_days} días):",
-        "reminder",
-        _reminder_line,
-    )
-    page.add_group(_memory_order(scored, project), "Memorias:", "memory", entry_line, ranked=True)
+    _fill_page(page, buckets, project, upcoming_days)
     missed = any(page.missed.values())
     if not page.entries and not missed:
         return "", []
