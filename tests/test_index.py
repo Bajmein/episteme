@@ -90,7 +90,7 @@ def test_incremental_reindex(vault: Path) -> None:
     (vault / "plans/new.md").write_text("# New\n\n[[hooks-reference]] zanahoria\n")
     os.unlink(vault / "memory/_shared/perfil.md")
     assert ix.refresh() is True
-    hits, total = ix.search("zanahoria")
+    _, total = ix.search("zanahoria")
     assert total == 2
     assert ix.note("memory/_shared/perfil.md") is None
     sources = {r["src"] for r in ix.backlinks("docs/claude-code/hooks-reference.md")}

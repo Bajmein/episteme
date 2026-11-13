@@ -23,7 +23,13 @@ target-version = "py314"
 extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "RUF001",  # typographic characters (–, ×, ·) in user-facing strings are intentional
+    "SIM102",  # nested ifs are kept where each condition reads better on its own line
+    "SIM105",  # try/except/pass is kept over contextlib.suppress
+    "SIM905",  # stopword lists are written as one split() string
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -180,7 +180,7 @@ def nudge(st: SessionState) -> str:
     if (
         st.prompts >= NUDGE_AFTER
         and st.prompts - st.nudged_at >= NUDGE_EVERY
-        and WRITES == st.baseline
+        and st.baseline == WRITES
     ):
         st.nudged_at = st.prompts
         return (
