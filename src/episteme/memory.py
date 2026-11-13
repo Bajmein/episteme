@@ -85,20 +85,39 @@ MEMORY_ACTIONS = ("supersede", "feedback", "archive", "dismiss")
 UPCOMING_DAYS = 7
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("private key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
-    ("AWS access key", re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")),
-    ("GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36}")),
-    ("GitHub token", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}")),
-    ("Anthropic API key", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}")),
-    ("API key", re.compile(r"\bsk-[A-Za-z0-9]{32,}")),
-    ("Stripe live key", re.compile(r"\bsk_live_[A-Za-z0-9]{16,}")),
-    ("npm token", re.compile(r"\bnpm_[A-Za-z0-9]{36}")),
-    ("Hugging Face token", re.compile(r"\bhf_[A-Za-z0-9]{30,}")),
-    ("Slack token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
-    ("Google API key", re.compile(r"\bAIza[A-Za-z0-9_-]{35}")),
-    ("JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{7,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{10,}")),
+    ("AWS access key", re.compile(r"(?<![A-Za-z0-9_-])(?:AKIA|ASIA)[A-Z0-9]{16}\b")),
+    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{36}")),
+    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{22,}")),
+    ("Anthropic API key", re.compile(r"(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}")),
+    ("API key", re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{32,}")),
+    ("Stripe live key", re.compile(r"(?<![A-Za-z0-9_-])sk_live_[A-Za-z0-9]{16,}")),
+    ("npm token", re.compile(r"(?<![A-Za-z0-9_-])npm_[A-Za-z0-9]{36}")),
+    ("Hugging Face token", re.compile(r"(?<![A-Za-z0-9_-])hf_[A-Za-z0-9]{30,}")),
+    ("Slack token", re.compile(r"(?<![A-Za-z0-9_-])xox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("Google API key", re.compile(r"(?<![A-Za-z0-9_-])AIza[A-Za-z0-9_-]{35}")),
+    (
+        "JWT",
+        re.compile(
+            r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{7,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{10,}"
+        ),
+    ),
 )
 _URL_CREDENTIALS = re.compile(r"://[^\s/:@]+:([^\s/@]{6,})@")
-_PLACEHOLDER_PASSWORDS = {"pass", "password", "passwd", "clave", "secret"}
+_PLACEHOLDER_PASSWORDS = {
+    "pass",
+    "password",
+    "passwd",
+    "clave",
+    "secret",
+    "changeme",
+    "example",
+    "redacted",
+    "your_password",
+    "your-password",
+    "yourpassword",
+    "contraseña",
+    "tu_clave",
+}
 
 
 def _is_placeholder(password: str) -> bool:
@@ -432,6 +451,8 @@ def remember(
         ("body", body),
         ("keywords", keywords),
         ("source", source),
+        ("tags", tags),
+        ("files", files),
     ):
         _reject_secrets(field, value)
 
@@ -572,7 +593,8 @@ def revise(
     if action == "edit":
         if not old or new is None:
             raise invalid("edit needs old (text to replace) and new.")
-        _reject_secrets("new", new)
+        if find_secrets(new) != find_secrets(old):  # editing around an old false positive is fine
+            _reject_secrets("new", new)
         count = nf.body.count(old)
         if count != 1:
             raise invalid(

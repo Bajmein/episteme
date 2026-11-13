@@ -40,7 +40,11 @@ HARMLESS = [
     "https://user:<clave>@host/x",
     "https://user:$PASS123@host/x",
     "https://user:******@host/x",
+    "https://user:changeme@host/x",
     "https://host:8080/x",
+    "nombre-de-tarea-sk-" + "x" * 5,
+    "disk-" + "a" * 40,
+    "task-sk-" + "a" * 10,
     "-----BEGIN CERTIFICATE-----",
 ]
 
@@ -65,6 +69,8 @@ async def test_remember_rejects_secret_fields(vault: Path) -> None:
             ("body", f"El token es {secret}"),
             ("keywords", [secret]),
             ("source", secret),
+            ("tags", [secret]),
+            ("files", [secret]),
         ):
             err = await c.error("remember", **{**base, field: value})
             assert err.startswith(f"invalid_argument: {field} looks like a secret (GitHub token)")
@@ -115,6 +121,10 @@ async def test_revise_checks_only_incoming_text(vault: Path) -> None:
     note.write_text(text, encoding="utf-8", newline="")
     async with mcp_client(vault) as c:
         res = await c.ok("revise", note=path, action="append", text="Otra línea.")
+        assert res["changed"] == ["body"]
+        res = await c.ok(
+            "revise", note=path, action="edit", old=f"Texto {secret}", new=f"Texto {secret} ok"
+        )
         assert res["changed"] == ["body"]
         res = await c.ok("revise", note=path, action="set", fields={"priority": 5})
         assert res["changed"] == ["priority"]
