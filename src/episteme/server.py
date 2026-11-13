@@ -345,8 +345,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         stays in the H1. A name that already exists gets -2, -3...
 
         Validates the schema and looks for near-duplicates of the same project and type: at
-        similarity >= 0.8 nothing is created (created: false) unless force=true. `similar` also
-        lists active memories of any type in the project or _shared (they only warn).
+        similarity >= 0.8 nothing is created (created: false) and the answer carries a "hint":
+        revise(action="feedback", value="helpful") if it happened again, remember again with
+        supersedes=<path> if it changed, force=true only for a genuinely different memory.
+        `similar` also lists active memories of any type in the project or _shared (they only
+        warn). title, body, keywords and source are refused (invalid_argument) when they look
+        like a credential (private key, cloud/API token, JWT, password in a URL): say where
+        the secret is stored instead.
         Returns JSON {"created", "path", "similar": [{"path", "title", "similarity", "type",
         "project"}], "new_tags": [{"tag", "similar"}] (tags no other note has, with close
         spellings), "link_candidates": [{"path", "title", "reason"}] (up to 5 memories sharing
@@ -405,9 +410,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """Change a note in a read-write or memory zone. Read-only zones are refused.
 
         supersede, feedback, archive and dismiss (archives a reminder) only apply to memories.
-        Memories are validated against the schema before anything is written. set on a memory
-        that changes type or project moves the file to memory/<project>/<type folder>/ (same
-        name, so [[name]] links keep working) and returns the new path with "moved_from".
+        Memories are validated against the schema before anything is written. Incoming text
+        (new, text, string values in fields) that looks like a credential is refused. set on a
+        memory that changes type or project moves the file to memory/<project>/<type folder>/
+        (same name, so [[name]] links keep working) and returns the new path with "moved_from".
         Returns JSON {"path", "action", "changed"}.
         """
         with engine.session():

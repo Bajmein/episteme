@@ -83,6 +83,71 @@ MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
 MEMORY_ACTIONS = ("supersede", "feedback", "archive", "dismiss")
 UPCOMING_DAYS = 7
+SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("private key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
+    ("AWS access key", re.compile(r"(?<![A-Za-z0-9_-])(?:AKIA|ASIA)[A-Z0-9]{16}\b")),
+    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{36}")),
+    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{22,}")),
+    ("Anthropic API key", re.compile(r"(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}")),
+    ("API key", re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{32,}")),
+    ("Stripe live key", re.compile(r"(?<![A-Za-z0-9_-])sk_live_[A-Za-z0-9]{16,}")),
+    ("npm token", re.compile(r"(?<![A-Za-z0-9_-])npm_[A-Za-z0-9]{36}")),
+    ("Hugging Face token", re.compile(r"(?<![A-Za-z0-9_-])hf_[A-Za-z0-9]{30,}")),
+    ("Slack token", re.compile(r"(?<![A-Za-z0-9_-])xox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("Google API key", re.compile(r"(?<![A-Za-z0-9_-])AIza[A-Za-z0-9_-]{35}")),
+    (
+        "JWT",
+        re.compile(
+            r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{7,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{10,}"
+        ),
+    ),
+)
+_URL_CREDENTIALS = re.compile(r"://[^\s/:@]+:([^\s/@]{6,})@")
+_PLACEHOLDER_PASSWORDS = {
+    "pass",
+    "password",
+    "passwd",
+    "clave",
+    "secret",
+    "changeme",
+    "example",
+    "redacted",
+    "your_password",
+    "your-password",
+    "yourpassword",
+    "contraseña",
+    "tu_clave",
+}
+
+
+def _is_placeholder(password: str) -> bool:
+    return (
+        password[0] in "<${[%*"
+        or set(password) <= {"*", "x", "X", "."}
+        or password.lower() in _PLACEHOLDER_PASSWORDS
+    )
+
+
+def find_secrets(text: str) -> str | None:
+    """Name of the first credential type found in ``text`` (never the value), else None."""
+    for name, pattern in SECRET_PATTERNS:
+        if pattern.search(text):
+            return name
+    for m in _URL_CREDENTIALS.finditer(text):
+        if not _is_placeholder(m.group(1)):
+            return "password in URL"
+    return None
+
+
+def _reject_secrets(field: str, value: Any) -> None:
+    values = value if isinstance(value, list) else [value]
+    for item in values:
+        found = find_secrets(item) if isinstance(item, str) else None
+        if found:
+            raise invalid(
+                f"{field} looks like a secret ({found}). "
+                "Remove it and say where it is stored instead."
+            )
 
 
 def kind_for(type_: str) -> str:
@@ -381,6 +446,16 @@ def remember(
     if not (body or "").strip():
         raise invalid("body is empty. Describe the memory and name the files or tools involved.")
 
+    for field, value in (
+        ("title", title),
+        ("body", body),
+        ("keywords", keywords),
+        ("source", source),
+        ("tags", tags),
+        ("files", files),
+    ):
+        _reject_secrets(field, value)
+
     slug = _check_slug(slug) if slug is not None else memory_slug(title, project, type)
     related_links = [wikilink(engine, engine.resolve_note(r)) for r in related or []]
     old_rel = None
@@ -452,7 +527,14 @@ def remember(
     if blocking is not None and not force:
         similar.remove(blocking)
         similar.insert(0, blocking)
-        return {"created": False, "path": None, "similar": similar}
+        hint = (
+            f"Already saved as {blocking['path']}. If it happened again, "
+            f'revise(note="{blocking["path"]}", action="feedback", value="helpful"). '
+            "If it changed, call remember again with "
+            f'supersedes="{blocking["path"]}". '
+            "Use force=true only for a genuinely different memory."
+        )
+        return {"created": False, "path": None, "similar": similar, "hint": hint}
     extras: dict[str, Any] = {}
     new_tags = _new_tags(engine, fm.get("tags") or [])
     if new_tags:
@@ -513,6 +595,8 @@ def revise(
     if action == "edit":
         if not old or new is None:
             raise invalid("edit needs old (text to replace) and new.")
+        if find_secrets(new) != find_secrets(old):  # editing around an old false positive is fine
+            _reject_secrets("new", new)
         count = nf.body.count(old)
         if count != 1:
             raise invalid(
@@ -524,11 +608,14 @@ def revise(
     elif action == "append":
         if not text:
             raise invalid("append needs text.")
+        _reject_secrets("text", text)
         nf.body = _append(nf, text, heading)
         result["changed"] = ["body"]
     elif action == "set":
         if not fields:
             raise invalid('set needs fields, e.g. {"priority": 5}.')
+        for key, value_ in fields.items():
+            _reject_secrets(f"fields.{key}", value_)
         fields = {k: _coerce(k, v) for k, v in fields.items()}
         result["changed"] = nf.set_fields(fields)
         if mode == MEMORY and {"type", "project"} & set(result["changed"]):
