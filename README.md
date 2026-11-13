@@ -184,7 +184,7 @@ El detalle técnico vive en [`docs/`](docs/):
 | [Hooks](docs/hooks.md) | El bloque para `settings.json`, los permisos recomendados y cómo comprobar que funcionan |
 | [Mantención](docs/mantencion.md) | Avisos, archivado de memorias vencidas, backup y el ciclo de revisión |
 | [Migración de OMEGA](docs/migracion-omega.md) | Cómo traer las memorias de OMEGA |
-| [Desarrollo](docs/desarrollo.md) | Tests, lint y scripts de medición |
+| [Desarrollo](docs/desarrollo.md) | Tests, lint, salud del código y scripts de medición |
 | [CHANGELOG](CHANGELOG.md) | Cambios de cada versión |
 
 ## Desarrollo
@@ -195,4 +195,4 @@ uv run ruff check  # lint
 uv run pytest      # tests
 ```
 
-El resto (el lint completo del CI, los scripts de medición y cómo se publica una versión) está en [Desarrollo](docs/desarrollo.md).
+El resto (el lint completo del CI, la revisión de calidad de cada PR con CodeScene y los scripts de medición) está en [Desarrollo](docs/desarrollo.md).
