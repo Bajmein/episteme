@@ -112,6 +112,19 @@ def build_resolver(conn: sqlite3.Connection) -> Resolver:
     return Resolver((p, aliases.get(p, [])) for p in paths)
 
 
+def _answers(
+    raw: str, keys: set[str], aliases: set[str], names: set[str], stems: list[str]
+) -> bool:
+    """Whether the link target ``raw`` is answered by the touched keys, aliases or stems."""
+    key = raw.strip().replace("\\", "/").strip("/").lower()
+    stem = _strip_md(key)
+    if key in keys or key in aliases:
+        return True
+    if "/" in stem:
+        return any(s.endswith("/" + stem) for s in stems)
+    return stem in names
+
+
 def _touch_matcher(paths: set[str], aliases: set[str]) -> Callable[[str], bool]:
     """A memoized test: can a link target be answered by one of ``paths`` or ``aliases``?"""
     keys: set[str] = set()
@@ -126,15 +139,7 @@ def _touch_matcher(paths: set[str], aliases: set[str]) -> Callable[[str], bool]:
 
     def touched(raw: str) -> bool:
         if raw not in verdicts:
-            key = raw.strip().replace("\\", "/").strip("/").lower()
-            stem = _strip_md(key)
-            if key in keys or key in aliases:
-                hit = True
-            elif "/" in stem:
-                hit = any(s.endswith("/" + stem) for s in stems)
-            else:
-                hit = stem in names
-            verdicts[raw] = hit
+            verdicts[raw] = _answers(raw, keys, aliases, names, stems)
         return verdicts[raw]
 
     return touched
@@ -152,6 +157,13 @@ def _heading_missing(
             for h in conn.execute("select text from headings where path = ?", (dst,))
         }
     return int(normalize_heading(heading) not in headings[dst])
+
+
+def _needs_relink(r: sqlite3.Row, changed: set[str], touched: Callable[[str], bool]) -> bool:
+    """Whether a link row starts in or points at a changed note, or names a touched target."""
+    if r["src"] in changed or r["dst_path"] in changed:
+        return True
+    return bool(r["dst_raw"]) and touched(r["dst_raw"])
 
 
 def relink(
@@ -172,9 +184,8 @@ def relink(
         "select rowid, src, dst_raw, dst_path, heading, heading_missing from links"
     ).fetchall()
     for r in rows:
-        if r["src"] not in changed and r["dst_path"] not in changed:
-            if not r["dst_raw"] or not touched(r["dst_raw"]):
-                continue
+        if not _needs_relink(r, changed, touched):
+            continue
         if not r["dst_raw"]:
             dst = r["src"]
         else:
