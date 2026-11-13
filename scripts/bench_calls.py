@@ -42,6 +42,13 @@ BASELINE_CMD = "uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.6.0 epis
 FILTERS = ("path", "type", "tags", "status", "zone")
 AB_TOOLS = ("search", "read", "context", "links")
 RUN_TIMEOUT = 900
+BURST_GAP_SECONDS = 60
+SEARCH_LIMIT_DEFAULT = 20
+SEARCH_LIMIT_MAX = 100
+AB_COLUMNS = (
+    "Corrida", "Llamadas", "search", "read", "context", "links", "search_any", "read_batch",
+    "Caracteres", "Turnos", "Coste (USD)", "Nota",
+)  # fmt: skip
 
 Call = tuple[str, dict[str, Any], str | None]
 
@@ -93,7 +100,7 @@ def _write(text: str) -> None:
 
 
 def find_bursts(
-    calls: list[sqlite3.Row], gap: float = 60, pid: int | None = None
+    calls: list[sqlite3.Row], gap: float = BURST_GAP_SECONDS, pid: int | None = None
 ) -> list[list[sqlite3.Row]]:
     """Runs of the model's successful search/read calls of one process, split at ``gap`` s."""
     by_pid: dict[int, list[sqlite3.Row]] = {}
@@ -161,7 +168,8 @@ def batch_calls(calls: list[Call]) -> list[Call]:
                 joined = {k: args[k] for k in FILTERS if k in args}
                 joined["query"] = " ".join(queries)
                 joined["match"] = "any"
-                joined["limit"] = min(100, max(int(m.get("limit", 20)) for m in members))
+                limit = max(int(m.get("limit", SEARCH_LIMIT_DEFAULT)) for m in members)
+                joined["limit"] = min(SEARCH_LIMIT_MAX, limit)
                 out.append((tool, joined, project))
         elif tool == "read" and _whole_read(args):
             if not notes_done:
@@ -182,7 +190,7 @@ def _call(engine: Engine, tool: str, args: dict[str, Any], project: str | None) 
             tags=args.get("tags"),
             project=project,
             status=args.get("status"),
-            limit=int(args.get("limit", 20)),
+            limit=int(args.get("limit", SEARCH_LIMIT_DEFAULT)),
             zone=args.get("zone"),
             match=args.get("match", "all"),
         )
@@ -228,7 +236,9 @@ def run_calls(engine: Engine, calls: list[Call]) -> dict[str, Any]:
     return stats
 
 
-def replay(vault: Path, pid: int | None = None, gap: float = 60) -> dict[str, Any] | None:
+def replay(
+    vault: Path, pid: int | None = None, gap: float = BURST_GAP_SECONDS
+) -> dict[str, Any] | None:
     """Replay the largest burst as logged and batched; None if the log has no burst."""
     bursts = find_bursts(load_calls(vault), gap, pid)
     if not bursts:
@@ -378,6 +388,71 @@ def _merge(groups: list[dict[str, Any]]) -> dict[str, Any]:
     return run
 
 
+def _prepare_variant(
+    vault: Path, out: Path, variant: str, command: list[str], project: str
+) -> tuple[Path, Path]:
+    """Copy and index the vault for a variant and write its MCP config: (config, copy)."""
+    copy = out / variant / "vault"
+    copy_vault(vault, copy)
+    engine = Engine(copy)
+    try:
+        engine.index.refresh()
+    finally:
+        engine.index.close()
+    server = {
+        "command": command[0],
+        "args": [*command[1:], "--vault", str(copy), "--project", project],
+    }
+    cfg = out / f"{variant}.mcp.json"
+    cfg.write_text(
+        json.dumps({"mcpServers": {"episteme": server}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+        newline="",
+    )
+    return cfg, copy
+
+
+def _agent_command(claude_bin: str, prompt: str, config: Path, model: str | None) -> list[str]:
+    allowed = [f"mcp__episteme__{tool}" for tool in AB_TOOLS]
+    return [
+        claude_bin, "-p", prompt,
+        "--mcp-config", str(config),
+        "--strict-mcp-config",
+        "--allowedTools", *allowed,
+        "--output-format", "json",
+        *(["--model", model] if model else []),
+    ]  # fmt: skip
+
+
+def _run_agent(cmd: list[str], cwd: Path, out: Path, name: str) -> tuple[str, str]:
+    """Run one headless agent: (stdout, note), with the note empty when it ended well."""
+    try:
+        proc = subprocess.run(  # nosec B603
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=RUN_TIMEOUT,
+            env=os.environ,
+        )
+    except subprocess.TimeoutExpired:
+        return "", f"sin respuesta en {RUN_TIMEOUT} s"
+    note = ""
+    if proc.returncode != 0:
+        note = f"claude salió con código {proc.returncode}"
+        (out / f"{name}.stderr.txt").write_text(proc.stderr or "", encoding="utf-8", newline="")
+    return proc.stdout or "", note
+
+
+def _parse_answer(stdout: str) -> dict[str, Any]:
+    try:
+        answer = json.loads(stdout)
+    except ValueError:
+        return {}
+    return answer if isinstance(answer, dict) else {}
+
+
 def run_ab(
     vault: Path,
     project: str,
@@ -399,67 +474,19 @@ def run_ab(
     configs: dict[str, Path] = {}
     copies: dict[str, Path] = {}
     for variant, command in commands.items():
-        copy = out / variant / "vault"
-        copy_vault(vault, copy)
-        engine = Engine(copy)
-        try:
-            engine.index.refresh()
-        finally:
-            engine.index.close()
-        server = {
-            "command": command[0],
-            "args": [*command[1:], "--vault", str(copy), "--project", project],
-        }
-        cfg = out / f"{variant}.mcp.json"
-        cfg.write_text(
-            json.dumps({"mcpServers": {"episteme": server}}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-            newline="",
-        )
-        configs[variant], copies[variant] = cfg, copy
-    allowed = [f"mcp__episteme__{tool}" for tool in AB_TOOLS]
+        configs[variant], copies[variant] = _prepare_variant(vault, out, variant, command, project)
     results: list[dict[str, Any]] = []
     for n in range(1, runs + 1):
-        for variant in ("base", "new"):
+        for variant in commands:
             db = activity_db(copies[variant])
             before = _max_id(db)
-            cmd = [
-                claude_bin, "-p", prompt,
-                "--mcp-config", str(configs[variant]),
-                "--strict-mcp-config",
-                "--allowedTools", *allowed,
-                "--output-format", "json",
-                *(["--model", model] if model else []),
-            ]  # fmt: skip
-            run: dict[str, Any] = {"variant": variant, "n": n, "note": ""}
+            cmd = _agent_command(claude_bin, prompt, configs[variant], model)
             start = time.perf_counter()
-            try:
-                proc = subprocess.run(  # nosec B603
-                    cmd,
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=RUN_TIMEOUT,
-                    env=os.environ,
-                )
-                stdout = proc.stdout or ""
-                if proc.returncode != 0:
-                    run["note"] = f"claude salió con código {proc.returncode}"
-                    (out / f"{variant}-{n}.stderr.txt").write_text(
-                        proc.stderr or "", encoding="utf-8", newline=""
-                    )
-            except subprocess.TimeoutExpired:
-                stdout = ""
-                run["note"] = f"sin respuesta en {RUN_TIMEOUT} s"
+            stdout, note = _run_agent(cmd, cwd, out, f"{variant}-{n}")
+            run: dict[str, Any] = {"variant": variant, "n": n, "note": note}
             run["seconds"] = round(time.perf_counter() - start)
             (out / f"{variant}-{n}.json").write_text(stdout, encoding="utf-8", newline="")
-            try:
-                answer = json.loads(stdout)
-            except ValueError:
-                answer = {}
-            if not isinstance(answer, dict):
-                answer = {}
+            answer = _parse_answer(stdout)
             run["turns"] = answer.get("num_turns")
             run["cost"] = answer.get("total_cost_usd")
             run["answer_chars"] = len(answer.get("result") or "")
@@ -483,11 +510,8 @@ def _median(values: list[Any]) -> str:
 
 
 def render_ab(results: list[dict[str, Any]], out: Path) -> str:
-    cols = (
-        "| Corrida | Llamadas | search | read | context | links | search_any | read_batch "
-        "| Caracteres | Turnos | Coste (USD) | Nota |"
-    )
-    lines = ["# A/B con agentes", "", cols, "|" + " --- |" * 12]
+    cols = "| " + " | ".join(AB_COLUMNS) + " |"
+    lines = ["# A/B con agentes", "", cols, "|" + " --- |" * len(AB_COLUMNS)]
 
     def cells(run: dict[str, Any]) -> list[Any]:
         calls = run["calls"]
@@ -534,7 +558,9 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("replay", help="replay the largest logged burst, as it was and batched")
     rp.add_argument("--vault", required=True, type=Path)
     rp.add_argument("--pid", type=int, default=None, help="only bursts of this server process")
-    rp.add_argument("--gap", type=float, default=60, help="seconds of silence that end a burst")
+    rp.add_argument(
+        "--gap", type=float, default=BURST_GAP_SECONDS, help="seconds of silence that end a burst"
+    )
     rp.add_argument("--show", action="store_true", help="print the queries and paths (private)")
     ab = sub.add_parser("ab", help="run headless agents against the baseline and this checkout")
     ab.add_argument("--vault", required=True, type=Path)
