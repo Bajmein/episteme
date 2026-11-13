@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Cambiado
+
+- Refactor interno para bajar la complejidad del código (PR #63 a #75), guiado por el análisis de CodeScene: funciones más cortas y con menos anidación en el motor de búsqueda y lectura, el vault, el parser de Markdown, el índice, las memorias y los hooks. No cambia nada de lo que se usa: las herramientas, sus parámetros, sus respuestas y sus mensajes de error son los mismos.
+
 ## [0.10.0] - 2026-11-13
 
 ### Añadido

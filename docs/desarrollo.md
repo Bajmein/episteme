@@ -22,6 +22,38 @@ Dependabot (`.github/dependabot.yml`) abre un PR agrupado por semana con las dep
 
 El banner es `static/banner-episteme.jpg` (1600 px de ancho, JPEG progresivo). El badge de versión de la cabecera es estático: se cambia en cada release, junto con el tag de los ejemplos de instalación.
 
+## Salud del código
+
+CodeScene Cloud analiza `main` cada día y revisa cada PR: el check «CodeScene Code Health Review (main)» aplica el perfil de quality gates «The Bare Minimum» y deja un comentario con el code health de cada archivo tocado, antes y después. Un PR no debería bajar el de ningún archivo; si lo baja, se corrige en el mismo PR.
+
+Para bajar la complejidad sin cambiar lo que ve el agente:
+
+- Se extraen funciones privadas en el mismo módulo, se nombran las condiciones compuestas con un predicado (`_is_…`, `_wants_…`) y se usan retornos anticipados o `continue` en vez de anidar.
+- No se tocan las firmas de los tools ni las funciones que las reflejan (`Engine.search`, `Engine.read`, `memory.remember`…): el SDK saca el esquema de la firma. Las funciones `register(...)` de `tools/` son largas a propósito (CodeScene las marca como «Large Method»).
+- Los tests no se modifican: son la red del refactor. CodeScene avisa entonces «Absence of Expected Change Pattern», que en un refactor es esperable.
+- Se compara la foto del contrato antes y después: arrancar el servidor por stdio, volcar las instrucciones y `list_tools` a JSON con las claves ordenadas y comprobar con `cmp` que no cambió.
+
+El refactor de noviembre de 2026 (PR #63 a #75) partió de 8,73 de code health y 8,02 en hotspots (análisis sobre `266ab09`). Por archivo, según la revisión de cada PR:
+
+| Archivo | Antes | Después |
+| :-- | --: | --: |
+| `engine.py` | 6,07 | 8,42 |
+| `memory/reviewing.py` | 6,98 | 9,69 |
+| `index/text.py` | 7,11 | 10,00 |
+| `memory/writing.py` | 7,32 | 9,39 |
+| `vault.py` | 7,40 | 9,10 |
+| `memory/schema.py` | 7,65 | 9,84 |
+| `prompting.py` | 7,87 | 8,74 |
+| `markdown.py` | 7,90 | 9,69 |
+| `memory/task.py` | 8,03 | 9,39 |
+| `memory/files.py` | 8,16 | 9,54 |
+| `memory/welcoming.py` | 8,43 | 9,69 |
+| `tools/hooks.py` | 8,46 | 8,99 |
+| `index/store.py` | 8,47 | 9,36 |
+| `memory/revising.py` | 8,62 | 9,10 |
+| `index/ingest.py` | 8,82 | 9,69 |
+| `server.py` | 9,14 | 9,54 |
+
 ## Medir variantes de búsqueda
 
 Para decidir con números si conviene un lematizador de español o los trigramas de SQLite, corre el script sobre tu vault. Es de solo lectura: recorre las notas con el parser, no abre ni crea el índice y no escribe nada en el vault.
