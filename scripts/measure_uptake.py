@@ -58,7 +58,10 @@ def _open_ro(vault_root: Path) -> sqlite3.Connection:
         raise EpistemeError(
             NOT_FOUND, f"no activity log at {db}. Use the vault for a while, or check --vault."
         )
-    return sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        return sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error as e:
+        raise EpistemeError(NOT_FOUND, f"cannot open {db} read-only: {e}. Check --vault.") from e
 
 
 def _created(vault: Vault, zone: str) -> dict[str, date]:
@@ -85,15 +88,22 @@ def _created(vault: Vault, zone: str) -> dict[str, date]:
 
 
 def _read_paths(args: dict, paths: list[str]) -> list[str]:
-    found: list[str] = []
+    """Notes the agent asked for: path-like args, else the leading result paths.
+
+    ``paths`` is scraped from the result text, so it can also hold linked notes; when the
+    request used bare names, only as many leading paths as names are trusted.
+    """
+    asked: list[str] = []
     note = args.get("note")
     if isinstance(note, str):
-        found.append(note)
+        asked.append(note)
     notes = args.get("notes")
     if isinstance(notes, list):
-        found += [n for n in notes if isinstance(n, str)]
-    found += paths
-    return list(dict.fromkeys(_norm(p) for p in found))
+        asked += [n for n in notes if isinstance(n, str)]
+    asked = [_norm(n) for n in asked]
+    if asked and all(n.endswith(".md") for n in asked):
+        return list(dict.fromkeys(asked))
+    return list(dict.fromkeys(paths[: len(asked) or len(paths)]))
 
 
 def measure(
@@ -113,13 +123,16 @@ def measure(
     conn = _open_ro(vault.root)
     try:
         sql = (
-            "select session, tool, hook_event, args, paths, ok from calls where at >= ?"
-            + (" and project = ?" if project else "")
-            + " order by at, id"
+            "select session, tool, hook_event, args, paths, ok, project from calls"
+            " where at >= ? order by at, id"
         )
-        rows = conn.execute(sql, (since, project) if project else (since,)).fetchall()
+        rows = conn.execute(sql, (since,)).fetchall()
     finally:
         conn.close()
+    if project:
+        # Agent calls often carry no project: keep every call of a session that has one.
+        mine = {r[0] for r in rows if r[6] == project and r[0]}
+        rows = [r for r in rows if r[6] == project or (r[0] and r[0] in mine)]
 
     def is_mem(p: str) -> bool:
         return p.startswith(zone + "/")
@@ -132,13 +145,13 @@ def measure(
     sessions_wrote: set[str] = set()
     empty: Counter = Counter()
 
-    for i, (session, tool, hook, args_s, paths_s, ok) in enumerate(rows):
+    for i, (session, tool, hook, args_s, paths_s, ok, _project) in enumerate(rows):
         args = _json(args_s, {})
         paths = [_norm(p) for p in _json(paths_s, []) if isinstance(p, str)]
-        if tool in WRITE_TOOLS and session:
-            sessions_wrote.add(session)
         if not ok:
             continue
+        if tool in WRITE_TOOLS and session:
+            sessions_wrote.add(session)
         if hook and tool in DELIVERY_TOOLS:
             for p in dict.fromkeys(p for p in paths if is_mem(p)):
                 stats[p][tool] += 1
@@ -185,7 +198,7 @@ def measure(
     created = _created(vault, zone)
     cutoff = now.date() - timedelta(days=old_days)
     old = [p for p, c in created.items() if c < cutoff]
-    old_read = [p for p in old if stats[p]["reads"]]
+    old_read = [p for p in old if p in stats and stats[p]["reads"]]
     return {
         "days": days,
         "project": project,
