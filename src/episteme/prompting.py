@@ -116,6 +116,14 @@ def trail_block(engine: Engine, skip: set[str]) -> tuple[str, list[dict[str, Any
     )
 
 
+def _recovered_parts(memories: int, trail: int) -> list[str]:
+    """The phrases that say what the welcome recovered (project memories, session trail)."""
+    parts = [f"{memories} memorias del proyecto"] if memories else []
+    if trail:
+        parts.append(f"{trail} de esta sesión" if memories else f"{trail} memorias de esta sesión")
+    return parts
+
+
 def recovered_notice(source: str | None, memories: int, trail: int) -> str:
     """The line shown to the person when the welcome is resent after compact or clear."""
     after = {"compact": "tras compactar", "clear": "tras /clear"}.get(
@@ -123,9 +131,7 @@ def recovered_notice(source: str | None, memories: int, trail: int) -> str:
     )
     if not memories and not trail:
         return f"episteme · {after}: no había memorias que recuperar"
-    parts = [f"{memories} memorias del proyecto"] if memories else []
-    if trail:
-        parts.append(f"{trail} de esta sesión" if memories else f"{trail} memorias de esta sesión")
+    parts = _recovered_parts(memories, trail)
     return f"episteme · contexto recuperado {after}: {' y '.join(parts)}"
 
 
@@ -217,28 +223,44 @@ def _rare_terms(engine: Engine, terms: list[str], project: str) -> list[str]:
     return counted
 
 
+def _is_recallable(row: Any, iso: str) -> bool:
+    """Whether a note can be recalled: it is not a reminder and has not expired."""
+    if row["type"] == "reminder":
+        return False
+    return not (row["valid_until"] and row["valid_until"] < iso)
+
+
+def _strong_words(engine: Engine, row: Any) -> set[str]:
+    """The words of the note's title, tags and keywords."""
+    props = engine.index.props(row["path"])
+    words = set(tokens(row["title"] or ""))
+    for key in ("tags", "keywords"):
+        for item in _as_list(props.get(key)):
+            words.update(tokens(item))
+    return words
+
+
+def _enough_hits(hit_terms: set[str], counted: list[str]) -> bool:
+    """Whether the note holds enough of the message's terms (or the message has few terms)."""
+    return len(hit_terms) >= RECALL_MIN_HIT_TERMS or len(counted) <= RECALL_FEW_TERMS
+
+
 def _score(
     engine: Engine, path: str, pos: int, counted: list[str], iso: str
 ) -> tuple[int, int, int, Any] | None:
     """Sort key and row of a hit worth recalling, or None (reminder, expired, weak match)."""
     row = engine.index.note(path)
-    if row is None or row["type"] == "reminder":
+    if row is None or not _is_recallable(row, iso):
         return None
-    if row["valid_until"] and row["valid_until"] < iso:
-        return None
-    props = engine.index.props(path)
-    strong_words = set(tokens(row["title"] or ""))
-    for key in ("tags", "keywords"):
-        for item in _as_list(props.get(key)):
-            strong_words.update(tokens(item))
-    strong = {t for t in counted if t in strong_words}
+    words = _strong_words(engine, row)
+    strong = {t for t in counted if t in words}
     if not strong:
         return None
     body_words = set(tokens(row["search_text"] or ""))
     hit_terms = strong | {t for t in counted if t in body_words}
-    if len(hit_terms) >= RECALL_MIN_HIT_TERMS or len(counted) <= RECALL_FEW_TERMS:
-        return (-len(strong), -len(hit_terms), pos, row)
-    return None
+    if not _enough_hits(hit_terms, counted):
+        return None
+    return (-len(strong), -len(hit_terms), pos, row)
 
 
 def _rank_hits(engine: Engine, hits: list[Any], counted: list[str], seen: set[str]) -> list[Any]:
@@ -255,17 +277,8 @@ def _rank_hits(engine: Engine, hits: list[Any], counted: list[str], seen: set[st
     return [x[3] for x in ranked[:RECALL_MAX]]
 
 
-def recall(
-    engine: Engine, prompt: str, project: str, st: SessionState, skip: set[str]
-) -> tuple[str, list[dict[str, Any]]]:
-    """Memories whose title, tags or keywords hold a rare word of the user's message."""
-    terms = _recall_terms(prompt)
-    if not terms:
-        return "", []
-    scope = [project, "_shared"]
-    counted = _rare_terms(engine, terms, project)
-    if not counted:
-        return "", []
+def _search_memories(engine: Engine, counted: list[str], scope: list[str]) -> list[Any]:
+    """The active memories of ``scope`` that match any of the ``counted`` terms."""
     hits, _ = engine.index.search(
         " ".join(counted),
         any_term=True,
@@ -275,6 +288,20 @@ def recall(
         limit=RECALL_SEARCH_LIMIT,
         snippets=False,
     )
+    return hits
+
+
+def recall(
+    engine: Engine, prompt: str, project: str, st: SessionState, skip: set[str]
+) -> tuple[str, list[dict[str, Any]]]:
+    """Memories whose title, tags or keywords hold a rare word of the user's message."""
+    terms = _recall_terms(prompt)
+    if not terms:
+        return "", []
+    counted = _rare_terms(engine, terms, project)
+    if not counted:
+        return "", []
+    hits = _search_memories(engine, counted, [project, "_shared"])
     chosen = _rank_hits(engine, hits, counted, skip | st.delivered)
     if not chosen:
         return "", []
@@ -288,11 +315,9 @@ def recall(
 
 
 def _nudge_due(st: SessionState) -> bool:
-    return (
-        st.prompts >= NUDGE_AFTER
-        and st.prompts - st.nudged_at >= NUDGE_EVERY
-        and st.baseline == WRITES
-    )
+    if st.prompts < NUDGE_AFTER or st.prompts - st.nudged_at < NUDGE_EVERY:
+        return False
+    return st.baseline == WRITES
 
 
 def nudge(st: SessionState) -> str:
