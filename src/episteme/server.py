@@ -157,7 +157,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None,
             Field(
                 description="active, speculative, superseded or archived. Default: everything "
-                'except superseded and archived memories; "any" includes them '
+                "except superseded and archived memories; \"any\" includes them "
                 "(rows then carry status and superseded_by)."
             ),
         ] = None,
@@ -199,7 +199,9 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         with engine.session():
             return dump(
-                engine.search(query, path, type, tags, project, status, limit, zone, facets, match)
+                engine.search(
+                    query, path, type, tags, project, status, limit, zone, facets, match
+                )
             )
 
     @server.tool(annotations=READ_ONLY, structured_output=False)

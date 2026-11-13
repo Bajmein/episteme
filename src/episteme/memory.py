@@ -319,7 +319,9 @@ def _link_candidates(
     if project == SHARED:
         rows = engine.index.memories("status = 'active'")
     else:
-        rows = engine.index.memories("status = 'active' and project in (?, ?)", (project, SHARED))
+        rows = engine.index.memories(
+            "status = 'active' and project in (?, ?)", (project, SHARED)
+        )
     files = _files_of(engine)
     found = []
     for row in rows:
@@ -1211,7 +1213,9 @@ def review(
                     }
                 )
 
-    similar = _similar_groups([r for r in active if r["type"] not in ("session", "reminder")], toks)
+    similar = _similar_groups(
+        [r for r in active if r["type"] not in ("session", "reminder")], toks
+    )
 
     cut_titles = []
     for r in mems:
