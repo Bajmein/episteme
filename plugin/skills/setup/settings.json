@@ -109,7 +109,8 @@
             "input": {
               "mode": "welcome",
               "session": "${session_id}",
-              "hook_event": "${hook_event_name}"
+              "hook_event": "${hook_event_name}",
+              "source": "${source}"
             }
           }
         ]

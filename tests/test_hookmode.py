@@ -71,3 +71,21 @@ def test_file_matching() -> None:
     assert file_matches("/p/src/x.py", "src/x.py", "src/*.py")
     assert not file_matches("/p/lib/x.py", "lib/x.py", "src/*.py")
     assert project_relative("./src/a.py", None) == "src/a.py"
+
+
+def test_notice_is_a_coloured_system_message_on_session_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    out = json.loads(hookmode.render("SessionStart", "ctx", "recuperado"))
+    assert out["systemMessage"] == "\x1b[1;32mrecuperado\x1b[0m"
+    assert out["hookSpecificOutput"]["additionalContext"] == "ctx"
+    assert json.loads(hookmode.render("SessionStart", "", "solo aviso")) == {
+        "systemMessage": "\x1b[1;32msolo aviso\x1b[0m"
+    }
+    for event in ("UserPromptSubmit", "PreToolUse", "PostToolUse"):
+        assert "systemMessage" not in json.loads(hookmode.render(event, "ctx", "aviso"))
+        assert hookmode.render(event, "", "aviso") == ""
+    assert hookmode.render("PreCompact", "ctx", "aviso") == ""
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert json.loads(hookmode.render("SessionStart", "", "plano"))["systemMessage"] == "plano"

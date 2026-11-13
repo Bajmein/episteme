@@ -24,6 +24,8 @@ MEMORY = "memory"
 MODES = (READ_ONLY, READ_WRITE, MEMORY)
 CONFIG_FILE = "episteme.toml"
 INDEX_DIR = ".index"
+DEFAULT_EVERY_DAYS = 1
+DEFAULT_BACKUP_KEEP = 14
 
 
 @dataclass
@@ -43,7 +45,7 @@ class Zone:
 
 @dataclass(frozen=True)
 class Maintenance:
-    every_days: int = 1
+    every_days: int = DEFAULT_EVERY_DAYS
     notify: bool = True
     archive_expired: bool = False
 
@@ -51,7 +53,7 @@ class Maintenance:
 @dataclass(frozen=True)
 class Backup:
     dir: Path | None = None
-    keep: int = 14
+    keep: int = DEFAULT_BACKUP_KEEP
 
 
 @dataclass
@@ -92,7 +94,7 @@ def _flag(table: dict, name: str, key: str, default: bool) -> bool:
 def _load_maintenance(data: dict) -> Maintenance:
     table = _table(data, "maintenance", ("every_days", "notify", "archive_expired"))
     return Maintenance(
-        every_days=_int_min1(table, "maintenance", "every_days", 1),
+        every_days=_int_min1(table, "maintenance", "every_days", DEFAULT_EVERY_DAYS),
         notify=_flag(table, "maintenance", "notify", True),
         archive_expired=_flag(table, "maintenance", "archive_expired", False),
     )
@@ -115,17 +117,10 @@ def _load_backup(data: dict, root: Path) -> Backup:
     real_root = Path(os.path.normcase(os.path.realpath(root)))
     if real == real_root or real_root in real.parents:
         raise StartupError(f'[backup] dir "{raw}" must be outside the vault.')
-    return Backup(dir=target, keep=_int_min1(table, "backup", "keep", 14))
+    return Backup(dir=target, keep=_int_min1(table, "backup", "keep", DEFAULT_BACKUP_KEEP))
 
 
-def load_config(root: Path) -> Config:
-    """Parse ``episteme.toml``; any invalid value raises StartupError."""
-    path = root / CONFIG_FILE
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise StartupError(f"cannot read {path}: {exc}. Fix the file and restart.") from exc
-
+def _load_zones(data: dict) -> list[Zone]:
     zones: list[Zone] = []
     seen: set[str] = set()
     raw_zones = data.get("zones", {})
@@ -142,14 +137,29 @@ def load_config(root: Path) -> Config:
         if mode not in MODES:
             raise StartupError(f'zone "{name}" has mode {mode!r}; use one of {", ".join(MODES)}.')
         zones.append(Zone(name, mode))
+    return zones
 
-    state_glob = None
+
+def _load_state_glob(data: dict) -> str | None:
     checkpoint = data.get("checkpoint", {})
-    if isinstance(checkpoint, dict) and checkpoint.get("state_glob") is not None:
-        state_glob = checkpoint["state_glob"]
-        if not isinstance(state_glob, str) or not state_glob:
-            raise StartupError("[checkpoint] state_glob must be a non-empty string.")
-    return Config(zones, state_glob, _load_maintenance(data), _load_backup(data, root))
+    if not isinstance(checkpoint, dict) or checkpoint.get("state_glob") is None:
+        return None
+    state_glob = checkpoint["state_glob"]
+    if not isinstance(state_glob, str) or not state_glob:
+        raise StartupError("[checkpoint] state_glob must be a non-empty string.")
+    return state_glob
+
+
+def load_config(root: Path) -> Config:
+    """Parse ``episteme.toml``; any invalid value raises StartupError."""
+    path = root / CONFIG_FILE
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise StartupError(f"cannot read {path}: {exc}. Fix the file and restart.") from exc
+    return Config(
+        _load_zones(data), _load_state_glob(data), _load_maintenance(data), _load_backup(data, root)
+    )
 
 
 def today() -> dt.date:
@@ -296,8 +306,8 @@ class Vault:
 
     # -- writes ------------------------------------------------------------
 
-    def write_atomic(self, rel: str, text: str) -> Path:
-        """Write ``text`` to ``rel`` through a temporary file in the same folder."""
+    def _stage(self, rel: str, text: str) -> tuple[Path, str]:
+        """Resolve ``rel`` and write ``text`` to a temporary file beside it."""
         path = self.resolve(rel)
         path.parent.mkdir(parents=True, exist_ok=True)
         # The parent may have been created through a symlink: check again.
@@ -306,6 +316,16 @@ class Vault:
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
                 fh.write(text)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+        return path, tmp
+
+    def write_atomic(self, rel: str, text: str) -> Path:
+        """Write ``text`` to ``rel`` through a temporary file in the same folder."""
+        path, tmp = self._stage(rel, text)
+        try:
             os.replace(tmp, path)
         except BaseException:
             if os.path.exists(tmp):
@@ -315,20 +335,14 @@ class Vault:
 
     def create_exclusive(self, rel: str, text: str) -> bool:
         """Create ``rel`` only if it does not exist yet; False if it already does."""
-        path = self.resolve(rel)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.resolve(rel)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".tmp")
+        path, tmp = self._stage(rel, text)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
-                fh.write(text)
-            try:
-                os.link(tmp, path)
-            except FileExistsError:
-                return False
-            return True
+            os.link(tmp, path)
+        except FileExistsError:
+            return False
         finally:
             os.unlink(tmp)
+        return True
 
     def remove(self, rel: str) -> None:
         """Delete ``rel``. Only ``revise`` uses it, to move a memory to its new folder."""

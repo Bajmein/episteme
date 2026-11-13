@@ -27,8 +27,10 @@ import json
 import sqlite3
 import sys
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 from episteme.errors import NOT_FOUND, EpistemeError
 from episteme.markdown import parse
@@ -37,9 +39,42 @@ from episteme.vault import INDEX_DIR, Vault
 DELIVERY_TOOLS = ("context", "surface", "constraints")
 WRITE_TOOLS = ("remember", "revise")
 TOP_EMPTY = 20
+DEFAULT_DAYS = 30
+DEFAULT_MIN_DELIVERIES = 3
+DEFAULT_OLD_DAYS = 90
+
+_ROWS_SQL = (
+    "select session, tool, hook_event, args, paths, ok, project from calls"
+    " where at >= ? order by at, id"
+)
 
 
-def _json(text: str | None, default):
+class Row(NamedTuple):
+    """One row of the ``calls`` table, in the column order of ``_ROWS_SQL``."""
+
+    session: str | None
+    tool: str
+    hook: str | None
+    args: str | None
+    paths: str | None
+    ok: int
+    project: str | None
+
+
+@dataclass
+class _Scan:
+    """What one pass over the rows collects; mutated only by the ``_record_*`` helpers."""
+
+    stats: dict[str, Counter] = field(default_factory=lambda: defaultdict(Counter))
+    first_delivery: dict[tuple[str, str], int] = field(default_factory=dict)  # -> row index
+    reads_at: dict[tuple[str, str], list[int]] = field(default_factory=lambda: defaultdict(list))
+    deliveries: list[tuple[str | None, str, int]] = field(default_factory=list)
+    sessions_read: set[str] = field(default_factory=set)
+    sessions_wrote: set[str] = field(default_factory=set)
+    empty: Counter = field(default_factory=Counter)
+
+
+def _json[T](text: str | None, default: T) -> T:
     try:
         value = json.loads(text) if text else default
     except ValueError:
@@ -106,12 +141,86 @@ def _read_paths(args: dict, paths: list[str]) -> list[str]:
     return list(dict.fromkeys(paths[: len(asked) or len(paths)]))
 
 
+def _load_rows(vault_root: Path, since: str, project: str | None) -> list[Row]:
+    conn = _open_ro(vault_root)
+    try:
+        rows = [Row(*r) for r in conn.execute(_ROWS_SQL, (since,)).fetchall()]
+    finally:
+        conn.close()
+    if project:
+        # Agent calls often carry no project: keep every call of a session that has one.
+        mine = {r.session for r in rows if r.project == project and r.session}
+        rows = [r for r in rows if r.project == project or (r.session and r.session in mine)]
+    return rows
+
+
+def _record_delivery(
+    scan: _Scan, row: Row, i: int, args: dict, paths: list[str], zone: str
+) -> None:
+    for p in dict.fromkeys(p for p in paths if p.startswith(zone + "/")):
+        scan.stats[p][row.tool] += 1
+        if row.tool == "context" and args.get("mode") == "welcome":
+            scan.stats[p]["welcome"] += 1
+        scan.deliveries.append((row.session, p, i))
+        if row.session:
+            scan.first_delivery.setdefault((row.session, p), i)
+
+
+def _record_read(scan: _Scan, row: Row, i: int, args: dict, paths: list[str], zone: str) -> None:
+    mems = [p for p in _read_paths(args, paths) if p.startswith(zone + "/")]
+    for p in mems:
+        scan.stats[p]["reads"] += 1
+        if row.session:
+            scan.reads_at[(row.session, p)].append(i)
+    if mems and row.session:
+        scan.sessions_read.add(row.session)
+
+
+def _record_search(scan: _Scan, args: dict, paths: list[str], zone: str) -> None:
+    for p in dict.fromkeys(p for p in paths if p.startswith(zone + "/")):
+        scan.stats[p]["searches"] += 1
+    if not paths:
+        key = (str(args.get("query", "")), str(args.get("match", "")), str(args.get("zone", "")))
+        scan.empty[key] += 1
+
+
+def _scan_rows(rows: list[Row], zone: str) -> _Scan:
+    scan = _Scan()
+    for i, row in enumerate(rows):
+        args = _json(row.args, {})
+        paths = [_norm(p) for p in _json(row.paths, []) if isinstance(p, str)]
+        if not row.ok:
+            continue
+        if row.tool in WRITE_TOOLS and row.session:
+            scan.sessions_wrote.add(row.session)
+        if row.hook and row.tool in DELIVERY_TOOLS:
+            _record_delivery(scan, row, i, args, paths, zone)
+        elif row.tool == "read" and not row.hook:
+            _record_read(scan, row, i, args, paths, zone)
+        elif row.tool == "search" and not row.hook:
+            _record_search(scan, args, paths, zone)
+    return scan
+
+
+def _count_followed(scan: _Scan) -> int:
+    """Deliveries with a read of the same memory later in the same session; fills reads_after."""
+    followed = 0
+    for session, p, i in scan.deliveries:
+        if session and any(j > i for j in scan.reads_at.get((session, p), ())):
+            followed += 1
+    for (session, p), idxs in scan.reads_at.items():
+        first = scan.first_delivery.get((session, p))
+        if first is not None:
+            scan.stats[p]["reads_after"] += sum(1 for j in idxs if j > first)
+    return followed
+
+
 def measure(
     vault_root: Path,
     project: str | None = None,
-    days: int = 30,
-    min_deliveries: int = 3,
-    old_days: int = 90,
+    days: int = DEFAULT_DAYS,
+    min_deliveries: int = DEFAULT_MIN_DELIVERIES,
+    old_days: int = DEFAULT_OLD_DAYS,
     now: datetime | None = None,
 ) -> dict:
     """Per-memory counters and the figures of the five summary sections."""
@@ -120,73 +229,10 @@ def measure(
     zone = zone_obj.path if zone_obj else "memory"
     now = now or datetime.now(UTC)
     since = (now - timedelta(days=days)).isoformat(timespec="seconds")
-    conn = _open_ro(vault.root)
-    try:
-        sql = (
-            "select session, tool, hook_event, args, paths, ok, project from calls"
-            " where at >= ? order by at, id"
-        )
-        rows = conn.execute(sql, (since,)).fetchall()
-    finally:
-        conn.close()
-    if project:
-        # Agent calls often carry no project: keep every call of a session that has one.
-        mine = {r[0] for r in rows if r[6] == project and r[0]}
-        rows = [r for r in rows if r[6] == project or (r[0] and r[0] in mine)]
-
-    def is_mem(p: str) -> bool:
-        return p.startswith(zone + "/")
-
-    stats: dict[str, Counter] = defaultdict(Counter)
-    first_delivery: dict[tuple[str, str], int] = {}  # (session, path) -> row index
-    reads_at: dict[tuple[str, str], list[int]] = defaultdict(list)
-    deliveries: list[tuple[str | None, str, int]] = []
-    sessions_read: set[str] = set()
-    sessions_wrote: set[str] = set()
-    empty: Counter = Counter()
-
-    for i, (session, tool, hook, args_s, paths_s, ok, _project) in enumerate(rows):
-        args = _json(args_s, {})
-        paths = [_norm(p) for p in _json(paths_s, []) if isinstance(p, str)]
-        if not ok:
-            continue
-        if tool in WRITE_TOOLS and session:
-            sessions_wrote.add(session)
-        if hook and tool in DELIVERY_TOOLS:
-            for p in dict.fromkeys(p for p in paths if is_mem(p)):
-                stats[p][tool] += 1
-                if tool == "context" and args.get("mode") == "welcome":
-                    stats[p]["welcome"] += 1
-                deliveries.append((session, p, i))
-                if session:
-                    first_delivery.setdefault((session, p), i)
-        elif tool == "read" and not hook:
-            mems = [p for p in _read_paths(args, paths) if is_mem(p)]
-            for p in mems:
-                stats[p]["reads"] += 1
-                if session:
-                    reads_at[(session, p)].append(i)
-            if mems and session:
-                sessions_read.add(session)
-        elif tool == "search" and not hook:
-            for p in dict.fromkeys(p for p in paths if is_mem(p)):
-                stats[p]["searches"] += 1
-            if not paths:
-                key = (
-                    str(args.get("query", "")),
-                    str(args.get("match", "")),
-                    str(args.get("zone", "")),
-                )
-                empty[key] += 1
-
-    followed = 0
-    for session, p, i in deliveries:
-        if session and any(j > i for j in reads_at.get((session, p), ())):
-            followed += 1
-    for (session, p), idxs in reads_at.items():
-        first = first_delivery.get((session, p))
-        if first is not None:
-            stats[p]["reads_after"] += sum(1 for j in idxs if j > first)
+    rows = _load_rows(vault.root, since, project)
+    scan = _scan_rows(rows, zone)
+    followed = _count_followed(scan)
+    stats = scan.stats
 
     def n_delivered(p: str) -> int:
         return sum(stats[p][t] for t in DELIVERY_TOOLS)
@@ -195,16 +241,15 @@ def measure(
         (p for p in stats if n_delivered(p) >= min_deliveries and not stats[p]["reads"]),
         key=lambda p: (-n_delivered(p), p),
     )
-    created = _created(vault, zone)
     cutoff = now.date() - timedelta(days=old_days)
-    old = [p for p, c in created.items() if c < cutoff]
+    old = [p for p, c in _created(vault, zone).items() if c < cutoff]
     old_read = [p for p in old if p in stats and stats[p]["reads"]]
     return {
         "days": days,
         "project": project,
         "rows": len(rows),
         "stats": stats,
-        "deliveries": len(deliveries),
+        "deliveries": len(scan.deliveries),
         "followed": followed,
         "min_deliveries": min_deliveries,
         "never_read": [(p, n_delivered(p)) for p in never_read],
@@ -212,14 +257,14 @@ def measure(
         "old_total": len(old),
         "old_read": sorted(old_read),
         "old_unread": sorted(set(old) - set(old_read)),
-        "sessions_read": len(sessions_read),
-        "sessions_no_write": sorted(sessions_read - sessions_wrote),
-        "empty": sorted(empty.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_EMPTY],
-        "empty_total": sum(empty.values()),
+        "sessions_read": len(scan.sessions_read),
+        "sessions_no_write": sorted(scan.sessions_read - scan.sessions_wrote),
+        "empty": sorted(scan.empty.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_EMPTY],
+        "empty_total": sum(scan.empty.values()),
     }
 
 
-def render(r: dict) -> str:
+def _render_table(r: dict) -> list[str]:
     scope = f"proyecto {r['project']}" if r["project"] else "todos los proyectos"
     out = [
         "# Medición de uso de las memorias",
@@ -248,9 +293,13 @@ def render(r: dict) -> str:
         )
     if not stats:
         out.append("| (sin actividad sobre memorias) | | | | | | | |")
+    return out
+
+
+def _render_followed_and_never_read(r: dict) -> list[str]:
     d, f = r["deliveries"], r["followed"]
     pct = f"{f / d:.1%}" if d else "n/a"
-    out += [
+    out = [
         "",
         "## Resumen",
         "",
@@ -262,8 +311,11 @@ def render(r: dict) -> str:
         f"### (b) Entregadas {r['min_deliveries']} veces o más y nunca leídas",
         "",
     ]
-    out += [f"- {p} ({n} entregas)" for p, n in r["never_read"]] or ["- (ninguna)"]
-    out += [
+    return out + ([f"- {p} ({n} entregas)" for p, n in r["never_read"]] or ["- (ninguna)"])
+
+
+def _render_old_and_sessions(r: dict) -> list[str]:
+    out = [
         "",
         f"### (c) Memorias de más de {r['old_days']} días",
         "",
@@ -278,13 +330,23 @@ def render(r: dict) -> str:
         "",
         f"{len(r['sessions_no_write'])} de {r['sessions_read']} sesiones con lecturas de "
         "memorias.",
-        "",
-        f"### (e) Búsquedas del agente sin resultados ({r['empty_total']})",
-        "",
     ]
-    out += [
-        f"- {n}x `{q}` (match={m or '-'}, zone={z or '-'})" for (q, m, z), n in r["empty"]
-    ] or ["- (ninguna)"]
+    return out
+
+
+def _render_empty(r: dict) -> list[str]:
+    out = ["", f"### (e) Búsquedas del agente sin resultados ({r['empty_total']})", ""]
+    return out + (
+        [f"- {n}x `{q}` (match={m or '-'}, zone={z or '-'})" for (q, m, z), n in r["empty"]]
+        or ["- (ninguna)"]
+    )
+
+
+def render(r: dict) -> str:
+    out = _render_table(r)
+    out += _render_followed_and_never_read(r)
+    out += _render_old_and_sessions(r)
+    out += _render_empty(r)
     return "\n".join(out) + "\n"
 
 
@@ -292,9 +354,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, type=Path)
     ap.add_argument("--project", default=None, help="only calls of this project")
-    ap.add_argument("--days", type=int, default=30)
-    ap.add_argument("--min-deliveries", type=int, default=3)
-    ap.add_argument("--old-days", type=int, default=90)
+    ap.add_argument("--days", type=int, default=DEFAULT_DAYS)
+    ap.add_argument("--min-deliveries", type=int, default=DEFAULT_MIN_DELIVERIES)
+    ap.add_argument("--old-days", type=int, default=DEFAULT_OLD_DAYS)
     args = ap.parse_args(argv)
     try:
         result = measure(args.vault, args.project, args.days, args.min_deliveries, args.old_days)

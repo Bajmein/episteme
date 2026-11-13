@@ -15,6 +15,9 @@ from episteme.vault import CONFIG_FILE, READ_ONLY, Vault
 PREFIX = "episteme-"
 SUFFIX = ".tar.gz"
 STALE_TMP_SECONDS = 3600
+SEAL_LENGTH = 12
+STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
+TMP_GLOB = ".tmp-*.tmp"
 
 
 def _members(vault: Vault) -> list[tuple[str, os.stat_result]]:
@@ -22,14 +25,15 @@ def _members(vault: Vault) -> list[tuple[str, os.stat_result]]:
     found = [(rel, st) for rel, st in vault.iter_notes() if vault.mode_for(rel) != READ_ONLY]
     try:
         found.append((CONFIG_FILE, (vault.root / CONFIG_FILE).stat()))
-    except OSError:
+    except OSError:  # nosec B110
+        # A vault without its config file is still backed up: only the notes go in.
         pass
     return sorted(found, key=lambda item: item[0])
 
 
 def _seal(members: list[tuple[str, os.stat_result]]) -> str:
     lines = sorted(f"{rel}\0{st.st_mtime_ns}\0{st.st_size}" for rel, st in members)
-    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()[:SEAL_LENGTH]
 
 
 def run(vault: Vault, dest: Path, keep: int, now: dt.datetime | None = None) -> Path | None:
@@ -44,7 +48,7 @@ def run(vault: Vault, dest: Path, keep: int, now: dt.datetime | None = None) -> 
         _rotate(dest, keep)
         return None
 
-    stamp = (now or dt.datetime.now(dt.UTC)).strftime("%Y%m%dT%H%M%SZ")
+    stamp = (now or dt.datetime.now(dt.UTC)).strftime(STAMP_FORMAT)
     final = dest / f"{PREFIX}{stamp}-{seal}{SUFFIX}"
 
     fd, tmp_name = tempfile.mkstemp(dir=dest, prefix=".tmp-", suffix=".tmp")
@@ -72,9 +76,10 @@ def _rotate(dest: Path, keep: int) -> None:
     for old in archives[: max(len(archives) - keep, 0)]:
         old.unlink(missing_ok=True)
     cutoff = time.time() - STALE_TMP_SECONDS
-    for tmp in dest.glob(".tmp-*.tmp"):
+    for tmp in dest.glob(TMP_GLOB):
         try:
             if tmp.stat().st_mtime < cutoff:
                 tmp.unlink()
-        except OSError:
+        except OSError:  # nosec B110
+            # A stale temp file we cannot stat or remove is retried on the next backup.
             pass

@@ -16,6 +16,9 @@ SCHEMA_VERSION = 1
 RETENTION_DAYS = 180
 MAX_PATHS = 30
 MAX_STRING = 200
+MAX_WALK_DEPTH = 3
+CONNECT_TIMEOUT_S = 5.0
+BUSY_TIMEOUT_MS = 5000
 ARG_KEYS = (
     "mode", "action", "type", "path", "note", "notes", "file", "relative_path", "query",
     "tags", "status", "zone", "heading", "lines", "limit", "match", "title", "task",
@@ -42,7 +45,7 @@ def _clip(value: Any) -> Any:
 
 
 def _walk(node: Any, depth: int, found: list[str]) -> None:
-    if depth > 3:
+    if depth > MAX_WALK_DEPTH:
         return
     if isinstance(node, dict):
         for key, value in node.items():
@@ -63,7 +66,8 @@ def extract_paths(text: str) -> list[str]:
     if text.lstrip().startswith(("{", "[")):
         try:
             _walk(json.loads(text), 0, found)
-        except ValueError:
+        except ValueError:  # nosec B110
+            # Not valid JSON after all: the ``(x.md)`` scan below still applies.
             pass
     found.extend(_MD_IN_PARENS.findall(text))
     return list(dict.fromkeys(found))[:MAX_PATHS]
@@ -85,11 +89,14 @@ class Activity:
         if self._conn is None:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(
-                self.db_path, timeout=5.0, isolation_level=None, check_same_thread=False
+                self.db_path,
+                timeout=CONNECT_TIMEOUT_S,
+                isolation_level=None,
+                check_same_thread=False,
             )
             try:
                 conn.execute("pragma journal_mode = wal")
-                conn.execute("pragma busy_timeout = 5000")
+                conn.execute(f"pragma busy_timeout = {BUSY_TIMEOUT_MS}")
                 version = conn.execute("pragma user_version").fetchone()[0]
                 if version < SCHEMA_VERSION:
                     conn.execute("drop table if exists calls")

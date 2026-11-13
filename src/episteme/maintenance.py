@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 
 SCHEMA_VERSION = 1
 LOG_RETENTION_DAYS = 365
+CONNECT_TIMEOUT_S = 5.0
+BUSY_TIMEOUT_MS = 5000
+MAX_LISTED = 5
 
 _SCHEMA = """
 create table if not exists runs (task text primary key, at text);
@@ -45,11 +48,14 @@ class Store:
         if self._conn is None:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(
-                self.db_path, timeout=5.0, isolation_level=None, check_same_thread=False
+                self.db_path,
+                timeout=CONNECT_TIMEOUT_S,
+                isolation_level=None,
+                check_same_thread=False,
             )
             try:
                 conn.execute("pragma journal_mode = wal")
-                conn.execute("pragma busy_timeout = 5000")
+                conn.execute(f"pragma busy_timeout = {BUSY_TIMEOUT_MS}")
                 version = conn.execute("pragma user_version").fetchone()[0]
                 if version < SCHEMA_VERSION:
                     conn.executescript(_SCHEMA)
@@ -142,11 +148,9 @@ class Store:
             if conn is not None:
                 try:
                     conn.close()
-                except sqlite3.Error:
+                except sqlite3.Error:  # nosec B110
+                    # Closing is best-effort: a failure here must not break shutdown.
                     pass
-
-
-MAX_LISTED = 5
 
 
 def _archived_line(paths: list[str]) -> str:
@@ -158,29 +162,46 @@ def _archived_line(paths: list[str]) -> str:
     )
 
 
+def _archive_line(engine: Engine, store: Store, every_days: int) -> str:
+    """Archive expired memories if due; return the notice line (``""`` if none)."""
+    from episteme import memory
+
+    previous = store.claim("archive_expired", every_days)
+    if previous is None:
+        return ""
+    try:
+        paths = memory.archive_expired(engine)
+    except Exception:
+        store.restore("archive_expired", previous)
+        return ""
+    if not paths:
+        return ""
+    store.log("archive_expired", paths)
+    return _archived_line(paths)
+
+
+def _notify_line(engine: Engine, store: Store, project: str, every_days: int) -> str:
+    """Build the review notice if due; return it (``""`` if none)."""
+    from episteme import prompting
+
+    previous = store.claim(f"notify:{project}", every_days)
+    if previous is None:
+        return ""
+    try:
+        return prompting.review_notice(engine, project)
+    except Exception:
+        store.restore(f"notify:{project}", previous)
+        return ""
+
+
 def run(engine: Engine, store: Store, project: str) -> str:
     """Run the due maintenance tasks and return the lines to show (``""`` if none)."""
-    from episteme import memory, prompting
-
     cfg = engine.vault.config.maintenance
     lines: list[str] = []
     if cfg.archive_expired:
-        previous = store.claim("archive_expired", cfg.every_days)
-        if previous is not None:
-            try:
-                paths = memory.archive_expired(engine)
-            except Exception:
-                store.restore("archive_expired", previous)
-            else:
-                if paths:
-                    store.log("archive_expired", paths)
-                    lines.append(_archived_line(paths))
-    previous_notify = store.claim(f"notify:{project}", cfg.every_days) if cfg.notify else None
-    if previous_notify is not None:
-        try:
-            lines.append(prompting.review_notice(engine, project))
-        except Exception:
-            store.restore(f"notify:{project}", previous_notify)
+        lines.append(_archive_line(engine, store, cfg.every_days))
+    if cfg.notify:
+        lines.append(_notify_line(engine, store, project, cfg.every_days))
     return "\n".join(line for line in lines if line)
 
 
