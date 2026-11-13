@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any
@@ -194,31 +195,36 @@ def _links_in(text: str, kind: str, line: int) -> list[Link]:
     out = []
     for m in WIKILINK_RE.finditer(text):
         dest, heading, block, alias = parse_wikilink(m.group(1))
-        if dest or heading or block:
+        if any((dest, heading, block)):
             out.append(Link(dest, kind, line, heading, block, alias))
     return out
 
 
+def _key_line(key: str, fm_lines: list[str]) -> int:
+    """File line of the frontmatter ``key`` (1 if it is not found)."""
+    pattern = re.compile(rf"^{re.escape(key)}\s*:")
+    for i, text in enumerate(fm_lines):
+        if pattern.match(text):
+            return i + 2  # first frontmatter line is file line 2
+    return 1
+
+
+def _walk_links(value: Any, key: str, line: int) -> Iterator[Link]:
+    """Wikilinks in a frontmatter value, descending into lists and mappings."""
+    if isinstance(value, str):
+        yield from _links_in(value, key, line)
+    elif isinstance(value, list):
+        for v in value:
+            yield from _walk_links(v, key, line)
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from _walk_links(v, key, line)
+
+
 def _property_links(fm: dict[str, Any], fm_lines: list[str]) -> list[Link]:
     links: list[Link] = []
-
-    def walk(value: Any, key: str, line: int) -> None:
-        if isinstance(value, str):
-            links.extend(_links_in(value, key, line))
-        elif isinstance(value, list):
-            for v in value:
-                walk(v, key, line)
-        elif isinstance(value, dict):
-            for v in value.values():
-                walk(v, key, line)
-
     for key, value in fm.items():
-        line = 1
-        for i, text in enumerate(fm_lines):
-            if re.match(rf"^{re.escape(key)}\s*:", text):
-                line = i + 2  # first frontmatter line is file line 2
-                break
-        walk(value, key, line)
+        links.extend(_walk_links(value, key, _key_line(key, fm_lines)))
     return links
 
 
@@ -265,11 +271,7 @@ class _Scanner:
     def _structural_line(self, i: int, line: str) -> bool:
         """Handle region markers, region content and fence openings; True if consumed."""
         marker = MARKER_RE.match(line)
-        if marker and marker.group(2) == "start" and self.region is None:
-            self.region = marker.group(1)
-            return True
-        if marker and marker.group(2) == "end" and marker.group(1) == self.region:
-            self.region = None
+        if marker and self._handle_marker(marker):
             return True
         if self.region is not None:
             self.links.extend(_body_links(line, i + 1))
@@ -277,10 +279,24 @@ class _Scanner:
         m = FENCE_RE.match(line)
         if not m:
             return False
-        self.fence = m.group(1)
+        self._open_fence(i, line, m.group(1))
+        return True
+
+    def _handle_marker(self, marker: re.Match[str]) -> bool:
+        """Open or close a region on its marker line; False if the marker changes nothing."""
+        name, kind = marker.group(1), marker.group(2)
+        if kind == "start" and self.region is None:
+            self.region = name
+            return True
+        if kind == "end" and name == self.region:
+            self.region = None
+            return True
+        return False
+
+    def _open_fence(self, i: int, line: str, fence: str) -> None:
+        self.fence = fence
         self.search_lines[i] = line
         self.prev_blank, self.in_indented = False, False
-        return True
 
     def _text_line(self, i: int, line: str) -> None:
         lineno = i + 1
@@ -296,31 +312,55 @@ class _Scanner:
             self.headings.append(Heading(len(h.group(1)), (h.group(2) or "").strip(), lineno))
         code_free = _strip_inline_code(visible)
         self.links.extend(_links_in(code_free, "body", lineno))
+        self._update_block_state(line, h is not None)
+        if not self.in_indented:
+            self._collect_tags(code_free)
+
+    def _update_block_state(self, line: str, heading_found: bool) -> None:
+        """Track indented code blocks and list items after a non-blank text line."""
         if INDENTED_RE.match(line):
             self.in_indented = (self.prev_blank and not self.in_list) or self.in_indented
         else:
             self.in_indented = False
             # A column-0 line right after a list line is a lazy continuation of the item.
-            lazy = self.in_list and not self.prev_blank and not h
+            lazy = self.in_list and not self.prev_blank and not heading_found
             self.in_list = bool(LIST_ITEM_RE.match(line)) or lazy
         self.prev_blank = False
-        if not self.in_indented:
-            self._collect_tags(code_free)
 
     def _collect_tags(self, code_free: str) -> None:
         no_links = WIKILINK_RE.sub(" ", code_free)
         for t in TAG_RE.findall(no_links):
             tag = normalize_tag(t)
-            if tag and not tag.replace("/", "").isdigit() and not is_hex_color(tag):
+            if _is_real_tag(tag):
                 self.body_tags.append(tag)
+
+
+def _is_real_tag(tag: str) -> bool:
+    """False for empty, numeric-only (``#12``, ``#1/2``) and hex-color tags."""
+    return bool(tag) and not tag.replace("/", "").isdigit() and not is_hex_color(tag)
+
+
+def _split_lines(text: str) -> list[str]:
+    """Split text into lines, normalizing line endings and dropping the trailing empty one."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+def _note_title(fm: dict[str, Any], headings: list[Heading], rel: str) -> str:
+    """Frontmatter title, else the first level-1 heading, else the file name."""
+    title = fm.get("title")
+    if not (isinstance(title, str) and title.strip()):
+        title = next((h.text for h in headings if h.level == 1 and h.text), None)
+    if title is None:
+        title = PurePosixPath(rel).name.removesuffix(".md")
+    return title.strip()
 
 
 def parse(text: str, rel: str) -> ParsedNote:
     """Parse a note. Never raises on bad YAML: the note is flagged instead."""
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    lines = text.split("\n")
-    if lines and lines[-1] == "":
-        lines.pop()
+    lines = _split_lines(text)
     raw_fm, fm_end = split_frontmatter(lines)
     fm, fm_valid, fm_error = load_frontmatter(raw_fm)
 
@@ -333,11 +373,6 @@ def parse(text: str, rel: str) -> ParsedNote:
     headings = scanner.headings
 
     tags = expand_tags(frontmatter_tags(fm) + scanner.body_tags)
-    title = fm.get("title") if isinstance(fm.get("title"), str) and fm["title"].strip() else None
-    if title is None:
-        title = next((h.text for h in headings if h.level == 1 and h.text), None)
-    if title is None:
-        title = PurePosixPath(rel).name.removesuffix(".md")
     return ParsedNote(
         frontmatter=fm,
         fm_valid=fm_valid,
@@ -345,7 +380,7 @@ def parse(text: str, rel: str) -> ParsedNote:
         fm_end=fm_end,
         lines=lines,
         search_lines=scanner.search_lines,
-        title=title.strip(),
+        title=_note_title(fm, headings, rel),
         headings=headings,
         tags=tags,
         links=scanner.links,
