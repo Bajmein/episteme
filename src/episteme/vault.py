@@ -317,7 +317,8 @@ class Vault:
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
                 fh.write(text)
         except BaseException:
-            os.unlink(tmp)
+            if os.path.exists(tmp):
+                os.unlink(tmp)
             raise
         return path, tmp
 
