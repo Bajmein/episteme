@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Conectar un proyecto a episteme
 
-episteme (repo privado `Bajmein/episteme`) sirve un vault Markdown, por defecto el global `~/.episteme` (`%USERPROFILE%\.episteme` en Windows), como documentación y memoria. Toda interacción pasa por sus 10 tools MCP; no hay CLI. El uso de cada tool está en el `README.md` del repo.
+episteme (repo privado `Bajmein/episteme`) sirve un vault Markdown, por defecto el global `~/.episteme` (`%USERPROFILE%\.episteme` en Windows), como documentación y memoria. Toda interacción pasa por sus 10 tools MCP; no hay CLI. El uso de cada tool está en `docs/tools.md` del repo.
 
 Pide a la persona el nombre del proyecto (`<p>`, p. ej. `fabrik`). Trabaja desde la raíz del proyecto.
 
@@ -153,7 +153,7 @@ Al empezar la convivencia, crea un recordatorio con `remember(type="reminder", p
 
 # Actualizar episteme
 
-En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1 (con el scope y el lanzador con que se registró: `--scope project` si está en `.mcp.json`). La primera ejecución descarga; después tira de la caché de uv. Después, haz la comprobación de configuración del paso 5 en cada proyecto: los hooks o permisos nuevos de la skill no llegan solos. Para actualizar esta skill, `git pull` en el clone del que se instaló (ver «La skill episteme-setup» en el `README.md`).
+En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1 (con el scope y el lanzador con que se registró: `--scope project` si está en `.mcp.json`). La primera ejecución descarga; después tira de la caché de uv. Después, haz la comprobación de configuración del paso 5 en cada proyecto: los hooks o permisos nuevos de la skill no llegan solos. Para actualizar esta skill, `git pull` en el clone del que se instaló (ver «La skill episteme-setup» en `docs/instalacion.md`).
 
 # Publicar una versión de episteme (mantenedor)
 

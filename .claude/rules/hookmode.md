@@ -18,4 +18,4 @@ Invariantes:
 - **Nunca** se devuelve `decision`, `permissionDecision` ni `continue: false`. `checkpoint` en `PreCompact` no bloquea jamás la compactación, y `constraints` avisa sin bloquear: si el servidor no está conectado, el hook falla sin bloquear y la sesión sigue.
 - `checkpoint` es la única lectura fuera del vault y se limita a `state_glob` resuelto contra `project_dir`.
 
-El contrato de `mcp_tool` es reciente. Si Claude Code cambia la sustitución de variables o el tratamiento de la salida, el arreglo va aquí y en el bloque de hooks del README, y en ningún otro sitio.
+El contrato de `mcp_tool` es reciente. Si Claude Code cambia la sustitución de variables o el tratamiento de la salida, el arreglo va aquí y en el bloque de hooks de `docs/hooks.md`, y en ningún otro sitio.
