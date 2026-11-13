@@ -166,8 +166,9 @@ def save(engine: Engine, project_dir: str | None, project: str | None) -> dict[s
         "valid_until": now + dt.timedelta(days=VALID_DAYS),
         "helpful": 0,
         "task_title": title,
-        "worktree": _project_dir(project_dir).as_posix(),
     }
+    if project_dir:  # without it the base is the server's cwd, which says nothing of the session
+        meta["worktree"] = _project_dir(project_dir).as_posix()
     for key, value in fm.items():
         if key not in meta:
             meta[key] = value
@@ -212,9 +213,18 @@ def _saved_result(engine: Engine, row: Any) -> dict[str, Any]:
     }
 
 
-def _archive_stale(engine: Engine, project: str, active_titles: set[str]) -> None:
-    """Archive the saved checkpoints of tasks that no longer have an active state."""
+def _archive_stale(
+    engine: Engine, project: str, active_titles: set[str], project_dir: str | None = None
+) -> None:
+    """Archive the saved checkpoints of tasks that no longer have an active state.
+
+    Only those of this worktree (or without the ``worktree`` key): another worktree's
+    checkpoints are not this state's to judge.
+    """
+    here = os.path.normcase(_project_dir(project_dir).as_posix())
     for row in _saved(engine, project):
+        if not _same_worktree(engine, row, here):
+            continue
         title = engine.index.props(row["path"]).get("task_title") or row["title"]
         if title not in active_titles:
             nf = NoteFile(engine, row["path"])
@@ -231,7 +241,9 @@ def restore(
     """Live ``estado.md`` first (branch's change, else newest active), saved checkpoint after.
 
     With ``task_title`` it resumes that task instead. Without ``project_dir`` only saved
-    checkpoints are looked at.
+    checkpoints are looked at. With ``project_dir`` the saved ones are limited to that
+    worktree (checkpoints saved before the ``worktree`` key match any); a saved checkpoint's
+    content starts with a notice that it is not the live state.
     """
     project = engine.need_project(project)
     states = active_states(engine, project_dir) if project_dir else []
@@ -243,7 +255,7 @@ def restore(
         chosen = _pick(states, project_dir)
         if chosen is not None:
             # A saved checkpoint of a task that is no longer active must not come back later.
-            _archive_stale(engine, project, {_title(*s) for s in states})
+            _archive_stale(engine, project, {_title(*s) for s in states}, project_dir)
     if chosen is not None:
         path, note = chosen
         title, body = _render(path, note)

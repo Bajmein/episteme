@@ -11,7 +11,7 @@ CONTEXT_EVENTS = ("UserPromptSubmit", "SessionStart", "PreToolUse", "PostToolUse
 SILENT_EVENTS = ("PreCompact",)
 EVENTS = CONTEXT_EVENTS + SILENT_EVENTS
 CAP = 10_000
-CUT_MARK = "\n[episteme: output cut at 10,000 characters]"
+CUT_MARK = f"\n[episteme: output cut at {CAP:,} characters]"
 
 
 def check(event: str | None) -> None:

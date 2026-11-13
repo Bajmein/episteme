@@ -84,3 +84,17 @@ async def test_hook_cut_mark_end_to_end(vault: Path, project_dir: Path) -> None:
         )
     ctx = json.loads(hook[1])["hookSpecificOutput"]["additionalContext"]
     assert hook[0] is False and len(ctx) <= CAP and ctx.endswith(CUT_MARK)
+
+
+async def test_other_worktree_state_does_not_archive_checkpoint(
+    vault: Path, project_dir: Path, tmp_path: Path
+) -> None:
+    other = _second_project(tmp_path)
+    state = other / ".fabrik/core/001-demo/estado.md"
+    state.write_text(state.read_text().replace("001 · demo", "009 · otra"))
+    async with mcp_client(vault) as c:
+        saved = await c.ok("checkpoint", action="save", project_dir=str(project_dir))
+        res = await c.ok("checkpoint", action="restore", project_dir=str(other))
+        assert res["source"] == "state"
+        res = await c.ok("checkpoint", action="restore")
+        assert res["found"] is True and res["path"] == saved["path"]
