@@ -23,16 +23,18 @@ LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 # ``%% nav:start %%`` … ``%% nav:end %%``: the whole block is treated as a comment.
 MARKER_RE = re.compile(r"^\s*%%\s*([\w-]+):(start|end)\s*%%\s*$")
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s")
+SENTENCE_LIMIT = 160
+SLUG_LIMIT = 60
 
 
-@dataclass
+@dataclass(frozen=True)
 class Heading:
     level: int
     text: str
     line: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class Link:
     target: str  # destination as written, without heading or alias ("" = same note)
     kind: str  # "body" or the frontmatter key
@@ -42,7 +44,7 @@ class Link:
     alias: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class ParsedNote:
     frontmatter: dict[str, Any]
     fm_valid: bool
@@ -227,6 +229,92 @@ def is_hex_color(tag: str) -> bool:
     return any(c.isdigit() for c in tag) or len(set(tag.lower())) == 1
 
 
+def _body_links(text: str, lineno: int) -> list[Link]:
+    """Wikilinks of ``text`` outside inline code, as body links."""
+    return _links_in(_strip_inline_code(text), "body", lineno)
+
+
+@dataclass
+class _Scanner:
+    """Walks the body line by line, tracking fences, comments, regions and code blocks."""
+
+    search_lines: list[str]
+    links: list[Link]
+    headings: list[Heading] = field(default_factory=list)
+    body_tags: list[str] = field(default_factory=list)
+    fence: str | None = None
+    in_comment: bool = False
+    in_indented: bool = False  # inside an indented code block (not a list continuation)
+    prev_blank: bool = True
+    in_list: bool = False
+    region: str | None = None  # name of an open ``%% name:start %%`` block
+
+    def feed(self, i: int, line: str) -> None:
+        if self.fence is not None:
+            self._fenced_line(i, line, self.fence)
+        elif self.in_comment or not self._structural_line(i, line):
+            self._text_line(i, line)
+
+    def _fenced_line(self, i: int, line: str, fence: str) -> None:
+        self.prev_blank, self.in_indented = False, False
+        stripped = line.strip()
+        if stripped.startswith(fence[0] * len(fence)) and set(stripped) == {fence[0]}:
+            self.fence = None
+        self.search_lines[i] = line
+
+    def _structural_line(self, i: int, line: str) -> bool:
+        """Handle region markers, region content and fence openings; True if consumed."""
+        marker = MARKER_RE.match(line)
+        if marker and marker.group(2) == "start" and self.region is None:
+            self.region = marker.group(1)
+            return True
+        if marker and marker.group(2) == "end" and marker.group(1) == self.region:
+            self.region = None
+            return True
+        if self.region is not None:
+            self.links.extend(_body_links(line, i + 1))
+            return True
+        m = FENCE_RE.match(line)
+        if not m:
+            return False
+        self.fence = m.group(1)
+        self.search_lines[i] = line
+        self.prev_blank, self.in_indented = False, False
+        return True
+
+    def _text_line(self, i: int, line: str) -> None:
+        lineno = i + 1
+        visible, hidden, self.in_comment = _split_comments(line, self.in_comment)
+        self.search_lines[i] = visible
+        if hidden:
+            self.links.extend(_body_links(hidden, lineno))
+        if not visible.strip():
+            self.prev_blank = True
+            return
+        h = HEADING_RE.match(visible)
+        if h:
+            self.headings.append(Heading(len(h.group(1)), (h.group(2) or "").strip(), lineno))
+        code_free = _strip_inline_code(visible)
+        self.links.extend(_links_in(code_free, "body", lineno))
+        if INDENTED_RE.match(line):
+            self.in_indented = (self.prev_blank and not self.in_list) or self.in_indented
+        else:
+            self.in_indented = False
+            # A column-0 line right after a list line is a lazy continuation of the item.
+            lazy = self.in_list and not self.prev_blank and not h
+            self.in_list = bool(LIST_ITEM_RE.match(line)) or lazy
+        self.prev_blank = False
+        if not self.in_indented:
+            self._collect_tags(code_free)
+
+    def _collect_tags(self, code_free: str) -> None:
+        no_links = WIKILINK_RE.sub(" ", code_free)
+        for t in TAG_RE.findall(no_links):
+            tag = normalize_tag(t)
+            if tag and not tag.replace("/", "").isdigit() and not is_hex_color(tag):
+                self.body_tags.append(tag)
+
+
 def parse(text: str, rel: str) -> ParsedNote:
     """Parse a note. Never raises on bad YAML: the note is flagged instead."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -236,74 +324,15 @@ def parse(text: str, rel: str) -> ParsedNote:
     raw_fm, fm_end = split_frontmatter(lines)
     fm, fm_valid, fm_error = load_frontmatter(raw_fm)
 
-    search_lines = [""] * len(lines)
-    headings: list[Heading] = []
-    body_tags: list[str] = []
-    links: list[Link] = _property_links(fm, lines[1 : max(fm_end - 1, 1)]) if fm else []
-
-    fence: str | None = None
-    in_comment = False
-    in_indented = False  # inside an indented code block (not a list continuation)
-    prev_blank = True
-    in_list = False
-    region: str | None = None  # name of an open ``%% name:start %%`` block
+    scanner = _Scanner(
+        search_lines=[""] * len(lines),
+        links=_property_links(fm, lines[1 : max(fm_end - 1, 1)]) if fm else [],
+    )
     for i in range(fm_end, len(lines)):
-        line = lines[i]
-        lineno = i + 1
-        if fence is None and not in_comment:
-            marker = MARKER_RE.match(line)
-            if marker and marker.group(2) == "start" and region is None:
-                region = marker.group(1)
-                continue
-            if marker and marker.group(2) == "end" and marker.group(1) == region:
-                region = None
-                continue
-            if region is not None:
-                links.extend(_links_in(_strip_inline_code(line), "body", lineno))
-                continue
-            m = FENCE_RE.match(line)
-            if m:
-                fence = m.group(1)
-                search_lines[i] = line
-                prev_blank, in_indented = False, False
-                continue
-        elif fence is not None:
-            prev_blank, in_indented = False, False
-            stripped = line.strip()
-            if stripped.startswith(fence[0] * len(fence)) and set(stripped) == {fence[0]}:
-                fence = None
-            search_lines[i] = line
-            continue
+        scanner.feed(i, lines[i])
+    headings = scanner.headings
 
-        visible, hidden, in_comment = _split_comments(line, in_comment)
-        search_lines[i] = visible
-        if hidden:
-            links.extend(_links_in(_strip_inline_code(hidden), "body", lineno))
-        if not visible.strip():
-            prev_blank = True
-            continue
-        h = HEADING_RE.match(visible)
-        if h:
-            headings.append(Heading(len(h.group(1)), (h.group(2) or "").strip(), lineno))
-        code_free = _strip_inline_code(visible)
-        links.extend(_links_in(code_free, "body", lineno))
-        if INDENTED_RE.match(line):
-            in_indented = (prev_blank and not in_list) or in_indented
-        else:
-            in_indented = False
-            # A column-0 line right after a list line is a lazy continuation of the item.
-            lazy = in_list and not prev_blank and not h
-            in_list = bool(LIST_ITEM_RE.match(line)) or lazy
-        prev_blank = False
-        if in_indented:
-            continue
-        no_links = WIKILINK_RE.sub(" ", code_free)
-        for t in TAG_RE.findall(no_links):
-            tag = normalize_tag(t)
-            if tag and not tag.replace("/", "").isdigit() and not is_hex_color(tag):
-                body_tags.append(tag)
-
-    tags = expand_tags(frontmatter_tags(fm) + body_tags)
+    tags = expand_tags(frontmatter_tags(fm) + scanner.body_tags)
     title = fm.get("title") if isinstance(fm.get("title"), str) and fm["title"].strip() else None
     if title is None:
         title = next((h.text for h in headings if h.level == 1 and h.text), None)
@@ -315,11 +344,11 @@ def parse(text: str, rel: str) -> ParsedNote:
         fm_error=fm_error,
         fm_end=fm_end,
         lines=lines,
-        search_lines=search_lines,
+        search_lines=scanner.search_lines,
         title=title.strip(),
         headings=headings,
         tags=tags,
-        links=links,
+        links=scanner.links,
     )
 
 
@@ -332,17 +361,21 @@ def normalize_heading(text: str) -> str:
     return " ".join(text.split()).casefold()
 
 
+def section_end(note: ParsedNote, idx: int) -> int:
+    """Last 1-based line of the section of ``note.headings[idx]``."""
+    h = note.headings[idx]
+    for nxt in note.headings[idx + 1 :]:
+        if nxt.level <= h.level:
+            return nxt.line - 1
+    return len(note.lines)
+
+
 def find_section(note: ParsedNote, heading: str) -> tuple[int, int] | None:
     """0-based [start, end) file-line range of ``heading``'s section."""
     want = normalize_heading(heading.lstrip("#"))
     for idx, h in enumerate(note.headings):
         if normalize_heading(h.text) == want:
-            end = len(note.lines)
-            for nxt in note.headings[idx + 1 :]:
-                if nxt.level <= h.level:
-                    end = nxt.line - 1
-                    break
-            return h.line - 1, end
+            return h.line - 1, section_end(note, idx)
     return None
 
 
@@ -400,7 +433,7 @@ def body_without_title(body: str) -> str:
     return "\n".join(lines).strip()
 
 
-def first_sentence(body: str, limit: int = 160) -> str:
+def first_sentence(body: str, limit: int = SENTENCE_LIMIT) -> str:
     """First sentence of the body (after the title), at most ``limit`` characters."""
     text = body_without_title(body)
     paragraph = ""
@@ -429,7 +462,7 @@ def clip_at_newline(text: str, limit: int) -> str:
     return text[: cut if cut > 0 else limit]
 
 
-def slugify(text: str, limit: int = 60) -> str:
+def slugify(text: str, limit: int = SLUG_LIMIT) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", fold(text)).strip("-")
     slug = slug[:limit].strip("-")
     return slug or "note"
