@@ -1238,6 +1238,9 @@ def task_context(
 
 STALE_DAYS = 90
 REVIEW_SIMILAR = 0.4  # wider than remember's 0.5: review only reports
+# Two decisions that only share a hub file (server.py) are not about the same thing:
+# below this token similarity the pair is noise, not a possible contradiction.
+REVIEW_CONTRADICTION = 0.15
 
 
 def expired_memories(rows: list[Any], iso: str) -> list[Any]:
@@ -1361,15 +1364,14 @@ def review(
                 reason = f"both cover files: {', '.join(sorted(files_a & files_b))}"
             elif len(tags_a & tags_b) >= 2:
                 reason = f"share tags: {', '.join(sorted(tags_a & tags_b))}"
-            if reason:
-                contradictions.append(
-                    {
-                        "a": a["path"],
-                        "b": b["path"],
-                        "reason": reason,
-                        "similarity": round(similarity(toks[a["path"]], toks[b["path"]]), 3),
-                    }
-                )
+            if not reason:
+                continue
+            sim = similarity(toks[a["path"]], toks[b["path"]])
+            if sim < REVIEW_CONTRADICTION:
+                continue
+            contradictions.append(
+                {"a": a["path"], "b": b["path"], "reason": reason, "similarity": round(sim, 3)}
+            )
 
     similar = _similar_groups(
         [r for r in active if r["type"] not in ("session", "reminder")], toks
