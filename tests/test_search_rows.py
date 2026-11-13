@@ -143,3 +143,39 @@ async def test_partial_matches(vault):
 
         res = await c.ok("search", query="serena")
         assert "partial" not in res
+
+
+async def test_match_any(vault):
+    async with mcp_client(vault, today="2026-10-22") as c:
+        res = await c.ok("search", query="serena pyright", match="any")
+        assert res["total"] == 2
+        assert "partial" not in res and "match" not in res and "note" not in res
+        for row in res["results"]:
+            assert row["matched"] and set(row["matched"]) <= {"serena", "pyright"}
+        first = res["results"][0]
+        assert first["path"] == "memory/fabrik/decisions/2026-10-02-serena-ty.md"
+        assert first["matched"] == ["serena", "pyright"]
+
+        res = await c.ok("search", query="serena pyright", match="any", facets=True)
+        assert sum(res["facets"]["zone"].values()) == res["total"] == 2
+
+        res = await c.ok("search", query="serena", match="all")
+        assert all("matched" not in r for r in res["results"])
+        res = await c.ok("search", zone="memory", match="any")
+        assert res["total"] == 5 and all("matched" not in r for r in res["results"])
+
+        err = await c.error("search", query="serena", match="bogus")
+        assert err.startswith("invalid_argument: match must be")
+
+
+async def test_matched_in_fallback_and_partial_rows(vault):
+    async with mcp_client(vault, today="2026-10-22") as c:
+        res = await c.ok("search", query="serena PreToolUse")
+        assert res["match"] == "or"
+        for row in res["results"]:
+            assert row["matched"] and set(row["matched"]) <= {"serena", "pretooluse"}
+
+        res = await c.ok("search", query="serena pyright")
+        assert all("matched" not in r for r in res["results"])
+        for row in res["partial"]:
+            assert row["matched"] and set(row["matched"]) <= {"serena", "pyright"}

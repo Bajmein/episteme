@@ -6,7 +6,7 @@ Guía para Claude Code en este repo.
 
 `episteme` es un servidor MCP en Python que sirve un vault Markdown compatible con Obsidian (documentación y memoria de proyectos). El uso, los argumentos, los 10 tools y el bloque de hooks están en `README.md`; el contrato de cada tool, en sus docstrings.
 
-- La interfaz es **solo tools MCP**: no hay CLI para el agente. Los scripts son de la persona, en local: `scripts/migrate_omega.py` (una vez) y `scripts/measure_recall.py` (solo lectura, para decidir sobre lematización o trigramas).
+- La interfaz es **solo tools MCP**: no hay CLI para el agente. Los scripts son de la persona, en local: `scripts/migrate_omega.py` (una vez), `scripts/measure_recall.py` (solo lectura, para decidir sobre lematización o trigramas) y `scripts/bench_calls.py` (solo lectura sobre una copia del vault; mide llamadas por ráfaga).
 - `skills/episteme-setup/` es la skill de usuario que conecta un proyecto (registro con `claude mcp add`, permisos, hooks y `CLAUDE.md`), en Linux, macOS y Windows. Se instala en `~/.claude/skills/` enlazada a un clone (ver «La skill `episteme-setup`» en `README.md`). Si cambian la instalación, los hooks, los permisos o los tools, actualiza a la vez `README.md`, `SKILL.md` y su `settings.json`.
 - Alcance cerrado: no hay tools para mover, renombrar, borrar o crear notas fuera de `memory/`, ni sync, web, HTTP o embeddings.
 - Los invariantes por módulo están en `.claude/rules/` y se cargan al tocar esos archivos. El porqué de las decisiones está en las memorias de episteme (`search` con `project="episteme"`).

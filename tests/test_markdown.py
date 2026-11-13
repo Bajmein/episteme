@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import unicodedata
 
 from episteme.markdown import (
     dump_frontmatter,
     first_sentence,
+    fold_with_map,
     parse,
     parse_wikilink,
     section_text,
@@ -149,3 +151,31 @@ def test_frontmatter_is_one_key_per_line() -> None:
     assert text == "---\ntype: reminder\ndue: 2026-10-27\n---\n"
     text = dump_frontmatter({"tags": ["a/b", "c"], "related": ["[[x]]"], "m": {"k": 1}})
     assert text == "---\ntags: [a/b, c]\nrelated: ['[[x]]']\nm:\n  k: 1\n---\n"
+
+
+def test_fold_with_map_matches_the_per_character_fold() -> None:
+    # The ASCII fast path must give what folding one character at a time gives.
+    def reference(text: str) -> tuple[str, list[int]]:
+        out, index = [], []
+        for i, ch in enumerate(text):
+            for c in unicodedata.normalize("NFKD", ch):
+                if not unicodedata.combining(c):
+                    for f in c.casefold():
+                        out.append(f)
+                        index.append(i)
+        return "".join(out), index
+
+    samples = [
+        "",
+        "Plain ASCII\nText_1",
+        "Añadió la decisión: ¿CÓMO?",
+        "Straße ﬁn İstanbul ǅ ½",
+        "e\u0301 combining, then\ttab",
+        "\u0301\u0301",
+        "emoji 🗺️ y … fin",
+        "áéíóú" * 3 + "x",
+    ]
+    for text in samples:
+        assert fold_with_map(text) == reference(text), text
+    assert fold_with_map("Él SÍ") == ("el si", [0, 1, 2, 3, 4])
+    assert fold_with_map("aßb") == ("assb", [0, 1, 1, 2])

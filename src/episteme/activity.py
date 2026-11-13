@@ -17,8 +17,8 @@ RETENTION_DAYS = 180
 MAX_PATHS = 30
 MAX_STRING = 200
 ARG_KEYS = (
-    "mode", "action", "type", "path", "note", "file", "relative_path", "query",
-    "tags", "status", "zone", "heading", "lines", "limit", "title", "task",
+    "mode", "action", "type", "path", "note", "notes", "file", "relative_path", "query",
+    "tags", "status", "zone", "heading", "lines", "limit", "match", "title", "task",
 )  # fmt: skip
 _MD_IN_PARENS = re.compile(r"\(([^()\s]+\.md)\)")
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from episteme.index import Index, query_terms
+from episteme.index import Index, locate, query_terms
 from episteme.vault import Vault
 
 
@@ -242,3 +242,31 @@ def test_welcomed_old_rows_are_pruned(vault: Path) -> None:
     ids = {r[0] for r in ix.conn.execute("select session_id from welcomed")}
     assert ids == {"new"}
     assert ix.mark_welcomed("new") is False
+
+
+def test_locate_single_words_scans_line_by_line() -> None:
+    text = "Título\n\nLa migración del índice quedó lista\nmás texto\n"
+    line, snippet = locate(text, query_terms("migracion indice"))
+    assert line == 3
+    assert "**migración**" in snippet and "**índice**" in snippet
+
+
+def test_locate_phrase_across_a_line_break() -> None:
+    line, snippet = locate("alfa\nbeta", query_terms('"alfa beta"'))
+    assert line == 1
+    assert snippet == "**alfa beta**"
+
+
+def test_locate_without_a_match_returns_the_first_non_empty_line() -> None:
+    assert locate("\n\nPrimera línea\notra", query_terms("zzz")) == (3, "Primera línea otra")
+    assert locate("uno\ndos", []) == (1, "uno dos")
+
+
+def test_search_without_snippets_returns_the_same_notes(vault: Path) -> None:
+    ix = _index(vault)
+    full, total = ix.search("configuracion")
+    bare, bare_total = ix.search("configuracion", snippets=False)
+    assert total == bare_total > 0
+    assert [h.path for h in bare] == [h.path for h in full]
+    assert [h.score for h in bare] == [h.score for h in full]
+    assert all(h.snippet == "" and h.line == 1 for h in bare)

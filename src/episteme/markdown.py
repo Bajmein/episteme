@@ -362,12 +362,24 @@ def fold(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
 
 
+_FOLD_CHUNK_RE = re.compile(r"[\x00-\x7f]+|[^\x00-\x7f]")
+
+
 def fold_with_map(text: str) -> tuple[str, list[int]]:
     """``fold`` plus, for every folded character, the index of its source character."""
     out: list[str] = []
     index: list[int] = []
-    for i, ch in enumerate(text):
-        for c in unicodedata.normalize("NFKD", ch):
+    # ASCII folds one character to one, so a whole run is folded at once; only the other
+    # characters need NFKD one by one. A note body is mostly ASCII, and `search` folds one
+    # per hit.
+    for m in _FOLD_CHUNK_RE.finditer(text):
+        chunk = m.group()
+        i = m.start()
+        if chunk.isascii():
+            out.append(chunk.casefold())
+            index.extend(range(i, m.end()))
+            continue
+        for c in unicodedata.normalize("NFKD", chunk):
             if unicodedata.combining(c):
                 continue
             for f in c.casefold():

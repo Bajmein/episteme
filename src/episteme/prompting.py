@@ -107,13 +107,21 @@ def recall(
     limit = max(3, total // 4)
     counted = []
     for t in terms:
-        _, df = engine.index.search(t, mode=MEMORY, project=scope, status="active", limit=1)
+        _, df = engine.index.search(
+            t, mode=MEMORY, project=scope, status="active", limit=1, snippets=False
+        )
         if 1 <= df <= limit:
             counted.append(t)
     if not counted:
         return "", []
     hits, _ = engine.index.search(
-        " ".join(counted), any_term=True, mode=MEMORY, project=scope, status="active", limit=30
+        " ".join(counted),
+        any_term=True,
+        mode=MEMORY,
+        project=scope,
+        status="active",
+        limit=30,
+        snippets=False,
     )
     iso = today().isoformat()
     ranked = []

@@ -601,6 +601,24 @@ class Index:
             return None
         return row["text"]
 
+    def matched_terms(self, query: str, paths: list[str]) -> dict[str, list[str]]:
+        """For each path, the terms of ``query`` its note matches in the full-text index."""
+        out: dict[str, list[str]] = {p: [] for p in paths}
+        if not paths:
+            return out
+        marks = ",".join("?" * len(paths))
+        for term in query_terms(query):
+            label = " ".join(term)
+            rows = self.conn.execute(
+                "select n.path from fts join notes n on n.id = fts.rowid "  # nosec B608
+                f"where fts match ? and n.path in ({marks})",
+                [_fts_term(term), *paths],
+            )
+            for r in rows:
+                if label not in out[r["path"]]:
+                    out[r["path"]].append(label)
+        return out
+
     def superseded_by(self, path: str) -> str | None:
         row = self.conn.execute(
             "select src from links where kind = 'supersedes' and dst_path = ? "
@@ -639,11 +657,14 @@ class Index:
         mode: str | None = None,
         limit: int = 20,
         zone: str | None = None,
+        snippets: bool = True,
     ) -> tuple[list[Hit], int]:
         """Full-text search. Returns the hits (after ``limit``) and the total before it.
 
         Without ``query`` the filters alone select the notes (ordered by priority, then path).
         ``term*`` is a prefix match; ``drop_stopwords`` ignores Spanish function words.
+        ``snippets=False`` skips locating the match: every hit has ``line`` 1 and no snippet,
+        for callers that only need the paths.
         """
         built = self._where(
             query,
@@ -670,15 +691,16 @@ class Index:
             f"select count(*) {source} where {clause}",  # nosec B608
             params,
         ).fetchone()[0]
+        text_col = "n.search_text, " if snippets else ""
         rows = self.conn.execute(
-            "select n.path, n.title, n.search_text, n.zone, n.type, n.status, n.project, "  # nosec B608
+            f"select n.path, n.title, {text_col}n.zone, n.type, n.status, n.project, "  # nosec B608
             f"n.created, n.priority, {cols} {source} "
             f"where {clause} {order} limit ?",
             [*params, limit],
         ).fetchall()
         hits = []
         for r in rows:
-            line, snippet = locate(r["search_text"], terms)
+            line, snippet = locate(r["search_text"], terms) if snippets else (1, "")
             hits.append(
                 Hit(
                     r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0,
@@ -742,22 +764,47 @@ def _term_regex(term: list[str]) -> re.Pattern[str]:
     return re.compile(rf"(?<![^\W_]){body}" + ("" if prefix else r"(?![^\W_])"))
 
 
-def locate(text: str, terms: list[list[str]], width: int = 200) -> tuple[int, str]:
-    """1-based line of the first match in ``text`` and a snippet with ``**match**``."""
+def _first_match(
+    text: str, terms: list[list[str]], patterns: list[re.Pattern[str]]
+) -> tuple[int, int] | None:
+    """Source offsets [start, end) of the earliest match of any pattern."""
+    if not patterns:
+        return None
+    if all(len(t) == 1 for t in terms):
+        # A single-token term cannot span lines: fold line by line and stop at the first hit.
+        pos = 0
+        for raw in text.split("\n"):
+            folded, index = fold_with_map(raw)
+            best = None
+            for pat in patterns:
+                m = pat.search(folded)
+                if m and (best is None or m.start() < best[0]):
+                    best = (m.start(), m.end())
+            if best is not None:
+                return pos + index[best[0]], pos + index[best[1] - 1] + 1
+            pos += len(raw) + 1
+        return None
     folded, index = fold_with_map(text)
-    patterns = [_term_regex(t) for t in terms]
     first = None
     for pat in patterns:
         m = pat.search(folded)
         if m and (first is None or m.start() < first[0]):
             first = (m.start(), m.end())
     if first is None:
+        return None
+    return index[first[0]], index[first[1] - 1] + 1
+
+
+def locate(text: str, terms: list[list[str]], width: int = 200) -> tuple[int, str]:
+    """1-based line of the first match in ``text`` and a snippet with ``**match**``."""
+    patterns = [_term_regex(t) for t in terms]
+    span = _first_match(text, terms, patterns)
+    if span is None:
         lines = text.split("\n")
         start_line = next((i for i, ln in enumerate(lines) if ln.strip()), 0)
         snippet = " ".join(" ".join(lines[start_line:]).split())[:width]
         return start_line + 1, snippet
-    start = index[first[0]]
-    end = index[first[1] - 1] + 1
+    start, end = span
     line = text.count("\n", 0, start) + 1
     lo = max(0, start - (width - (end - start)) // 3)
     hi = min(len(text), lo + width)
