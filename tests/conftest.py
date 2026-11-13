@@ -75,7 +75,9 @@ async def mcp_client(
         env={"EPISTEME_TODAY": today, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
     )
     with open(os.devnull, "w") as errlog:
-        async with stdio_client(params, errlog=errlog) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                yield Client(session)
+        async with (
+            stdio_client(params, errlog=errlog) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            yield Client(session)

@@ -133,13 +133,13 @@ class Activity:
                     1 if ok else 0,
                 ),
             )
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     def close(self) -> None:
         if self._conn is not None:
             try:
                 self._conn.close()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
             self._conn = None

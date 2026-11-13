@@ -108,13 +108,6 @@ def _pick(
     return (mine or states)[0]
 
 
-def active_state(engine: Engine, project_dir: str | None) -> Path | None:
-    """The active ``estado.md`` of the branch's change (``<type>/<ID>-<change>``) or, if the
-    branch is not a change's, the most recent active one; read only through ``state_glob``."""
-    picked = _pick(active_states(engine, project_dir), project_dir)
-    return picked[0] if picked else None
-
-
 def flow_line(path: Path, note: ParsedNote) -> str:
     """One line with the change, its ``etapa`` and the progress of the sibling ``tasks.md``."""
     change = path.parent

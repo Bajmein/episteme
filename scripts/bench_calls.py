@@ -188,7 +188,8 @@ def _call(engine: Engine, tool: str, args: dict[str, Any], project: str | None) 
         )
     if "notes" in args:
         return engine.read_many(args["notes"])
-    return engine.read(args.get("note"), args.get("heading"), args.get("lines"))
+    note = args.get("note")  # a recorded call may lack it; the engine answers with its error
+    return engine.read(note, args.get("heading"), args.get("lines"))  # ty: ignore[invalid-argument-type]
 
 
 def run_calls(engine: Engine, calls: list[Call]) -> dict[str, Any]:

@@ -7,6 +7,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Cambiado
 
 - `review` solo marca como contradicción posible un par de decisiones o constraints con similitud de texto de 0,15 o más. Antes bastaba con compartir un archivo de `files`, y las decisiones que tocan un archivo concurrido (`server.py`) salían todas emparejadas entre sí.
+- El paquete se construye con `uv_build` en lugar de hatchling. El wheel no cambia; el sdist ya solo lleva `src/`, `README.md` y `pyproject.toml` (antes arrastraba `tests/`, `.claude/` y `.github/`).
 
 ## [0.9.0] - 2026-11-13
 

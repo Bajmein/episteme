@@ -22,7 +22,7 @@ RECALL_TERMS = 40
 MAX_SESSIONS = 50
 OVERDUE_MAX = 5
 
-WRITES = 0  # memories written in this process by agent calls (remember, revise); see server
+WRITES: int = 0  # memories written in this process by agent calls (remember, revise); see server
 
 
 @dataclass
@@ -180,7 +180,7 @@ def nudge(st: SessionState) -> str:
     if (
         st.prompts >= NUDGE_AFTER
         and st.prompts - st.nudged_at >= NUDGE_EVERY
-        and WRITES == st.baseline
+        and st.baseline == WRITES
     ):
         st.nudged_at = st.prompts
         return (
