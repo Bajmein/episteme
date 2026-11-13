@@ -43,14 +43,28 @@ def run(vault: Vault, dest: Path, keep: int, now: dt.datetime | None = None) -> 
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
-    existing = sorted(p.name for p in dest.glob(f"{PREFIX}*{SUFFIX}"))
-    if existing and existing[-1].endswith(f"-{seal}{SUFFIX}"):
+    if _unchanged(dest, seal):
         _rotate(dest, keep)
         return None
 
     stamp = (now or dt.datetime.now(dt.UTC)).strftime(STAMP_FORMAT)
     final = dest / f"{PREFIX}{stamp}-{seal}{SUFFIX}"
+    _write_archive(vault, members, dest, final)
 
+    _rotate(dest, keep)
+    return final
+
+
+def _unchanged(dest: Path, seal: str) -> bool:
+    """Whether the newest archive in ``dest`` already carries ``seal``."""
+    existing = sorted(p.name for p in dest.glob(f"{PREFIX}*{SUFFIX}"))
+    return bool(existing) and existing[-1].endswith(f"-{seal}{SUFFIX}")
+
+
+def _write_archive(
+    vault: Vault, members: list[tuple[str, os.stat_result]], dest: Path, final: Path
+) -> None:
+    """Write the members to a temp file in ``dest`` and move it to ``final``."""
     fd, tmp_name = tempfile.mkstemp(dir=dest, prefix=".tmp-", suffix=".tmp")
     os.close(fd)
     tmp = Path(tmp_name)
@@ -65,9 +79,6 @@ def run(vault: Vault, dest: Path, keep: int, now: dt.datetime | None = None) -> 
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-
-    _rotate(dest, keep)
-    return final
 
 
 def _rotate(dest: Path, keep: int) -> None:

@@ -84,7 +84,15 @@ def reachable(
     start: str, outgoing: Callable[[str], Iterable[str]], depth: int
 ) -> list[tuple[str, int]]:
     """Notes reachable from ``start`` following outgoing links, up to ``depth`` hops."""
-    seen = {start: 0}
+    seen = _bfs_distances(start, outgoing, depth)
+    return sorted(((p, d) for p, d in seen.items() if p != start), key=lambda x: (x[1], x[0]))
+
+
+def _bfs_distances(
+    start: str, outgoing: Callable[[str], Iterable[str]], depth: int
+) -> dict[str, int]:
+    """Hop distance from ``start`` to every note within ``depth`` hops, ``start`` included."""
+    seen: dict[str, int] = {start: 0}
     queue = deque([start])
     while queue:
         node = queue.popleft()
@@ -95,4 +103,4 @@ def reachable(
             if nxt not in seen:
                 seen[nxt] = dist + 1
                 queue.append(nxt)
-    return sorted(((p, d) for p, d in seen.items() if p != start), key=lambda x: (x[1], x[0]))
+    return seen
