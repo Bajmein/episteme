@@ -142,7 +142,7 @@ uv run scripts/migrate_omega.py --export "$env:TEMP\omega\omega-memories" --vaul
 - Revisa la salida del `--dry-run` con la persona y luego repite sin `--dry-run`. Es idempotente: una segunda ejecución no duplica.
 - Los tags pasan de `dominio:x` a `dominio/x`, los `checkpoint` se descartan y la prioridad sale de `omega.db` (`--omega-db`). Revisa con la persona las normas vigentes y las contradicciones que marca `review`.
 - El tipo sale tal cual de OMEGA, que guarda como `user_preference` muchas decisiones y hechos del proyecto. Repasa las `preference` migradas (`search(type="preference", project="<p>")`) y corrige el tipo con `revise(action="set", fields={"type": "decision"})`, que mueve la nota a su carpeta.
-- En `review`, dos decisiones que comparten un archivo de `files` salen como contradicción posible. Si de verdad no se contradicen, enlaza una a la otra con `related` (`revise(action="set", fields={"related": [...]})`, con los enlaces que ya tuviera más `[[otra]]`: `set` reemplaza la lista) y dejan de salir.
+- En `review`, dos decisiones que comparten un archivo de `files` y se parecen en el texto (similitud ≥ 0,15) salen como contradicción posible. Si de verdad no se contradicen, enlaza una a la otra con `related` (`revise(action="set", fields={"related": [...]})`, con los enlaces que ya tuviera más `[[otra]]`: `set` reemplaza la lista) y dejan de salir.
 
 Unas semanas en paralelo con OMEGA, comparando la bienvenida y lo que sale al tocar archivos. Después, retira del proyecto:
 - OMEGA: sus hooks (`omega.hooks.fast_hook`) en `.claude/settings.json` y `.claude/rules/omega.md`;

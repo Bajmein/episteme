@@ -79,3 +79,25 @@ async def test_contradictions_carry_similarity(vault: Path) -> None:
         mine = [x for x in out["contradictions"] if "decisions/2026-10-20-x" in x["a"] + x["b"]]
         assert mine and isinstance(mine[0]["similarity"], float)
         assert round(mine[0]["similarity"], 3) == mine[0]["similarity"]
+
+
+async def test_contradictions_need_similar_text(vault: Path) -> None:
+    """Sharing a hub file is not enough: unrelated decisions are not paired."""
+    bodies = {
+        "hub-a": ("Bienvenida en UserPromptSubmit", "El hook reenvía avisos tras compactar."),
+        "hub-b": ("Respaldo rotado del vault", "Un tar comprimido guarda las notas cada periodo."),
+    }
+    for name, (title, body) in bodies.items():
+        path = vault / f"memory/fabrik/decisions/2026-10-20-{name}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "---\ntype: decision\nproject: fabrik\npriority: 4\nstatus: active\n"
+            "created: 2026-10-20\nfiles: [src/hub.py]\n---\n"
+            f"# {title}\n\n{body}\n",
+            encoding="utf-8",
+            newline="",
+        )
+    async with mcp_client(vault, today="2026-10-22") as c:
+        out = await c.ok("review", zone="memory")
+        assert not [x for x in out["contradictions"] if "2026-10-20-hub-" in x["a"] + x["b"]]
+        assert all(x["similarity"] >= 0.15 for x in out["contradictions"])
