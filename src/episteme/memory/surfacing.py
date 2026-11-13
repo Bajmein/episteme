@@ -24,6 +24,26 @@ if TYPE_CHECKING:
     from episteme.engine import Engine
 
 
+def _file_memories(
+    engine: Engine, project: str, type_clause: str
+) -> tuple[list[Any], dict[str, list[str]]]:
+    """The project's (and ``_shared``) active, unexpired memories of the types in ``type_clause``,
+    and the ``files`` entries of every note."""
+    rows = engine.index.memories(
+        "project in (?, '_shared') and status = 'active'"
+        f" and {type_clause} and (valid_until is null or valid_until >= ?)",  # nosec B608
+        (project, today().isoformat()),
+    )
+    return rows, _files_of(engine)
+
+
+def _by_files(rows: list[Any], files: dict[str, list[str]], file: str, rel: str) -> list[Any]:
+    """The ``rows`` whose ``files`` entries match the file, by priority."""
+    return _by_priority(
+        [r for r in rows if any(file_matches(file, rel, e) for e in files.get(r["path"], []))]
+    )
+
+
 def surface(
     engine: Engine,
     file: str,
@@ -41,16 +61,10 @@ def surface(
     if target is None:
         return "", {"file": "", "memories": []}
     file, rel = target
-    rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active'"
-        " and type not in ('constraint', 'session', 'reminder')"
-        " and (valid_until is null or valid_until >= ?)",
-        (project, today().isoformat()),
+    rows, files = _file_memories(
+        engine, project, "type not in ('constraint', 'session', 'reminder')"
     )
-    files = _files_of(engine)
-    by_files = _by_priority(
-        [r for r in rows if any(file_matches(file, rel, e) for e in files.get(r["path"], []))]
-    )
+    by_files = _by_files(rows, files, file, rel)
     seen = {r["path"] for r in by_files}
     name = PurePosixPath(rel).name
     query = f'"{rel}"' + (f' "{name}"' if _name_is_unambiguous(rel, name, files) else "")
@@ -100,15 +114,8 @@ def constraints(
     if target is None:
         return "", {"file": "", "constraints": []}
     file, rel = target
-    rows = engine.index.memories(
-        "project in (?, '_shared') and status = 'active' and type = 'constraint'"
-        " and (valid_until is null or valid_until >= ?)",
-        (project, today().isoformat()),
-    )
-    files = _files_of(engine)
-    found = _by_priority(
-        [r for r in rows if any(file_matches(file, rel, e) for e in files.get(r["path"], []))]
-    )
+    rows, files = _file_memories(engine, project, "type = 'constraint'")
+    found = _by_files(rows, files, file, rel)
     items = [
         {
             "path": r["path"],

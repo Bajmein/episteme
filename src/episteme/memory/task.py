@@ -20,6 +20,51 @@ if TYPE_CHECKING:
 
 MIN_RELEVANCE = 0.25  # task context: a memory's score relative to the best hit
 LINKED_MAX = 3  # task context: memories listed under "Memorias enlazadas:"
+LINK_SEEDS = 5  # task context: listed memories whose links are followed
+NOTES_MAX = 5  # task context: most notes under "Notas relacionadas:"
+MIN_NOTE_RELEVANCE = 0.5  # task context: a note's score relative to the best note
+EXCERPT_CHARS = 300  # task context: chars of a memory's body shown
+
+
+class _Pack:
+    """The context text being built, with the character budget left."""
+
+    def __init__(self, header: str, budget: int) -> None:
+        self.parts = [header]
+        self.used = len(header)
+        self.budget = budget
+        self.entries: list[dict[str, Any]] = []
+
+    def add_memory(self, block: str, entry: dict[str, Any]) -> bool:
+        """Add ``block`` unless it does not fit (later, shorter ones may)."""
+        if self.used + len(block) + 1 > self.budget:
+            return False
+        self.parts.append(block)
+        self.used += len(block) + 1
+        self.entries.append(entry)
+        return True
+
+    def add_group(self, section: str, items: list[tuple[str, dict[str, Any]]]) -> None:
+        """List ``(line, entry)`` items under ``section`` until one does not fit."""
+        for i, (line, entry) in enumerate(items):
+            extra = len(line) + 1 + (len(section) + 1 if i == 0 else 0)
+            if self.used + extra > self.budget:
+                return
+            if i == 0:
+                self.parts.append(section)
+            self.parts.append(line)
+            self.used += extra
+            self.entries.append(entry)
+
+
+def _need(terms: list[list[str]]) -> int:
+    """How many of the ``terms`` a hit must match."""
+    return 2 if len(terms) >= 3 else 1
+
+
+def _relevance(score: float, best: float) -> float:
+    """A score relative to the best hit (1.0 when there is no positive best)."""
+    return score / best if best > 0 else 1.0
 
 
 def _matched(engine: Engine, path: str, terms: list[list[str]]) -> int:
@@ -36,30 +81,21 @@ def _matched(engine: Engine, path: str, terms: list[list[str]]) -> int:
     return max(1, sum(1 for t in terms if _term_regex(t).search(text)))
 
 
-def task_context(
-    engine: Engine, task: str, project: str | None, budget_tokens: int
-) -> tuple[str, list[dict[str, Any]]]:
-    """A context pack for ``task``: relevant memories, linked memories, then related notes.
-
-    English stopwords are dropped from ``task`` first (Spanish ones by the search). With N
-    remaining terms a hit must match ``need`` of them (2 if N >= 3, else 1). A memory is listed
-    if it is a constraint with ``files``, or if its score relative to the best hit is at least
-    ``MIN_RELEVANCE``, it matches ``need`` terms and ``0.5*relevance + 0.3*priority +
-    0.2*recency`` is at least ``MIN_CONTEXT_SCORE``. "Memorias enlazadas:" adds up to
-    ``LINKED_MAX`` active memories one ``related`` link away from the first five listed. Notes
-    need relevance >= 0.5 (relative to the best note) and ``need`` terms; their score is
-    ``0.5*relevance``; at most 5.
-    """
+def _query_terms(task: str) -> tuple[str, list[list[str]]]:
+    """The search query for ``task`` (English stopwords dropped) and its terms."""
     from episteme.index import query_terms
 
-    if budget_tokens < 1:
-        raise invalid(f"budget_tokens must be positive, got {budget_tokens}.")
-    project = engine.need_project(project)
-    now = today()
     kept = [w for w in task.split() if fold(w).strip(".,;:!?()[]\"'") not in STOPWORDS_EN]
     query = " ".join(kept) if kept else task
-    terms = query_terms(query, drop_stopwords=True)
-    need = 2 if len(terms) >= 3 else 1
+    return query, query_terms(query, drop_stopwords=True)
+
+
+def _relevant_memories(
+    engine: Engine, query: str, terms: list[list[str]], project: str
+) -> list[tuple[float, Any]]:
+    """The memories to list, as ``(score, row)``: pinned constraints first, then by score."""
+    now = today()
+    need = _need(terms)
     hits, _ = engine.index.search(
         query,
         any_term=True,
@@ -77,7 +113,7 @@ def task_context(
     files = _files_of(engine)
     for h in hits:
         row = rows[h.path]
-        relevance = h.score / hi if hi > 0 else 1.0
+        relevance = _relevance(h.score, hi)
         score = (
             0.5 * relevance
             + 0.3 * ((row["priority"] or 1) - 1) / 4
@@ -91,27 +127,15 @@ def task_context(
         ):
             scored.append((pinned, score, row))
     scored.sort(key=lambda x: (not x[0], -x[1], x[2]["path"]))
+    return [(score, row) for _, score, row in scored]
 
-    budget = budget_tokens * 4
-    header = f"episteme · contexto para: {' '.join(task.split())}"
-    parts = [header]
-    used = len(header)
-    entries: list[dict[str, Any]] = []
-    chosen: list[str] = []
-    for _, score, row in scored:
-        excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), 300)
-        block = f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']})\n  {excerpt}"
-        if used + len(block) + 1 > budget:
-            continue
-        parts.append(block)
-        used += len(block) + 1
-        entries.append({"path": row["path"], "score": round(score, 4), "kind": "memory"})
-        chosen.append(row["path"])
 
+def _linked_memories(engine: Engine, chosen: list[str], project: str) -> list[Any]:
+    """Active memories one ``related`` link away from the first ``LINK_SEEDS`` of ``chosen``."""
+    iso = today().isoformat()
     listed = set(chosen)
-    iso = now.isoformat()
     linked: list[Any] = []
-    for path in chosen[:5]:
+    for path in chosen[:LINK_SEEDS]:
         near = [x["dst_path"] for x in engine.index.outgoing(path) if x["kind"] == "related"]
         near += [x["src"] for x in engine.index.backlinks(path) if x["kind"] == "related"]
         for other in near:
@@ -128,43 +152,69 @@ def task_context(
                 continue
             listed.add(other)
             linked.append(r)
-    first = True
-    for r in linked[:LINKED_MAX]:
-        line = f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})"
-        extra = len(line) + 1 + (len("Memorias enlazadas:") + 1 if first else 0)
-        if used + extra > budget:
-            break
-        if first:
-            parts.append("Memorias enlazadas:")
-            first = False
-        parts.append(line)
-        used += extra
-        entries.append({"path": r["path"], "score": None, "kind": "linked"})
+    return linked
 
+
+def _related_notes(engine: Engine, query: str, terms: list[list[str]]) -> list[Any]:
+    """The documentation notes relevant to the query, scored; at most ``NOTES_MAX``."""
+    need = _need(terms)
     found, _ = engine.index.search(
         query, any_term=True, drop_stopwords=True, limit=50, snippets=False
     )
     found = [n for n in found if engine.vault.mode_for(n.path) != MEMORY]
-    nhi = max((n.score for n in found), default=0.0)
+    best = max((n.score for n in found), default=0.0)
     notes = []
     for n in found:
-        relevance = n.score / nhi if nhi > 0 else 1.0
-        if relevance >= 0.5 and _matched(engine, n.path, terms) >= need:
+        relevance = _relevance(n.score, best)
+        if relevance >= MIN_NOTE_RELEVANCE and _matched(engine, n.path, terms) >= need:
             n.score = round(0.5 * relevance, 4)
             notes.append(n)
-    notes = notes[:5]
-    first = True
-    for n in notes:
-        line = f"- {n.path} — {n.title}"
-        extra = len(line) + 1 + (len("Notas relacionadas:") + 1 if first else 0)
-        if used + extra > budget:
-            break
-        if first:
-            parts.append("Notas relacionadas:")
-            first = False
-        parts.append(line)
-        used += extra
-        entries.append({"path": n.path, "score": n.score, "kind": "note"})
-    if not entries:
+    return notes[:NOTES_MAX]
+
+
+def task_context(
+    engine: Engine, task: str, project: str | None, budget_tokens: int
+) -> tuple[str, list[dict[str, Any]]]:
+    """A context pack for ``task``: relevant memories, linked memories, then related notes.
+
+    English stopwords are dropped from ``task`` first (Spanish ones by the search). With N
+    remaining terms a hit must match ``need`` of them (2 if N >= 3, else 1). A memory is listed
+    if it is a constraint with ``files``, or if its score relative to the best hit is at least
+    ``MIN_RELEVANCE``, it matches ``need`` terms and ``0.5*relevance + 0.3*priority +
+    0.2*recency`` is at least ``MIN_CONTEXT_SCORE``. "Memorias enlazadas:" adds up to
+    ``LINKED_MAX`` active memories one ``related`` link away from the first five listed. Notes
+    need relevance >= 0.5 (relative to the best note) and ``need`` terms; their score is
+    ``0.5*relevance``; at most 5.
+    """
+    if budget_tokens < 1:
+        raise invalid(f"budget_tokens must be positive, got {budget_tokens}.")
+    project = engine.need_project(project)
+    query, terms = _query_terms(task)
+    pack = _Pack(f"episteme · contexto para: {' '.join(task.split())}", budget_tokens * 4)
+    chosen: list[str] = []
+    for score, row in _relevant_memories(engine, query, terms, project):
+        excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), EXCERPT_CHARS)
+        block = f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']})\n  {excerpt}"
+        entry = {"path": row["path"], "score": round(score, 4), "kind": "memory"}
+        if pack.add_memory(block, entry):
+            chosen.append(row["path"])
+    pack.add_group(
+        "Memorias enlazadas:",
+        [
+            (
+                f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})",
+                {"path": r["path"], "score": None, "kind": "linked"},
+            )
+            for r in _linked_memories(engine, chosen, project)[:LINKED_MAX]
+        ],
+    )
+    pack.add_group(
+        "Notas relacionadas:",
+        [
+            (f"- {n.path} — {n.title}", {"path": n.path, "score": n.score, "kind": "note"})
+            for n in _related_notes(engine, query, terms)
+        ],
+    )
+    if not pack.entries:
         return "", []
-    return "\n".join(parts), entries
+    return "\n".join(pack.parts), pack.entries

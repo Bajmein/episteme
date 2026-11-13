@@ -10,9 +10,85 @@ from episteme.memory.scoring import _neg_date, entry_line, welcome_score
 from episteme.vault import today
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from episteme.engine import Engine
 
+RANKED_MAX = 10  # welcome: most entries in "Memorias"
+
 WELCOME_RESERVE = 160  # welcome: minimum chars of the 4000 held back for the "no caben aquí" line
+
+
+class _Page:
+    """The welcome being built: its lines, entries and the character budget left."""
+
+    def __init__(self, header: str, budget: int, reserve: int) -> None:
+        self.lines = [header]
+        self.entries: list[dict[str, Any]] = []
+        self.budget = budget
+        self.reserve = reserve
+        self.ranked = 0
+        self.missed = {"norms": 0, "reminders": 0}
+
+    def _add(self, line: str, section: str | None, ranked_entry: bool) -> bool:
+        extra = len(line) + 1 + (len(section) + 1 if section else 0)
+        if (ranked_entry and self.ranked >= RANKED_MAX) or extra > self.budget:
+            return False
+        if section:
+            self.lines.append(section)
+        self.lines.append(line)
+        self.budget -= extra
+        self.ranked += ranked_entry
+        return True
+
+    def add_group(
+        self,
+        items: Iterable[tuple[Any, float | None]],
+        section: str,
+        kind: str,
+        line_of: Callable[[Any], str],
+        ranked: bool = False,
+    ) -> int:
+        """List ``(row, score)`` items under ``section`` until one does not fit.
+
+        Returns how many were left out.
+        """
+        items = list(items)
+        for i, (r, score) in enumerate(items):
+            if not self._add(line_of(r), None if i else section, ranked):
+                return len(items) - i
+            self.entries.append(
+                {
+                    "path": r["path"],
+                    "score": None if score is None else round(score, 4),
+                    "kind": kind,
+                }
+            )
+        return 0
+
+    def release_reserve(self) -> None:
+        """Nothing to warn about: the reserve goes back to the rest."""
+        if not any(self.missed.values()):
+            self.budget += self.reserve
+
+
+def _reminder_line(r: Any) -> str:
+    return f"- [{r['due']}] {r['title']} ({r['path']})"
+
+
+def _memory_order(scored: list[tuple[float, Any]], project: str) -> list[tuple[Any, float | None]]:
+    """The ranked memories, with the ``_shared`` ones past ``SHARED_MAX`` moved to the end."""
+    main: list[tuple[Any, float | None]] = []
+    spill: list[tuple[Any, float | None]] = []
+    shared_used = 0
+    for score, r in scored:
+        if project != "_shared" and r["project"] == "_shared":
+            if shared_used >= SHARED_MAX:
+                spill.append((r, score))
+                continue
+            shared_used += 1
+        main.append((r, score))
+    return main + spill
 
 
 def welcome_notice(project: str, norms: int, reminders: int) -> str:
@@ -25,6 +101,8 @@ def welcome_notice(project: str, norms: int, reminders: int) -> str:
         f"({' y '.join(parts)} no caben aquí: "
         f'search(project="{project}", zone="memory", type="reminder") o review)'
     )
+
+
 SHARED_MAX = 3  # welcome: most `_shared` memories listed ahead of the project's own
 
 
@@ -68,69 +146,23 @@ def welcome(
         key=lambda x: (-x[0], _neg_date(x[1]["created"]), x[1]["path"]),
     )
     header = f"episteme · memoria de {project}"
-    lines = [header]
-    entries: list[dict[str, Any]] = []
     reserve = max(WELCOME_RESERVE, len(welcome_notice(project, 99999, 99999)) + 1)
-    budget = 4000 - len(header) - 1 - reserve
-    ranked = 0
-    missed = {"norms": 0, "reminders": 0}
-
-    def add(line: str, section: str | None, ranked_entry: bool = False) -> bool:
-        nonlocal budget, ranked
-        extra = len(line) + 1 + (len(section) + 1 if section else 0)
-        if (ranked_entry and ranked >= 10) or extra > budget:
-            return False
-        if section:
-            lines.append(section)
-        lines.append(line)
-        budget -= extra
-        ranked += ranked_entry
-        return True
-
-    def reminder_lines(rows_: list[Any], section: str, count_missed: bool = False) -> None:
-        first = True
-        for i, r in enumerate(rows_):
-            line = f"- [{r['due']}] {r['title']} ({r['path']})"
-            if not add(line, section if first else None):
-                if count_missed:
-                    missed["reminders"] += len(rows_) - i
-                break
-            first = False
-            entries.append({"path": r["path"], "score": None, "kind": "reminder"})
-
-    reminder_lines(overdue, "Recordatorios vencidos:", True)
-    first = True
-    for i, r in enumerate(norms):
-        if not add(entry_line(r), "Normas:" if first else None):
-            missed["norms"] += len(norms) - i
-            break
-        first = False
-        entries.append({"path": r["path"], "score": None, "kind": "norm"})
-    if not any(missed.values()):
-        budget += reserve  # nothing to warn about: the reserve goes back to the rest
-    reminder_lines(upcoming, f"Vencen pronto ({upcoming_days} días):")
-    first = True
-    shared_used = 0
-    spill: list[tuple[float, Any]] = []
-    full = False
-    for score, r in scored:
-        if project != "_shared" and r["project"] == "_shared":
-            if shared_used >= SHARED_MAX:
-                spill.append((score, r))
-                continue
-            shared_used += 1
-        if not add(entry_line(r), "Memorias:" if first else None, True):
-            full = True
-            break
-        first = False
-        entries.append({"path": r["path"], "score": round(score, 4), "kind": "memory"})
-    for score, r in [] if full else spill:
-        if not add(entry_line(r), "Memorias:" if first else None, True):
-            break
-        first = False
-        entries.append({"path": r["path"], "score": round(score, 4), "kind": "memory"})
-    if not entries and not any(missed.values()):
+    page = _Page(header, 4000 - len(header) - 1 - reserve, reserve)
+    page.missed["reminders"] = page.add_group(
+        [(r, None) for r in overdue], "Recordatorios vencidos:", "reminder", _reminder_line
+    )
+    page.missed["norms"] = page.add_group([(r, None) for r in norms], "Normas:", "norm", entry_line)
+    page.release_reserve()
+    page.add_group(
+        [(r, None) for r in upcoming],
+        f"Vencen pronto ({upcoming_days} días):",
+        "reminder",
+        _reminder_line,
+    )
+    page.add_group(_memory_order(scored, project), "Memorias:", "memory", entry_line, ranked=True)
+    missed = any(page.missed.values())
+    if not page.entries and not missed:
         return "", []
-    if any(missed.values()):
-        lines.append(welcome_notice(project, missed["norms"], missed["reminders"]))
-    return "\n".join(lines), entries
+    if missed:
+        page.lines.append(welcome_notice(project, page.missed["norms"], page.missed["reminders"]))
+    return "\n".join(page.lines), page.entries
