@@ -12,7 +12,7 @@ Por `git+ssh`, con la misma clave que `git push`:
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.10.0 episteme --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.10.1 episteme --project fabrik
 ```
 
 Sin clave SSH, vale la URL de Windows (`git+https://…`). Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
@@ -37,7 +37,7 @@ winget install --id=astral-sh.uv -e
 Se instala por HTTPS, y la primera vez Git Credential Manager abre el navegador para iniciar sesión en GitHub:
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.10.0 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.10.1 episteme --project <proyecto>
 ```
 
 En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por defecto es `%USERPROFILE%\.episteme`; `--vault` acepta una ruta absoluta de Windows (`C:\Users\ana\notas`). El bloque de hooks es el mismo. Dentro de WSL, sigue la instalación de Linux.

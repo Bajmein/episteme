@@ -3,7 +3,7 @@
 ![episteme: Agentic Memory & Knowledge Vault. Persistent Knowledge Engine for AI Workflows.](static/banner-episteme.jpg)
 
 [![CI](https://github.com/Bajmein/episteme/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Bajmein/episteme/actions/workflows/ci.yml)
-[![Versión](https://img.shields.io/badge/versi%C3%B3n-v0.10.0-8B5CF6)](https://github.com/Bajmein/episteme/tags)
+[![Versión](https://img.shields.io/badge/versi%C3%B3n-v0.10.1-8B5CF6)](https://github.com/Bajmein/episteme/tags)
 [![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/uv-Astral-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![MCP SDK](https://img.shields.io/badge/MCP_SDK-2.x-005571)](https://github.com/modelcontextprotocol/python-sdk)
@@ -43,7 +43,7 @@ Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una 
 Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
 
 > [!NOTE]
-> **Versión actual: v0.10.0.** Funciona en Linux, macOS y Windows. Las novedades de cada versión están en el [CHANGELOG](CHANGELOG.md).
+> **Versión actual: v0.10.1.** Funciona en Linux, macOS y Windows. Las novedades de cada versión están en el [CHANGELOG](CHANGELOG.md).
 
 ## Cómo funciona
 
@@ -105,13 +105,13 @@ Un solo comando registra el servidor. Cambia `<proyecto>` por el nombre del tuyo
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.10.0 episteme --project <proyecto>
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.10.1 episteme --project <proyecto>
 ```
 
 **Windows** (PowerShell, en una sola línea)
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.10.0 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.10.1 episteme --project <proyecto>
 ```
 
 Luego faltan los hooks, los permisos y la regla del `CLAUDE.md`: los pasos están en la [guía de instalación](docs/instalacion.md#después-de-registrar).
