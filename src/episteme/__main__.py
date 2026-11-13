@@ -54,13 +54,21 @@ def resolve_vault(arg: str | None) -> Path:
 
     An explicit path must already be a vault; only the default one is created when missing.
     """
-    raw = arg or os.environ.get("EPISTEME_VAULT")
-    if not raw:
-        path = default_vault()
-        if not path.exists():
-            path.mkdir(parents=True)
-            (path / CONFIG_FILE).write_text(DEFAULT_TOML, encoding="utf-8")
-        raw = str(path)
+    raw = arg or os.environ.get("EPISTEME_VAULT") or _default_vault_raw()
+    return _check_vault_path(raw)
+
+
+def _default_vault_raw() -> str:
+    """The default vault path as a string, creating it when missing."""
+    path = default_vault()
+    if not path.exists():
+        path.mkdir(parents=True)
+        (path / CONFIG_FILE).write_text(DEFAULT_TOML, encoding="utf-8")
+    return str(path)
+
+
+def _check_vault_path(raw: str) -> Path:
+    """The vault at ``raw`` once it is absolute, an existing directory and has the config."""
     path = Path(raw)
     if not path.is_absolute():
         raise StartupError(f'vault path "{raw}" is not absolute. Pass an absolute path.')

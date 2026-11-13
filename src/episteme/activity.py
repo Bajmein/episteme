@@ -48,16 +48,31 @@ def _walk(node: Any, depth: int, found: list[str]) -> None:
     if depth > MAX_WALK_DEPTH:
         return
     if isinstance(node, dict):
-        for key, value in node.items():
-            if key == "path" and isinstance(value, str):
-                found.append(value)
-            elif key == "paths" and isinstance(value, list):
-                found.extend(v for v in value if isinstance(v, str))
-            else:
-                _walk(value, depth + 1, found)
+        _walk_dict(node, depth, found)
     elif isinstance(node, list):
-        for item in node:
-            _walk(item, depth + 1, found)
+        _walk_list(node, depth, found)
+
+
+def _collect_key(key: str, value: Any, found: list[str]) -> bool:
+    """Collect the strings under a ``path``/``paths`` key; False for any other key or shape."""
+    if key == "path" and isinstance(value, str):
+        found.append(value)
+        return True
+    if key == "paths" and isinstance(value, list):
+        found.extend(v for v in value if isinstance(v, str))
+        return True
+    return False
+
+
+def _walk_dict(node: dict[str, Any], depth: int, found: list[str]) -> None:
+    for key, value in node.items():
+        if not _collect_key(key, value, found):
+            _walk(value, depth + 1, found)
+
+
+def _walk_list(node: list[Any], depth: int, found: list[str]) -> None:
+    for item in node:
+        _walk(item, depth + 1, found)
 
 
 def extract_paths(text: str) -> list[str]:

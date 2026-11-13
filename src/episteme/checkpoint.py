@@ -68,8 +68,8 @@ def branch_change(base: Path) -> str | None:
     return match.group(1) if match else None
 
 
-def active_states(engine: Engine, project_dir: str | None) -> list[tuple[Path, ParsedNote]]:
-    """Every ``estado: activo`` file matched by ``state_glob``, newest mtime first."""
+def _state_glob(engine: Engine) -> str:
+    """The validated ``state_glob`` of the vault config."""
     glob = engine.vault.config.state_glob
     if not glob:
         raise invalid(
@@ -79,19 +79,30 @@ def active_states(engine: Engine, project_dir: str | None) -> list[tuple[Path, P
         )
     if Path(glob).is_absolute() or ".." in Path(glob).parts:
         raise invalid("state_glob must be relative to project_dir and stay inside it.")
+    return glob
+
+
+def _load_state(base: Path, candidate: Path) -> tuple[int, Path, ParsedNote] | None:
+    """``(mtime, real path, note)`` of an active state file inside ``base``, else None."""
+    real = Path(os.path.realpath(candidate))
+    if base not in real.parents or not real.is_file():
+        return None
+    try:
+        note = parse(real.read_text(encoding="utf-8", errors="replace"), real.name)
+        mtime = real.stat().st_mtime_ns
+    except OSError:
+        return None
+    if str(note.frontmatter.get("estado", "")).strip().lower() != "activo":
+        return None
+    return mtime, real, note
+
+
+def active_states(engine: Engine, project_dir: str | None) -> list[tuple[Path, ParsedNote]]:
+    """Every ``estado: activo`` file matched by ``state_glob``, newest mtime first."""
+    glob = _state_glob(engine)
     base = _project_dir(project_dir)
-    found: list[tuple[int, Path, ParsedNote]] = []
-    for candidate in base.glob(glob):
-        real = Path(os.path.realpath(candidate))
-        if base not in real.parents or not real.is_file():
-            continue
-        try:
-            note = parse(real.read_text(encoding="utf-8", errors="replace"), real.name)
-            mtime = real.stat().st_mtime_ns
-        except OSError:
-            continue
-        if str(note.frontmatter.get("estado", "")).strip().lower() == "activo":
-            found.append((mtime, real, note))
+    loaded = (_load_state(base, candidate) for candidate in base.glob(glob))
+    found = [item for item in loaded if item is not None]
     found.sort(key=lambda f: (f[0], str(f[1])), reverse=True)
     return [(path, note) for _, path, note in found]
 
