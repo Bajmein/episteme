@@ -17,16 +17,30 @@ import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from episteme.errors import EpistemeError
+from episteme.errors import INVALID_ARGUMENT, EpistemeError
 from episteme.index import STOPWORDS_ES
 from episteme.markdown import fold, parse, tokens
 from episteme.vault import MEMORY, Vault
 
+if TYPE_CHECKING:
+    from snowballstemmer.basestemmer import BaseStemmer
+
 NOISE_EXAMPLES = 10
+DEFAULT_TOP = 200
+DEFAULT_MIN_LEN = 4
+DEFAULT_EXAMPLES = 15
+FAMILIES_SHOWN = 10
+MIN_FAMILY_FORMS = 2
+# SQLite's trigram tokenizer cannot match terms shorter than this.
+TRIGRAM_MIN_LEN = 3
+
+Corpus = dict[str, tuple[set[str], str]]
+TokenDocs = dict[str, set[str]]
 
 
-def _stemmer():
+def _stemmer() -> BaseStemmer:
     import snowballstemmer
 
     return snowballstemmer.stemmer("spanish")
@@ -37,16 +51,16 @@ def _zone_prefix(vault: Vault, zone: str | None) -> str:
         z = vault.memory_zone
         if z is None:
             raise EpistemeError(
-                "invalid_argument",
+                INVALID_ARGUMENT,
                 f"the vault has no zone with mode {MEMORY!r}. Pass --zone <zone path>.",
             )
         return z.path
     return zone.replace("\\", "/").strip("/")
 
 
-def _load_corpus(vault: Vault, zone: str) -> dict[str, tuple[set[str], str]]:
+def _load_corpus(vault: Vault, zone: str) -> Corpus:
     """Relative path -> (token set without stopwords, folded text)."""
-    corpus: dict[str, tuple[set[str], str]] = {}
+    corpus: Corpus = {}
     for rel, _stat in vault.iter_notes():
         if not (rel == zone or rel.startswith(zone + "/")):
             continue
@@ -62,68 +76,84 @@ def _load_corpus(vault: Vault, zone: str) -> dict[str, tuple[set[str], str]]:
     return corpus
 
 
+def _token_docs(corpus: Corpus) -> TokenDocs:
+    """Token -> the documents that contain it."""
+    token_docs: TokenDocs = defaultdict(set)
+    for rel, (toks, _folded) in corpus.items():
+        for t in toks:
+            token_docs[t].add(rel)
+    return token_docs
+
+
+def _stem_index(
+    token_docs: TokenDocs, stem: BaseStemmer
+) -> tuple[dict[str, set[str]], TokenDocs]:
+    """Stem -> its families of forms (2 or more) and stem -> documents."""
+    stem_forms: dict[str, set[str]] = defaultdict(set)
+    stem_docs: TokenDocs = defaultdict(set)
+    for t, docs in token_docs.items():
+        s = stem.stemWord(t)
+        stem_forms[s].add(t)
+        stem_docs[s] |= docs
+    families = {s: f for s, f in stem_forms.items() if len(f) >= MIN_FAMILY_FORMS}
+    return families, stem_docs
+
+
+def _choose_terms(
+    token_docs: TokenDocs, terms: list[str] | None, top: int, min_len: int
+) -> list[str]:
+    if terms:
+        return list(dict.fromkeys(fold(t.strip()) for t in terms if t.strip()))
+    alpha = [t for t in token_docs if t.isalpha() and len(t) >= min_len]
+    alpha.sort(key=lambda t: (-len(token_docs[t]), t))
+    return alpha[:top]
+
+
+def _strategies(
+    term: str, corpus: Corpus, token_docs: TokenDocs, stem_docs: TokenDocs, stem: BaseStemmer
+) -> dict[str, set[str]]:
+    """The documents each strategy matches for one term."""
+    exact = set(token_docs.get(term, ()))
+    prefix = set(exact)
+    for t, docs in token_docs.items():
+        if t.startswith(term):
+            prefix |= docs
+    trigram = set(exact)
+    if len(term) >= TRIGRAM_MIN_LEN:
+        trigram |= {rel for rel, (_t, folded) in corpus.items() if term in folded}
+    return {
+        "exact": exact,
+        "prefix": prefix,
+        "stem": set(stem_docs.get(stem.stemWord(term), ())) | exact,
+        "trigram": trigram,
+    }
+
+
 def measure(
     vault_root: Path,
     zone: str | None = None,
     terms: list[str] | None = None,
-    top: int = 200,
-    min_len: int = 4,
+    top: int = DEFAULT_TOP,
+    min_len: int = DEFAULT_MIN_LEN,
 ) -> dict:
     """Document sets per term and strategy, plus corpus statistics."""
     vault = Vault(Path(vault_root))
     corpus = _load_corpus(vault, _zone_prefix(vault, zone))
     if not corpus:
         raise EpistemeError(
-            "invalid_argument",
+            INVALID_ARGUMENT,
             f"no notes found under zone {zone!r}. Pass --zone with a folder of the vault.",
         )
     stem = _stemmer()
-
-    token_docs: dict[str, set[str]] = defaultdict(set)
-    for rel, (toks, _folded) in corpus.items():
-        for t in toks:
-            token_docs[t].add(rel)
-
-    stem_forms: dict[str, set[str]] = defaultdict(set)
-    stem_docs: dict[str, set[str]] = defaultdict(set)
-    for t, docs in token_docs.items():
-        s = stem.stemWord(t)
-        stem_forms[s].add(t)
-        stem_docs[s] |= docs
-    families = {s: f for s, f in stem_forms.items() if len(f) >= 2}
-
-    if terms:
-        chosen = list(dict.fromkeys(fold(t.strip()) for t in terms if t.strip()))
-    else:
-        alpha = [t for t in token_docs if t.isalpha() and len(t) >= min_len]
-        alpha.sort(key=lambda t: (-len(token_docs[t]), t))
-        chosen = alpha[:top]
-
-    results: dict[str, dict] = {}
-    for term in chosen:
-        exact = set(token_docs.get(term, ()))
-        prefix = set(exact)
-        for t, docs in token_docs.items():
-            if t.startswith(term):
-                prefix |= docs
-        results[term] = {
-            "exact": exact,
-            "prefix": prefix,
-            "stem": set(stem_docs.get(stem.stemWord(term), ())) | exact,
-            # SQLite's trigram tokenizer cannot match terms shorter than 3 characters.
-            "trigram": (
-                {rel for rel, (_t, folded) in corpus.items() if term in folded} | exact
-                if len(term) >= 3
-                else set(exact)
-            ),
-        }
-
+    token_docs = _token_docs(corpus)
+    families, stem_docs = _stem_index(token_docs, stem)
+    chosen = _choose_terms(token_docs, terms, top, min_len)
     return {
         "docs": len(corpus),
         "vocabulary": len(token_docs),
         "families": families,
         "family_docs": {s: set().union(*(token_docs[t] for t in f)) for s, f in families.items()},
-        "terms": results,
+        "terms": {t: _strategies(t, corpus, token_docs, stem_docs, stem) for t in chosen},
         "token_docs": token_docs,
     }
 
@@ -153,28 +183,25 @@ def _noise(result: dict) -> tuple[int, list[tuple[str, str]]]:
     return total, examples
 
 
-def render(result: dict, examples: int) -> str:
-    terms = result["terms"]
+def _render_families(result: dict) -> list[str]:
     family_docs = set().union(*result["family_docs"].values()) if result["family_docs"] else set()
     out = [
-        "# Medición de variantes de búsqueda",
-        "",
-        f"- Documentos: {result['docs']}",
-        f"- Vocabulario: {result['vocabulary']} tokens",
-        f"- Términos medidos: {len(terms)}",
-        "",
         "## Familias de raíz",
         "",
         f"{len(result['families'])} raíces con 2 formas o más; "
         f"tocan {len(family_docs)} documentos.",
         "",
     ]
-    biggest = sorted(result["families"].items(), key=lambda kv: (-len(kv[1]), kv[0]))[:10]
-    for s, forms in biggest:
+    biggest = sorted(result["families"].items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    for s, forms in biggest[:FAMILIES_SHOWN]:
         out.append(
             f"- `{s}`: {', '.join(sorted(forms))} ({len(result['family_docs'][s])} documentos)"
         )
-    out += ["", "## Mayor ganancia por término", ""]
+    return out
+
+
+def _render_best_gain(terms: dict[str, dict], examples: int) -> list[str]:
+    out = ["", "## Mayor ganancia por término", ""]
     out += ["| término | exact | +stem | +prefix | +trigram |", "|---|---|---|---|---|"]
 
     def best(item: tuple[str, dict]) -> tuple[int, str]:
@@ -186,15 +213,23 @@ def render(result: dict, examples: int) -> str:
             f"| {term} | {len(r['exact'])} | +{len(r['stem'] - r['exact'])} "
             f"| +{len(r['prefix'] - r['exact'])} | +{len(r['trigram'] - r['exact'])} |"
         )
-    out += ["", "## Ganancia relativa (sobre `exact`, solo términos con `exact` > 0)", ""]
+    return out
+
+
+def _render_relative_gain(terms: dict[str, dict]) -> list[str]:
+    out = ["", "## Ganancia relativa (sobre `exact`, solo términos con `exact` > 0)", ""]
     out += ["| estrategia | media | mediana |", "|---|---|---|"]
     for key in ("stem", "prefix", "trigram"):
         gains = [_gain(r, key) for r in terms.values() if r["exact"]]
         mean = statistics.fmean(gains) if gains else 0.0
         med = statistics.median(gains) if gains else 0.0
         out.append(f"| {key} | {mean:.1%} | {med:.1%} |")
+    return out
+
+
+def _render_noise(result: dict) -> list[str]:
     total, ex = _noise(result)
-    out += [
+    out = [
         "",
         "## Ruido estimado del trigrama",
         "",
@@ -202,7 +237,23 @@ def render(result: dict, examples: int) -> str:
         f"sumados por término: {total}.",
         "",
     ]
-    out += [f"- {term} → {host}" for term, host in ex] or ["- (sin ejemplos)"]
+    return out + ([f"- {term} → {host}" for term, host in ex] or ["- (sin ejemplos)"])
+
+
+def render(result: dict, examples: int) -> str:
+    terms = result["terms"]
+    out = [
+        "# Medición de variantes de búsqueda",
+        "",
+        f"- Documentos: {result['docs']}",
+        f"- Vocabulario: {result['vocabulary']} tokens",
+        f"- Términos medidos: {len(terms)}",
+        "",
+    ]
+    out += _render_families(result)
+    out += _render_best_gain(terms, examples)
+    out += _render_relative_gain(terms)
+    out += _render_noise(result)
     return "\n".join(out) + "\n"
 
 
@@ -212,13 +263,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--zone", default=None, help="zone path (default: the memory zone)")
     ap.add_argument("--terms", default=None, help="comma-separated terms")
     ap.add_argument("--terms-file", type=Path, default=None, help="one term per line")
-    ap.add_argument("--top", type=int, default=200)
-    ap.add_argument("--min-len", type=int, default=4)
-    ap.add_argument("--examples", type=int, default=15)
+    ap.add_argument("--top", type=int, default=DEFAULT_TOP)
+    ap.add_argument("--min-len", type=int, default=DEFAULT_MIN_LEN)
+    ap.add_argument("--examples", type=int, default=DEFAULT_EXAMPLES)
     args = ap.parse_args(argv)
 
     try:
-        import snowballstemmer  # noqa: F401
+        _stemmer()
     except ImportError:
         print(
             "snowballstemmer is not installed. Run `uv run scripts/measure_recall.py` from the "
