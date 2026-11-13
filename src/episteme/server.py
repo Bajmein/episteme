@@ -431,15 +431,19 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             Field(description='Only notes of this zone, as in episteme.toml (e.g. "memory").'),
         ] = None,
     ) -> str:
-        """Vault health: stale memories, possible contradictions, groups of similar
-        memories, cut titles, orphans, broken links, invalid frontmatter and memories
+        """Vault health: stale memories, expired memories, possible contradictions, groups of
+        similar memories, cut titles, orphans, broken links, invalid frontmatter and memories
         flagged as outdated.
 
-        Returns JSON {"totals", "stale", "contradictions", "similar", "cut_titles",
+        Returns JSON {"totals", "stale", "expired", "contradictions", "similar", "cut_titles",
         "orphans", "broken_links", "invalid_frontmatter", "flagged", "read_only"}.
         "similar" lists groups {"paths", "similarity"} of active memories (any type or
         project, not session or reminder) to merge; "cut_titles" lists memories whose
-        first body line repeats the title and goes on. "totals" counts every item per
+        first body line repeats the title and goes on. "expired" lists active memories
+        {"path", "title", "type", "valid_until"} whose valid_until is before today
+        (checkpoints are left out: checkpoint manages them); it only reports, so for each
+        one call revise(action="archive"), or remember a new memory with supersedes if it
+        still applies in updated form. "totals" counts every item per
         category (the lists are cut at limit). Problems in read-only zones (you cannot fix
         them here; in practice broken links and invalid frontmatter, since memories live in
         memory zones) are not mixed in: they go under "read_only", with the same categories
