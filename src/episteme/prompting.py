@@ -21,14 +21,17 @@ RECALL_TERMS = 40
 MAX_SESSIONS = 50
 OVERDUE_MAX = 5
 
+WRITES = 0  # memories written in this process by agent calls (remember, revise); see server
+
 
 @dataclass
 class SessionState:
     prompts: int = 0
     reminded_at: int = 0
     nudged_at: int = NUDGE_AFTER - NUDGE_EVERY
-    baseline: tuple[int, int] | None = None
-    suggested: set[str] = field(default_factory=set)
+    baseline: int | None = None
+    delivered: set[str] = field(default_factory=set)
+    surfaced: set[str] = field(default_factory=set)
 
 
 _SESSIONS: dict[str, SessionState] = {}
@@ -50,16 +53,6 @@ def state(session: str) -> SessionState:
 def reset(session: str) -> SessionState:
     """Replace the state of ``session`` with a new one."""
     return _store(session, SessionState())
-
-
-def stamp(engine: Engine, project: str) -> tuple[int, int]:
-    """``(count, newest mtime_ns)`` of the project's memories: changes when one is written."""
-    row = engine.index.conn.execute(
-        "select count(*), coalesce(max(mtime_ns), 0) from notes "
-        "where mode = 'memory' and project in (?, '_shared')",
-        (project,),
-    ).fetchone()
-    return (row[0], row[1])
 
 
 def overdue_block(engine: Engine, project: str) -> tuple[str, list[dict[str, Any]]]:
@@ -126,7 +119,7 @@ def recall(
     iso = today().isoformat()
     ranked = []
     for pos, hit in enumerate(hits):
-        if hit.path in skip or hit.path in st.suggested:
+        if hit.path in skip or hit.path in st.delivered:
             continue
         row = engine.index.note(hit.path)
         if row is None or row["type"] == "reminder":
@@ -149,19 +142,19 @@ def recall(
     chosen = [x[3] for x in ranked[:RECALL_MAX]]
     if not chosen:
         return "", []
-    st.suggested.update(r["path"] for r in chosen)
+    st.delivered.update(r["path"] for r in chosen)
     lines = ["episteme · memorias que pueden venir al caso (ábrelas con read si aplican):"]
     lines += [f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})" for r in chosen]
     entries = [{"path": r["path"], "score": None, "kind": "recall"} for r in chosen]
     return "\n".join(lines), entries
 
 
-def nudge(engine: Engine, project: str, st: SessionState) -> str:
+def nudge(st: SessionState) -> str:
     """A reminder to save memories, when the session has written none."""
     if (
         st.prompts >= NUDGE_AFTER
         and st.prompts - st.nudged_at >= NUDGE_EVERY
-        and stamp(engine, project) == st.baseline
+        and WRITES == st.baseline
     ):
         st.nudged_at = st.prompts
         return (

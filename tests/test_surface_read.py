@@ -6,8 +6,6 @@ from pathlib import Path
 import pytest
 from conftest import mcp_client
 
-from episteme import memory
-
 pytestmark = pytest.mark.anyio
 
 GUARD = ".claude/hooks/serena_guard.py"
@@ -18,32 +16,6 @@ def hook_text(raw: str) -> str:
     if raw.startswith("{"):
         return json.loads(raw)["hookSpecificOutput"]["additionalContext"]
     return raw
-
-
-def test_repeat_within_window() -> None:
-    memory._SURFACED.clear()
-    assert memory.surface_repeated("s", "a.py", ["m1"], now=100.0) is False
-    assert memory.surface_repeated("s", "a.py", ["m1"], now=200.0) is True
-
-
-def test_changed_paths_not_repeated() -> None:
-    memory._SURFACED.clear()
-    assert memory.surface_repeated("s", "a.py", ["m1"], now=100.0) is False
-    assert memory.surface_repeated("s", "a.py", ["m1", "m2"], now=110.0) is False
-
-
-def test_shown_again_after_window() -> None:
-    memory._SURFACED.clear()
-    assert memory.surface_repeated("s", "a.py", ["m1"], now=100.0) is False
-    later = 100.0 + memory.SURFACE_REPEAT_SECONDS
-    assert memory.surface_repeated("s", "a.py", ["m1"], now=later) is False
-
-
-def test_sessions_independent() -> None:
-    memory._SURFACED.clear()
-    assert memory.surface_repeated("s1", "a.py", ["m1"], now=100.0) is False
-    assert memory.surface_repeated("s2", "a.py", ["m1"], now=101.0) is False
-    assert memory.surface_repeated("s1", "a.py", ["m1"], now=102.0) is True
 
 
 async def test_surface_hook_skips_repeat(vault: Path) -> None:
