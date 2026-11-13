@@ -20,9 +20,10 @@ import re
 import sqlite3
 import sys
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import NamedTuple, TextIO
+from typing import Any, NamedTuple, TextIO
 
 from episteme import memory
 from episteme.engine import Engine
@@ -43,6 +44,9 @@ DISCARDED = {"checkpoint", "project_status"}
 TITLE_MAX = 80
 SOURCE_PREFIX = "omega:"
 RELATED_RE = re.compile(r"^\s*-\s*\[\[(mem-[0-9a-f]+)\]\]")
+SOURCE_RE = re.compile(r"^\s*-\s*Source:\s*(.+?)\s*$")
+SECTION_RE = re.compile(r"^##\s+(Related|Metadata)\s*$")
+SPACE_OR_HASH_RE = re.compile(r"[\s#]+")
 # «fabrik (05-10-2026): », «GI (x), 03-09-2026: », «vigilia, 23-09-2026: »
 DATE_PREFIX_RE = re.compile(
     r"^[^\W\d_][\w .\-/]{0,40}?\s*[(,][^:\n]{0,100}?\b\d{1,2}-\d{1,2}-\d{4}\b[^:\n]{0,100}:\s+"
@@ -145,7 +149,23 @@ def _relative_file(tag: str, keys: list[str]) -> str:
 def _tag_name(tag: str) -> str:
     """``dominio:auth`` as the tag ``dominio/auth``."""
     name = "/".join(part.strip() for part in tag.split(":") if part.strip())
-    return re.sub(r"[\s#]+", "-", name)
+    return SPACE_OR_HASH_RE.sub("-", name)
+
+
+def _root_keys(roots: tuple[str, ...]) -> list[str]:
+    """The comparable form of the roots that are paths."""
+    return [path_key(root) for root in roots if is_path(root)]
+
+
+def _classify_tag(tag: str, keys: list[str]) -> tuple[str, str] | None:
+    """``("files", path)`` or ``("tags", name)`` for a tag worth keeping, else ``None``."""
+    if is_path(tag):
+        path = _relative_file(tag, keys)
+        return ("files", path) if path else None
+    if ":" in tag:
+        name = _tag_name(tag)
+        return ("tags", name) if name else None
+    return None
 
 
 def split_tags(tags: list[str], roots: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
@@ -155,20 +175,16 @@ def split_tags(tags: list[str], roots: tuple[str, ...] = ()) -> tuple[list[str],
     ``C:\\app\\rules\\x.md``) becomes the project-relative file ``rules/x.md``; bare words
     are dropped.
     """
-    out: list[str] = []
-    files: list[str] = []
-    keys = [path_key(root) for root in roots if is_path(root)]
+    found: dict[str, list[str]] = {"tags": [], "files": []}
+    keys = _root_keys(roots)
     for tag in map(str, tags):
-        tag = tag.strip()
-        if is_path(tag):
-            path = _relative_file(tag, keys)
-            if path and path not in files:
-                files.append(path)
-        elif ":" in tag:
-            name = _tag_name(tag)
-            if name and name not in out:
-                out.append(name)
-    return out, files
+        kept = _classify_tag(tag.strip(), keys)
+        if kept is None:
+            continue
+        bucket, value = kept
+        if value not in found[bucket]:
+            found[bucket].append(value)
+    return found["tags"], found["files"]
 
 
 def _date(value: object) -> dt.date | None:
@@ -190,41 +206,65 @@ def _priority(value: object) -> int | None:
     return value if PRIORITY_MIN <= value <= PRIORITY_MAX else None
 
 
+class _Body(NamedTuple):
+    text: str
+    related: list[str]
+    source: str | None
+
+
+def _related_id(line: str) -> str | None:
+    """The ``mem-…`` id of a «Related» bullet, if the line is one."""
+    m = RELATED_RE.match(line)
+    return m.group(1) if m else None
+
+
+def _source_of(line: str) -> str | None:
+    """The value of a «Source:» bullet in «Metadata», if the line is one."""
+    m = SOURCE_RE.match(line)
+    return m.group(1) if m else None
+
+
+def _split_body(lines: list[str]) -> _Body:
+    """Split the note body into its text, the «Related» ids and the «Metadata» source."""
+    text: list[str] = []
+    related: list[str] = []
+    source = None
+    section = None
+    for line in lines:
+        heading = SECTION_RE.match(line.strip())
+        if heading:
+            section = heading.group(1)
+        elif section is None:
+            text.append(line)
+        elif section == "Related":
+            related.extend(filter(None, [_related_id(line)]))
+        else:
+            source = _source_of(line) or source
+    return _Body("\n".join(text).strip(), related, source)
+
+
+def _fm_tags(value: object) -> list[str]:
+    """The frontmatter ``tags`` as a list of strings."""
+    value = value or []
+    return [str(t) for t in value] if isinstance(value, list) else [str(value)]
+
+
 def parse_export_note(path: Path) -> OmegaMemory | None:
     lines = path.read_text(encoding="utf-8").replace("\r\n", "\n").split("\n")
     raw, fm_end = split_frontmatter(lines)
     fm, ok, _ = load_frontmatter(raw)
     if not ok or "id" not in fm:
         return None
-    text: list[str] = []
-    related: list[str] = []
-    source = None
-    section = None
-    for line in lines[fm_end:]:
-        heading = re.match(r"^##\s+(Related|Metadata)\s*$", line.strip())
-        if heading:
-            section = heading.group(1)
-            continue
-        if section is None:
-            text.append(line)
-        elif section == "Related":
-            m = RELATED_RE.match(line)
-            if m:
-                related.append(m.group(1))
-        elif section == "Metadata":
-            m = re.match(r"^\s*-\s*Source:\s*(.+?)\s*$", line)
-            if m:
-                source = m.group(1)
-    tags = fm.get("tags") or []
+    body = _split_body(lines[fm_end:])
     project = fm.get("project")
     return OmegaMemory(
         id=str(fm["id"]),
         omega_type=str(fm.get("type", "")),
-        tags=[str(t) for t in tags] if isinstance(tags, list) else [str(tags)],
+        tags=_fm_tags(fm.get("tags")),
         created=_date(fm.get("created")),
-        text="\n".join(text).strip(),
-        related=related,
-        source=source,
+        text=body.text,
+        related=body.related,
+        source=body.source,
         project=str(project) if project else None,
         priority=_priority(fm.get("priority")),
         file=path,
@@ -242,42 +282,55 @@ def load_export(export: Path) -> list[OmegaMemory]:
     return notes
 
 
+DB_QUERY = (
+    "select node_id, content, metadata, created_at, event_type, project, priority, status"
+    " from memories order by id"
+)
+
+
+def _load_meta(meta: Any) -> dict[str, object]:
+    """The JSON ``metadata`` column as a dict; empty when missing or malformed."""
+    try:
+        data = json.loads(meta) if meta else {}
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _row_text(content: object, data: dict[str, object], event: object) -> str:
+    """The memory text, with the context of a reminder appended."""
+    text = str(content or "").strip()
+    if data.get("context") and event == "reminder":
+        text = f"{text}\n\nContexto: {str(data['context']).strip()}"
+    return text
+
+
+def _row_to_memory(row: tuple[Any, ...]) -> OmegaMemory:
+    """One ``memories`` row as an :class:`OmegaMemory`."""
+    node_id, content, meta, created, event, project, priority, status = row
+    data = _load_meta(meta)
+    tags = data.get("tags")
+    return OmegaMemory(
+        id=str(node_id),
+        omega_type=str(event or ""),
+        tags=[str(t) for t in tags] if isinstance(tags, list) else [],
+        created=_date(created),
+        text=_row_text(content, data, event),
+        source=str(data["source"]) if data.get("source") else None,
+        project=str(project) if project else None,
+        priority=_priority(priority),
+        status=str(data["reminder_status"]) if event == "reminder" else str(status or ""),
+        due=_date(data.get("remind_at")),
+    )
+
+
 def load_db(path: Path) -> dict[str, OmegaMemory]:
     """Read ``memories`` from an OMEGA database, read-only. Keys are the ``mem-…`` ids."""
     uri = f"file:{path.resolve()}?mode=ro"
-    rows: dict[str, OmegaMemory] = {}
     with contextlib.closing(sqlite3.connect(uri, uri=True)) as conn:
         conn.execute("pragma query_only = on")
-        query = (
-            "select node_id, content, metadata, created_at, event_type, project, priority, status"
-            " from memories order by id"
-        )
-        for node_id, content, meta, created, event, project, priority, status in conn.execute(
-            query
-        ):
-            try:
-                data = json.loads(meta) if meta else {}
-            except ValueError:
-                data = {}
-            data = data if isinstance(data, dict) else {}
-            tags = data.get("tags")
-            remind_at = data.get("remind_at")
-            text = str(content or "").strip()
-            if data.get("context") and event == "reminder":
-                text = f"{text}\n\nContexto: {str(data['context']).strip()}"
-            rows[str(node_id)] = OmegaMemory(
-                id=str(node_id),
-                omega_type=str(event or ""),
-                tags=[str(t) for t in tags] if isinstance(tags, list) else [],
-                created=_date(created),
-                text=text,
-                source=str(data["source"]) if data.get("source") else None,
-                project=str(project) if project else None,
-                priority=_priority(priority),
-                status=str(data["reminder_status"]) if event == "reminder" else str(status or ""),
-                due=_date(remind_at),
-            )
-    return rows
+        memories = [_row_to_memory(row) for row in conn.execute(DB_QUERY)]
+    return {note.id: note for note in memories}
 
 
 def _project_for(value: str | None, project: str, mapping: dict[str, str]) -> str | None:
@@ -320,10 +373,39 @@ class Classified(NamedTuple):
     unassigned: int
 
 
-def _report_skip(note: OmegaMemory, skip: Skip, done: Counter[str], out: TextIO) -> None:
-    print(f"- {note.omega_type} ({skip.reason}) {note.id}", file=out)
-    kind = "omitida" if skip.key in ("proyecto", "sin-proyecto") else "descartada"
-    done[f"{kind}:{skip.key or note.omega_type}"] += 1
+@dataclass(frozen=True)
+class _Routing:
+    project: str
+    mapping: dict[str, str]
+    unassigned: str
+
+
+@dataclass(frozen=True)
+class _Report:
+    done: Counter[str]
+    out: TextIO
+
+    def skip(self, note: OmegaMemory, skip: Skip) -> None:
+        """Print a skipped note and count it."""
+        print(f"- {note.omega_type} ({skip.reason}) {note.id}", file=self.out)
+        kind = "omitida" if skip.key in ("proyecto", "sin-proyecto") else "descartada"
+        self.done[f"{kind}:{skip.key or note.omega_type}"] += 1
+
+
+@dataclass(frozen=True)
+class _WriteCtx:
+    engine: Engine
+    mapping: dict[str, str]
+    dry_run: bool
+    report: _Report
+
+
+@dataclass(frozen=True)
+class MigrateOptions:
+    dry_run: bool = False
+    omega_db: Path | None = None
+    project_map: dict[str, str] | None = None
+    unassigned: str = "include"
 
 
 def _merge_db_row(note: OmegaMemory, row: OmegaMemory | None) -> OmegaMemory:
@@ -352,26 +434,62 @@ def _type_or_skip(note: OmegaMemory) -> str | Skip:
     return TYPE_MAP[note.omega_type]
 
 
+def _is_edit_pattern(note: OmegaMemory) -> bool:
+    return note.text.lower().startswith("edit pattern")
+
+
+def _is_auto(note: OmegaMemory) -> bool:
+    return is_auto_capture(note.text, note.source)
+
+
+def _is_harness(note: OmegaMemory) -> bool:
+    return bool(HARNESS_TEXT_RE.match(clean_text(note.text)))  # also after «Decision:»
+
+
+def _is_superseded(note: OmegaMemory) -> bool:
+    return note.status == "superseded"
+
+
+# In order: the first predicate that matches decides.
+CONTENT_SKIPS: list[tuple[Callable[[OmegaMemory], bool], Skip]] = [
+    (_is_edit_pattern, Skip("edit pattern", "edit-pattern")),
+    (_is_auto, Skip("captura automática", "captura-automatica")),
+    (_is_harness, Skip("texto del harness", "harness")),
+    (_is_superseded, Skip("reemplazada en OMEGA", "superseded")),
+]
+
+
 def _content_skip(note: OmegaMemory) -> Skip | None:
-    if note.text.lower().startswith("edit pattern"):
-        return Skip("edit pattern", "edit-pattern")
-    if is_auto_capture(note.text, note.source):
-        return Skip("captura automática", "captura-automatica")
-    if HARNESS_TEXT_RE.match(clean_text(note.text)):  # also after «Decision:»
-        return Skip("texto del harness", "harness")
-    if note.status == "superseded":
-        return Skip("reemplazada en OMEGA", "superseded")
-    return None
+    return next((skip for matches, skip in CONTENT_SKIPS if matches(note)), None)
+
+
+def _note_skip(note: OmegaMemory, unassigned: str) -> Skip | None:
+    """Why a note with a valid type is not migrated, from its content or lack of project."""
+    skip = _content_skip(note)
+    if skip is None and not note.project and unassigned == "skip":
+        return Skip("sin proyecto", "sin-proyecto")
+    return skip
+
+
+def _classify_one(note: OmegaMemory, routing: _Routing) -> Candidate | Skip:
+    """A merged note as a candidate, or the reason it is skipped."""
+    type_ = _type_or_skip(note)
+    if isinstance(type_, Skip):
+        return type_
+    skip = _note_skip(note, routing.unassigned)
+    if skip is not None:
+        return skip
+    dest = _project_for(note.project, routing.project, routing.mapping)
+    if dest is None:
+        return Skip(f"proyecto {note.project}", "proyecto")
+    return Candidate(dest, type_, replace(note, text=clean_text(note.text)))
 
 
 def _classify(
     notes: list[OmegaMemory],
     db: dict[str, OmegaMemory],
-    project: str,
-    mapping: dict[str, str],
-    unassigned: str,
-    done: Counter[str],
-    out: TextIO,
+    routing: _Routing,
+    report: _Report,
 ) -> Classified:
     """Decide which notes migrate and where; count and report the rest."""
     candidates: list[Candidate] = []
@@ -379,31 +497,19 @@ def _classify(
     unassigned_in = 0
     for original in notes:
         note = _merge_db_row(original, db.get(original.id))
-        type_ = _type_or_skip(note)
-        if isinstance(type_, Skip):
-            _report_skip(note, type_, done, out)
+        result = _classify_one(note, routing)
+        if isinstance(result, Skip):
+            report.skip(note, result)
+            if result.key == "proyecto":
+                skipped_projects[note.project or ""] += 1
             continue
-        skip = _content_skip(note)
-        if skip is None and not note.project:
-            if unassigned == "skip":
-                skip = Skip("sin proyecto", "sin-proyecto")
-            else:
-                unassigned_in += 1
-        if skip is not None:
-            _report_skip(note, skip, done, out)
-            continue
-        dest = _project_for(note.project, project, mapping)
-        if dest is None:
-            _report_skip(note, Skip(f"proyecto {note.project}", "proyecto"), done, out)
-            skipped_projects[note.project or ""] += 1
-            continue
-        cleaned = replace(note, text=clean_text(note.text))
-        candidates.append(Candidate(dest, type_, cleaned))
+        unassigned_in += not note.project
+        candidates.append(result)
     return Classified(candidates, skipped_projects, unassigned_in)
 
 
 def _drop_batch_duplicates(
-    candidates: list[Candidate], done: Counter[str], out: TextIO
+    candidates: list[Candidate], report: _Report
 ) -> tuple[list[Candidate], dict[str, str]]:
     """Keep the most recent of the near-duplicates in the batch (ties: the larger id).
 
@@ -427,8 +533,8 @@ def _drop_batch_duplicates(
             None,
         )
         if winner is not None:
-            print(f"= {type_} {note.id} (duplicada de {winner.id}, más reciente)", file=out)
-            done[f"duplicada:{type_}"] += 1
+            print(f"= {type_} {note.id} (duplicada de {winner.id}, más reciente)", file=report.out)
+            report.done[f"duplicada:{type_}"] += 1
             aliases[note.id] = winner.id
             continue
         tokens.setdefault((dest, type_), []).append((mine, note))
@@ -437,27 +543,38 @@ def _drop_batch_duplicates(
     return kept, aliases
 
 
-def _write_one(
-    engine: Engine,
-    cand: Candidate,
-    mapping: dict[str, str],
-    dry_run: bool,
-    done: Counter[str],
-    out: TextIO,
-) -> str | None:
+def _roots_for(note: OmegaMemory, mapping: dict[str, str]) -> tuple[str, ...]:
+    """The project roots (paths) a note's file tags can be relative to."""
+    return tuple(dict.fromkeys([r for r in [note.project, *mapping] if r and is_path(r)]))
+
+
+def _existing_result(ctx: _WriteCtx, type_: str, path: str) -> str:
+    """Report a memory that already exists and return its path."""
+    print(f"= {type_} → {path} (ya existe)", file=ctx.report.out)
+    ctx.report.done[f"existente:{type_}"] += 1
+    return path
+
+
+def _log_created(ctx: _WriteCtx, type_: str, res: dict[str, Any]) -> str:
+    """Report the result of ``remember``; return the path of the new or similar memory."""
+    if not res["created"]:
+        return _existing_result(ctx, type_, res["similar"][0]["path"])
+    print(f"+ {type_} → {res['path']}", file=ctx.report.out)
+    ctx.report.done[type_] += 1
+    return res["path"]
+
+
+def _write_one(ctx: _WriteCtx, cand: Candidate) -> str | None:
     """Write one memory unless it exists; return its path, or ``None`` on error."""
     dest, type_, note = cand
-    roots = tuple(dict.fromkeys([r for r in [note.project, *mapping] if r and is_path(r)]))
-    tags, files = split_tags(note.tags, roots)
+    tags, files = split_tags(note.tags, _roots_for(note, ctx.mapping))
     source = f"{SOURCE_PREFIX}{note.id}"
-    existing = _existing_by_source(engine, source)
+    existing = _existing_by_source(ctx.engine, source)
     if existing is not None:
-        print(f"= {type_} → {existing} (ya existe)", file=out)
-        done[f"existente:{type_}"] += 1
-        return existing
+        return _existing_result(ctx, type_, existing)
     try:
         res = memory.remember(
-            engine,
+            ctx.engine,
             type_,
             note.title,
             note.text,
@@ -468,35 +585,21 @@ def _write_one(
             source=source,
             due=note.due.isoformat() if type_ == "reminder" and note.due else None,
             created=note.created,
-            dry_run=dry_run,
+            dry_run=ctx.dry_run,
         )
     except EpistemeError as exc:
-        print(f"! {note.omega_type} {note.id}: {exc}", file=out)
-        done[f"error:{type_}"] += 1
+        print(f"! {note.omega_type} {note.id}: {exc}", file=ctx.report.out)
+        ctx.report.done[f"error:{type_}"] += 1
         return None
-    if res["created"]:
-        print(f"+ {type_} → {res['path']}", file=out)
-        done[type_] += 1
-        return res["path"]
-    path = res["similar"][0]["path"]
-    print(f"= {type_} → {path} (ya existe)", file=out)
-    done[f"existente:{type_}"] += 1
-    return path
+    return _log_created(ctx, type_, res)
 
 
-def _write_all(
-    engine: Engine,
-    kept: list[Candidate],
-    mapping: dict[str, str],
-    dry_run: bool,
-    done: Counter[str],
-    out: TextIO,
-) -> tuple[dict[str, str], list[Pending]]:
+def _write_all(ctx: _WriteCtx, kept: list[Candidate]) -> tuple[dict[str, str], list[Pending]]:
     """Write the kept memories; return OMEGA id -> path and those with relations to link."""
     paths: dict[str, str] = {}
     pending: list[Pending] = []
     for cand in kept:
-        path = _write_one(engine, cand, mapping, dry_run, done, out)
+        path = _write_one(ctx, cand)
         if path is None:
             continue
         paths[cand.note.id] = path
@@ -505,35 +608,49 @@ def _write_all(
     return paths, pending
 
 
-def _link_related(
-    engine: Engine,
-    pending: list[Pending],
-    paths: dict[str, str],
-    aliases: dict[str, str],
-    dry_run: bool,
-) -> None:
+def _resolve_ids(paths: dict[str, str], aliases: dict[str, str]) -> dict[str, str]:
+    """OMEGA id -> path, including the ids dropped as duplicates (they point at the winner)."""
+    return {**paths, **{old: paths[win] for old, win in aliases.items() if win in paths}}
+
+
+def _resolved_targets(note: OmegaMemory, rel: str, resolved: dict[str, str]) -> list[str]:
+    """Paths of the notes ``note`` relates to, without itself."""
+    return [resolved[r] for r in note.related if r in resolved and resolved[r] != rel]
+
+
+def _merge_links(engine: Engine, current: list[Any], targets: list[str]) -> list[Any]:
+    """``current`` plus the wikilinks to ``targets`` that are not in it yet."""
+    links = list(current)
+    for target in targets:
+        link = memory.wikilink(engine, target)
+        if link not in links:
+            links.append(link)
+    return links
+
+
+def _add_links(engine: Engine, rel: str, targets: list[str]) -> None:
+    """Add wikilinks to ``targets`` in the ``related`` field of the memory at ``rel``."""
+    nf = memory.NoteFile(engine, rel)
+    current = nf.fm.get("related") or []
+    current = current if isinstance(current, list) else [current]
+    links = _merge_links(engine, current, targets)
+    if links != current:
+        nf.set_fields({"related": links})
+        nf.save()
+
+
+def _link_related(ctx: _WriteCtx, pending: list[Pending], resolved: dict[str, str]) -> None:
     """Second pass: OMEGA ids → wikilinks to the new files."""
-    resolved = {**paths, **{old: paths[win] for old, win in aliases.items() if win in paths}}
+    if ctx.dry_run:
+        return
     for rel, note in pending:
-        targets = [resolved[r] for r in note.related if r in resolved and resolved[r] != rel]
-        if not targets or dry_run:
-            continue
-        nf = memory.NoteFile(engine, rel)
-        current = nf.fm.get("related") or []
-        current = current if isinstance(current, list) else [current]
-        links = list(current)
-        for target in targets:
-            link = memory.wikilink(engine, target)
-            if link not in links:
-                links.append(link)
-        if links != current:
-            nf.set_fields({"related": links})
-            nf.save()
+        targets = _resolved_targets(note, rel, resolved)
+        if targets:
+            _add_links(ctx.engine, rel, targets)
 
 
-def _print_summary(
-    classified: Classified, project: str, dry_run: bool, done: Counter[str], out: TextIO
-) -> None:
+def _print_summary(classified: Classified, project: str, dry_run: bool, report: _Report) -> None:
+    out = report.out
     if classified.skipped_projects:
         listed = ", ".join(f"{p} ({n})" for p, n in classified.skipped_projects.most_common())
         print(
@@ -547,7 +664,7 @@ def _print_summary(
             "u omítelas con --unassigned skip.",
             file=out,
         )
-    summary = ", ".join(f"{k} {v}" for k, v in sorted(done.items())) or "nada"
+    summary = ", ".join(f"{k} {v}" for k, v in sorted(report.done.items())) or "nada"
     prefix = "Resumen (dry-run)" if dry_run else "Resumen"
     print(f"{prefix}: {summary}", file=out)
 
@@ -556,37 +673,43 @@ def migrate(
     export: Path,
     vault: Path,
     project: str,
-    dry_run: bool = False,
+    options: MigrateOptions = MigrateOptions(),
     out: TextIO = sys.stdout,
-    *,
-    omega_db: Path | None = None,
-    project_map: dict[str, str] | None = None,
-    unassigned: str = "include",
 ) -> Counter[str]:
-    if unassigned not in UNASSIGNED:
-        raise ValueError(f"--unassigned must be include or skip, got {unassigned!r}.")
+    if options.unassigned not in UNASSIGNED:
+        raise ValueError(f"--unassigned must be include or skip, got {options.unassigned!r}.")
     engine = Engine(vault, project)
     engine.index.refresh()
-    mapping = {path_key(k): v for k, v in (project_map or {}).items()}
-    db = load_db(omega_db) if omega_db is not None else {}
-    done: Counter[str] = Counter()
+    mapping = {path_key(k): v for k, v in (options.project_map or {}).items()}
+    db = load_db(options.omega_db) if options.omega_db is not None else {}
+    report = _Report(Counter(), out)
     notes = [n for n in load_export(export) if n.omega_type != "reminder"]
     notes += [n for n in db.values() if n.omega_type == "reminder"]
-    classified = _classify(notes, db, project, mapping, unassigned, done, out)
-    kept, aliases = _drop_batch_duplicates(classified.candidates, done, out)
-    paths, pending = _write_all(engine, kept, mapping, dry_run, done, out)
-    _link_related(engine, pending, paths, aliases, dry_run)
-    _print_summary(classified, project, dry_run, done, out)
-    return done
+    routing = _Routing(project, mapping, options.unassigned)
+    classified = _classify(notes, db, routing, report)
+    kept, aliases = _drop_batch_duplicates(classified.candidates, report)
+    ctx = _WriteCtx(engine, mapping, options.dry_run, report)
+    paths, pending = _write_all(ctx, kept)
+    _link_related(ctx, pending, _resolve_ids(paths, aliases))
+    _print_summary(classified, project, options.dry_run, report)
+    return report.done
+
+
+def _split_pair(value: str) -> tuple[str, str] | None:
+    """``OLD=NEW`` as a stripped pair; ``None`` when it is not a valid pair."""
+    old, sep, new = value.partition("=")
+    if not sep or not old.strip() or not new.strip():
+        return None
+    return old.strip(), new.strip()
 
 
 def _parse_map(values: list[str]) -> dict[str, str]:
     mapping = {}
     for value in values:
-        old, sep, new = value.partition("=")
-        if not sep or not old.strip() or not new.strip():
+        pair = _split_pair(value)
+        if pair is None:
             raise ValueError(f"--map-project {value!r} must be OLD=NEW, e.g. /home/me/app=app.")
-        mapping[old.strip()] = new.strip()
+        mapping[pair[0]] = pair[1]
     return mapping
 
 
@@ -631,15 +754,8 @@ def main(argv: list[str] | None = None) -> int:
         return _fail(f"{db} is not a file. Pass the path of omega.db.")
     try:
         mapping = _parse_map(args.map_project)
-        migrate(
-            export,
-            vault,
-            args.project,
-            args.dry_run,
-            omega_db=db,
-            project_map=mapping,
-            unassigned=args.unassigned,
-        )
+        options = MigrateOptions(args.dry_run, db, mapping, args.unassigned)
+        migrate(export, vault, args.project, options)
     except (ValueError, StartupError) as exc:
         return _fail(str(exc))
     except sqlite3.Error as exc:
