@@ -77,9 +77,14 @@ def _table(data: dict, name: str, allowed: tuple[str, ...]) -> dict:
     return table
 
 
+def _is_positive_int(value: object) -> bool:
+    """True for an int >= 1; ``bool`` is excluded."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+
+
 def _int_min1(table: dict, name: str, key: str, default: int) -> int:
     value = table.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+    if not _is_positive_int(value):
         raise StartupError(f"[{name}] {key} must be an integer >= 1.")
     return value
 
@@ -100,6 +105,25 @@ def _load_maintenance(data: dict) -> Maintenance:
     )
 
 
+def _backup_dir(raw: str) -> Path:
+    """Expand ``raw`` into an absolute backup directory or raise StartupError."""
+    try:
+        target = Path(raw).expanduser()
+    except RuntimeError as exc:
+        raise StartupError(f'[backup] dir "{raw}" cannot be expanded: {exc}.') from exc
+    if not target.is_absolute():
+        raise StartupError(f'[backup] dir "{raw}" must be an absolute path.')
+    return target
+
+
+def _check_outside_vault(target: Path, raw: str, root: Path) -> None:
+    """Raise StartupError when ``target`` is the vault or lies inside it."""
+    real = Path(os.path.normcase(os.path.realpath(target)))
+    real_root = Path(os.path.normcase(os.path.realpath(root)))
+    if real == real_root or real_root in real.parents:
+        raise StartupError(f'[backup] dir "{raw}" must be outside the vault.')
+
+
 def _load_backup(data: dict, root: Path) -> Backup:
     table = _table(data, "backup", ("dir", "keep"))
     if "backup" not in data:
@@ -107,17 +131,25 @@ def _load_backup(data: dict, root: Path) -> Backup:
     raw = table.get("dir")
     if not isinstance(raw, str) or not raw.strip():
         raise StartupError("[backup] dir must be a non-empty string.")
-    try:
-        target = Path(raw).expanduser()
-    except RuntimeError as exc:
-        raise StartupError(f'[backup] dir "{raw}" cannot be expanded: {exc}.') from exc
-    if not target.is_absolute():
-        raise StartupError(f'[backup] dir "{raw}" must be an absolute path.')
-    real = Path(os.path.normcase(os.path.realpath(target)))
-    real_root = Path(os.path.normcase(os.path.realpath(root)))
-    if real == real_root or real_root in real.parents:
-        raise StartupError(f'[backup] dir "{raw}" must be outside the vault.')
+    target = _backup_dir(raw)
+    _check_outside_vault(target, raw, root)
     return Backup(dir=target, keep=_int_min1(table, "backup", "keep", DEFAULT_BACKUP_KEEP))
+
+
+def _zone_name(key: str) -> str:
+    """Normalise a zone key into a vault-relative path or raise StartupError."""
+    name = key.strip().strip("/")
+    if not name or ".." in PurePosixPath(name).parts or key.startswith("/"):
+        raise StartupError(f'zone "{key}" must be a path relative to the vault root.')
+    return name
+
+
+def _zone_mode(name: str, value: object) -> str:
+    """The valid ``mode`` of a zone table or raise StartupError."""
+    mode = value.get("mode") if isinstance(value, dict) else None
+    if mode not in MODES:
+        raise StartupError(f'zone "{name}" has mode {mode!r}; use one of {", ".join(MODES)}.')
+    return mode
 
 
 def _load_zones(data: dict) -> list[Zone]:
@@ -127,16 +159,11 @@ def _load_zones(data: dict) -> list[Zone]:
     if not isinstance(raw_zones, dict):
         raise StartupError("[zones] in episteme.toml must be a table of zone paths.")
     for key, value in raw_zones.items():
-        name = key.strip().strip("/")
-        if not name or ".." in PurePosixPath(name).parts or key.startswith("/"):
-            raise StartupError(f'zone "{key}" must be a path relative to the vault root.')
+        name = _zone_name(key)
         if name in seen:
             raise StartupError(f'zone "{name}" is declared twice in episteme.toml.')
         seen.add(name)
-        mode = value.get("mode") if isinstance(value, dict) else None
-        if mode not in MODES:
-            raise StartupError(f'zone "{name}" has mode {mode!r}; use one of {", ".join(MODES)}.')
-        zones.append(Zone(name, mode))
+        zones.append(Zone(name, _zone_mode(name, value)))
     return zones
 
 
@@ -170,10 +197,23 @@ def today() -> dt.date:
     return dt.date.today()
 
 
+def _is_absolute_like(rel: str, pure: PurePosixPath) -> bool:
+    """True for POSIX-absolute, ``~`` home or drive-letter (``C:``) paths."""
+    return pure.is_absolute() or rel.startswith("~") or (len(rel) > 1 and rel[1] == ":")
+
+
 def is_ignored(rel: str) -> bool:
     """Dot folders (.obsidian, .index, .git…) and non-Markdown files are invisible."""
     parts = PurePosixPath(rel).parts
     return any(p.startswith(".") for p in parts[:-1]) or not rel.lower().endswith(".md")
+
+
+def _dir_mtime(base: Path) -> int | None:
+    """Directory mtime in ns, or None if it cannot be stat-ed."""
+    try:
+        return base.stat().st_mtime_ns
+    except OSError:
+        return None
 
 
 class Vault:
@@ -191,7 +231,7 @@ class Vault:
             raise invalid("empty path. Pass a path relative to the vault.")
         rel = rel.replace("\\", "/")
         pure = PurePosixPath(rel)
-        if pure.is_absolute() or rel.startswith("~") or (len(rel) > 1 and rel[1] == ":"):
+        if _is_absolute_like(rel, pure):
             raise EpistemeError(
                 OUTSIDE_VAULT, f'"{rel}" is absolute. Use a path relative to the vault.'
             )
@@ -228,9 +268,8 @@ class Vault:
         while stack:
             reldir = stack.pop()
             base = self.root / reldir if reldir else self.root
-            try:
-                dir_mtime = base.stat().st_mtime_ns
-            except OSError:
+            dir_mtime = _dir_mtime(base)
+            if dir_mtime is None:
                 continue
             seen.add(reldir)
             listing = cache.get(reldir)
@@ -239,13 +278,26 @@ class Vault:
                 cache[reldir] = listing
             stack.extend(reversed(listing.subdirs))
             for rel in listing.notes:
-                try:
-                    st = (self.root / rel).stat()
-                except OSError:
-                    continue
-                yield rel, st
+                st = self._stat_note(rel)
+                if st is not None:
+                    yield rel, st
         for gone in set(cache) - seen:
             del cache[gone]
+
+    def _stat_note(self, rel: str) -> os.stat_result | None:
+        """Stat of the note at ``rel``, or None if it vanished."""
+        try:
+            return (self.root / rel).stat()
+        except OSError:
+            return None
+
+    def _note_visible(self, rel: str) -> bool:
+        """False for a symlinked note that leaves the vault."""
+        try:
+            self.resolve(rel)
+        except EpistemeError:
+            return False
+        return True
 
     def _list_dir(self, base: Path, reldir: str, mtime_ns: int) -> DirListing:
         subdirs: list[str] = []
@@ -259,13 +311,12 @@ class Vault:
             if entry.is_dir(follow_symlinks=False):
                 if not entry.name.startswith("."):
                     subdirs.append(rel)
-            elif entry.name.lower().endswith(".md"):
-                if entry.is_symlink():
-                    try:
-                        self.resolve(rel)
-                    except EpistemeError:
-                        continue
-                notes.append(rel)
+                continue
+            if not entry.name.lower().endswith(".md"):
+                continue
+            if entry.is_symlink() and not self._note_visible(rel):
+                continue
+            notes.append(rel)
         return DirListing(mtime_ns, subdirs, notes)
 
     # -- zones -------------------------------------------------------------
