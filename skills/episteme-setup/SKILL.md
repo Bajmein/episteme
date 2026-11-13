@@ -55,7 +55,7 @@ Fusiona en ese archivo el contenido de [settings.json](settings.json) de esta sk
 - `allow` de los 7 tools de solo lectura (`remember`, `revise` y `checkpoint` siguen pidiendo permiso);
 - `deny` de `Read/Edit(~/.episteme/**)` (`Edit` ya cubre Write; una regla `Write(...)` nunca coincide), `Bash(obsidian *)` y `Bash(omega *)`: el acceso al vault se cierra con permisos, no con el prompt. Si el vault no es el de por defecto, cambia la ruta en las dos reglas;
 - los 6 hooks `mcp_tool`: bienvenida, recordatorios y sugerencias por mensaje en `UserPromptSubmit` (con `${prompt}`), `constraints` antes de `Edit|Write|mcp__serena__.*` y `surface` después de `Read|Edit|Write|mcp__serena__.*` (con Serena el tool no trae `file_path`: pasa `relative_path`), `checkpoint` save en `PreCompact`, y en `SessionStart` (`compact|clear`) `checkpoint` restore y la bienvenida otra vez. Todos devuelven `hookSpecificOutput.additionalContext`.
-- `"autoMemoryEnabled": false`: la memoria automática de Claude Code (`MEMORY.md`) compite con episteme y el agente acaba guardando en dos sitios. Pregunta a la persona antes de escribirlo. Si el proyecto ya tiene un `MEMORY.md` con contenido, ofrece pasarlo a episteme con `remember` antes de desactivarla. Un `autoMemoryEnabled: true` explícito se respeta: no lo cambies.
+- `"autoMemoryEnabled": false`: la memoria automática de Claude Code (`MEMORY.md`) compite con episteme y el agente acaba guardando en dos sitios. Pregunta a la persona antes de escribirlo. El `MEMORY.md` vive por proyecto en `~/.claude/projects/<proyecto>/memory/`, no en la raíz del repo. Si el proyecto ya tiene uno con contenido, ofrece pasarlo a episteme con `remember` antes de desactivarla. Un `autoMemoryEnabled: true` explícito se respeta: no lo cambies. En `.claude/settings.json` (versionado) la clave afecta a todo el equipo: prefiere `settings.local.json`.
 
 Si el proyecto se empaqueta como plugin, `"server": "episteme"` pasa a `"plugin:<plugin>:episteme"`.
 
@@ -95,7 +95,7 @@ Es de solo lectura. Compara `.claude/settings.local.json`, `.claude/settings.jso
 - reglas `allow` o `deny` que faltan;
 - `autoMemoryEnabled`: ausente, o `true` explícito (se respeta, solo se informa).
 
-Muestra el diff a la persona y fusiona solo si lo aprueba. Si el clasificador bloquea la edición, entrega el JSON fusionado (regla del paso 2).
+Los hooks de archivos distintos se suman: si ya están en el `settings.json` de usuario, no los dupliques en el del proyecto; di en qué archivo deben quedar y pregunta. Muestra el diff a la persona y fusiona solo si lo aprueba. Si el clasificador bloquea la edición, entrega el JSON fusionado (regla del paso 2).
 
 ## 6. Migrar desde OMEGA (solo si el proyecto lo usa)
 
