@@ -9,7 +9,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
 from episteme.index import Index, jsonable, normalize_tag, query_terms, to_json
@@ -212,68 +212,72 @@ class Engine:
         facets: bool = False,
         match: str = "all",
     ) -> dict[str, Any]:
-        query = _check_query(query, match, limit, bool(tags or type or project or zone or facets))
+        has_filter = _has_filter(type, tags, project, zone, facets)
+        query = _check_query(query, match, limit, has_filter)
         any_mode = match == "any" and query is not None
-        if path:
-            self.check_path(path.strip().rstrip("/") or "/")
+        self._check_search_path(path)
         zones = sorted(z.path for z in self.vault.config.zones)
         zone = _check_zone(zone, zones)
         f = _Filters(path, type, tags, project, status, zone)
         kwargs = f.as_kwargs()
-        hits, total, fallback = self._run_query(query, f, kwargs, any_mode, limit, facets)
-        out = self._build_search_out(query, hits, total, fallback, any_mode, kwargs)
-        if total == 0:
-            hints = self._hints(query, f, zones)
-            if hints:
-                out["hints"] = hints
+        result = self._run_query(query, f, any_mode, limit, facets)
+        out = self._build_search_out(query, result, any_mode, kwargs)
+        self._add_hints(out, query, f, zones, result.total)
         if facets:
-            out["facets"] = self.index.facets(query, any_term=fallback or any_mode, **kwargs)
+            out["facets"] = self.index.facets(
+                query, any_term=result.fallback or any_mode, **kwargs
+            )
         return out
 
+    def _check_search_path(self, path: str | None) -> None:
+        if path:
+            self.check_path(path.strip().rstrip("/") or "/")
+
+    def _add_hints(
+        self, out: dict[str, Any], query: str | None, f: _Filters, zones: list[str], total: int
+    ) -> None:
+        """An empty result explains itself with hints."""
+        if total != 0:
+            return
+        hints = self._hints(query, f, zones)
+        if hints:
+            out["hints"] = hints
+
     def _run_query(
-        self,
-        query: str | None,
-        f: _Filters,
-        kwargs: dict[str, Any],
-        any_mode: bool,
-        limit: int,
-        facets: bool,
-    ) -> tuple[list[Any], int, bool]:
-        """Run the search; return the hits, the total and whether it fell back to OR."""
+        self, query: str | None, f: _Filters, any_mode: bool, limit: int, facets: bool
+    ) -> _QueryResult:
+        """Run the search; the result says whether it fell back to OR."""
         index = self.index
+        kwargs = f.as_kwargs()
         if _only_facets(query, f, facets):
-            return [], index.search(None, limit=1, snippets=False, **kwargs)[1], False
+            total = index.search(None, limit=1, snippets=False, **kwargs)[1]
+            return _QueryResult([], total, False)
         hits, total = index.search(query, any_term=any_mode, limit=limit, **kwargs)
         if not _should_fall_back(any_mode, total, query):
-            return hits, total, False
+            return _QueryResult(hits, total, False)
         hits, total = index.search(query, any_term=True, limit=limit, **kwargs)
-        return hits, total, bool(hits)
+        return _QueryResult(hits, total, bool(hits))
 
     def _build_search_out(
-        self,
-        query: str | None,
-        hits: list[Any],
-        total: int,
-        fallback: bool,
-        any_mode: bool,
-        kwargs: dict[str, Any],
+        self, query: str | None, result: _QueryResult, any_mode: bool, kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "results": self._rows(hits, query if (any_mode or fallback) else None),
-            "total": total,
+            "results": self._rows(result.hits, query if (any_mode or result.fallback) else None),
+            "total": result.total,
         }
-        if fallback:
+        if result.fallback:
             out["match"] = "or"
             out["note"] = "No note has all the words; showing notes with any of them (OR)."
         elif not any_mode and query is not None:
-            self._add_partial(out, query, hits, total, kwargs)
+            self._add_partial(out, query, result, kwargs)
         return out
 
     def _add_partial(
-        self, out: dict[str, Any], query: str, hits: list[Any], total: int, kwargs: dict[str, Any]
+        self, out: dict[str, Any], query: str, result: _QueryResult, kwargs: dict[str, Any]
     ) -> None:
         """Few AND matches: also list notes that have some of the words."""
-        if not _wants_partial(query, hits, total):
+        hits = result.hits
+        if not _wants_partial(query, hits, result.total):
             return
         seen = {h.path for h in hits}
         more, _ = self.index.search(query, any_term=True, limit=PARTIAL_MAX + len(seen), **kwargs)
@@ -292,20 +296,15 @@ class Engine:
         outline: bool | None = None,
         content: bool = True,
     ) -> dict[str, Any]:
-        _check_read_args(heading, lines, outline, content)
+        opts = _ReadOpts(heading, lines, outline, content)
+        _check_read_args(opts)
         rel = self.resolve_note(note)
         parsed = self.load(rel)
-        partial = heading is not None or lines is not None
-        start, end, cap = _read_window(parsed, rel, heading, lines, content)
+        partial = opts.is_partial()
+        start, end, cap = _read_window(parsed, rel, opts)
         text, truncated, shown_end = _truncate("\n".join(parsed.lines[start:end]), start, end, cap)
-        return _read_result(
-            rel,
-            parsed,
-            text=text,
-            truncated=truncated,
-            with_outline=_wants_outline(outline, partial),
-            line_range=f"{start + 1}-{shown_end}" if partial else None,
-        )
+        shown = _Shown(text, truncated, f"{start + 1}-{shown_end}" if partial else None)
+        return _read_result(rel, parsed, shown, with_outline=_wants_outline(outline, partial))
 
     def read_many(
         self,
@@ -316,7 +315,7 @@ class Engine:
         content: bool = True,
     ) -> dict[str, Any]:
         """Several whole notes in one call; a note that fails is reported, not raised."""
-        _check_batch_args(notes, heading, lines, outline, content)
+        _check_batch_args(notes, _ReadOpts(heading, lines, outline, content))
         wanted = None if not content else bool(outline)
         out_notes, pending = self._read_batch(notes, wanted, content)
         out: dict[str, Any] = {"notes": out_notes}
@@ -420,6 +419,53 @@ class _Filters:
         return not (self.path or self.type or self.tags or self.project or self.zone or self.status)
 
 
+class _QueryResult(NamedTuple):
+    """What a search run found: the hits, the total and whether it fell back to OR."""
+
+    hits: list[Any]
+    total: int
+    fallback: bool
+
+
+@dataclass(frozen=True)
+class _ReadOpts:
+    """The optional arguments of ``read`` / ``read_many`` as the caller gave them."""
+
+    heading: str | None
+    lines: str | None
+    outline: bool | None
+    content: bool
+
+    def is_partial(self) -> bool:
+        return _has_section(self.heading, self.lines)
+
+    def has_both_selectors(self) -> bool:
+        return self.heading is not None and self.lines is not None
+
+    def contradicts_outline_only(self) -> bool:
+        """content=false asked together with a section or outline=false."""
+        return not self.content and (self.is_partial() or self.outline is False)
+
+
+@dataclass(frozen=True)
+class _Shown:
+    """The text of a read, whether it was cut and the line range when partial."""
+
+    text: str
+    truncated: bool
+    line_range: str | None
+
+
+def _has_filter(
+    type: str | None, tags: list[str] | None, project: str | None, zone: str | None, facets: bool
+) -> bool:
+    return bool(tags or type or project or zone or facets)
+
+
+def _has_section(heading: str | None, lines: str | None) -> bool:
+    return heading is not None or lines is not None
+
+
 def _project_scope(project: str | None) -> str | list[str] | None:
     """A project also sees the ``_shared`` memories."""
     if project and project != "_shared":
@@ -446,12 +492,10 @@ def _optional_fields(h: Any) -> dict[str, Any]:
     return {key: getattr(h, key) for key in keys if getattr(h, key) is not None}
 
 
-def _check_read_args(
-    heading: str | None, lines: str | None, outline: bool | None, content: bool
-) -> None:
-    if heading is not None and lines is not None:
+def _check_read_args(opts: _ReadOpts) -> None:
+    if opts.has_both_selectors():
         raise invalid("pass heading or lines, not both.")
-    if not content and (heading is not None or lines is not None or outline is False):
+    if opts.contradicts_outline_only():
         raise invalid(
             "content=false returns only the outline. Drop heading, lines and outline=false."
         )
@@ -464,11 +508,9 @@ def _wants_outline(outline: bool | None, partial: bool) -> bool:
 def _read_result(
     rel: str,
     parsed: ParsedNote,
+    shown: _Shown,
     *,
-    text: str,
-    truncated: bool,
     with_outline: bool,
-    line_range: str | None,
 ) -> dict[str, Any]:
     """The read payload; ``line_range`` is None unless a heading or lines were asked for."""
     out: dict[str, Any] = {
@@ -478,25 +520,23 @@ def _read_result(
     }
     if with_outline:
         out["outline"] = _outline(parsed)
-    out["content"] = text
-    out["truncated"] = truncated
+    out["content"] = shown.text
+    out["truncated"] = shown.truncated
     out["total_lines"] = len(parsed.lines)
-    if line_range is not None:
-        out["range"] = line_range
+    if shown.line_range is not None:
+        out["range"] = shown.line_range
     return out
 
 
-def _check_batch_args(
-    notes: list[str],
-    heading: str | None,
-    lines: str | None,
-    outline: bool | None,
-    content: bool,
-) -> None:
-    if heading is not None or lines is not None:
+def _check_batch_args(notes: list[str], opts: _ReadOpts) -> None:
+    if opts.is_partial():
         raise invalid("heading and lines apply to one note. Use note, or drop them.")
-    if not content and outline is False:
+    if not opts.content and opts.outline is False:
         raise invalid("content=false returns only the outline. Drop outline=false.")
+    _check_batch_notes(notes)
+
+
+def _check_batch_notes(notes: list[str]) -> None:
     if not isinstance(notes, list) or not notes:
         raise invalid("notes is empty. Pass 1-20 paths or note names.")
     if len(notes) > BATCH_MAX:
@@ -535,17 +575,21 @@ def _check_zone(zone: str | None, zones: list[str]) -> str | None:
     return zone
 
 
-def _read_window(
-    parsed: ParsedNote, rel: str, heading: str | None, lines: str | None, content: bool
-) -> tuple[int, int, int]:
+def _read_window(parsed: ParsedNote, rel: str, opts: _ReadOpts) -> tuple[int, int, int]:
     """The 0-based [start, end) lines to show and the character cap that applies."""
-    if not content:
+    if not opts.content:
         return 0, 0, READ_CAP
-    if lines is not None:
-        start, end = _parse_range(lines, len(parsed.lines))
+    if opts.lines is not None:
+        start, end = _parse_range(opts.lines, len(parsed.lines))
         return start, end, SECTION_CAP
-    if heading is None:
+    if opts.heading is None:
         return parsed.fm_end, len(parsed.lines), READ_CAP
+    start, end = _heading_window(parsed, rel, opts.heading)
+    return start, end, SECTION_CAP
+
+
+def _heading_window(parsed: ParsedNote, rel: str, heading: str) -> tuple[int, int]:
+    """The [start, end) lines of a section, or ``not_found`` listing the headings."""
     rng = find_section(parsed, heading)
     if rng is None:
         names = clip(", ".join(f'"{h.text}"' for h in parsed.headings), HEADING_NAMES_CAP)
@@ -553,7 +597,7 @@ def _read_window(
             NOT_FOUND,
             f'no heading "{heading}" in {rel}. Headings are: {names or "none"}.',
         )
-    return rng[0], rng[1], SECTION_CAP
+    return rng[0], rng[1]
 
 
 def _truncate(text: str, start: int, end: int, cap: int) -> tuple[str, bool, int]:
@@ -571,16 +615,25 @@ def _truncate(text: str, start: int, end: int, cap: int) -> tuple[str, bool, int
 
 
 def _parse_range(spec: str, total: int) -> tuple[int, int]:
+    first, last = _range_bounds(spec)
+    _validate_range(spec, first, last, total)
+    return first - 1, min(last, total)
+
+
+def _range_bounds(spec: str) -> tuple[int, int]:
+    """The first and last line asked for in ``"10-40"`` or ``"10"``."""
     m = re.fullmatch(r"\s*(\d+)\s*(?:-\s*(\d+)\s*)?", spec or "")
     if not m:
         raise invalid(f'lines must look like "10-40", got "{spec}".')
     first = int(m.group(1))
-    last = int(m.group(2)) if m.group(2) else first
+    return first, int(m.group(2)) if m.group(2) else first
+
+
+def _validate_range(spec: str, first: int, last: int, total: int) -> None:
     if first < 1 or last < first:
         raise invalid(f'lines "{spec}" is not a valid 1-based range.')
     if first > total:
         raise invalid(f'lines "{spec}" starts after the end of the note ({total} lines).')
-    return first - 1, min(last, total)
 
 
 def _outline(parsed: ParsedNote) -> list[dict[str, Any]]:
