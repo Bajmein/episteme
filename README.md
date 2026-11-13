@@ -170,7 +170,8 @@ episteme no fusiona ni borra nada por su cuenta; `review` solo da los candidatos
 1. `review(project="*", zone="memory")`.
 2. Por cada grupo de `similar`: leer las memorias, guardar la unificada con `remember` y marcar cada antigua con `revise(action="supersede", by=…)`.
 3. Archivar lo que ya no aplica con `revise(action="archive")` (reversible).
-4. Corregir los `cut_titles` (el título quedó cortado y repetido en la primera línea del cuerpo).
+4. Revisar las `expired` (memorias activas con `valid_until` ya pasado, sin contar los checkpoints, que `checkpoint` archiva): `revise(action="archive")` o una memoria nueva con `supersedes`.
+5. Corregir los `cut_titles` (el título quedó cortado y repetido en la primera línea del cuerpo).
 
 ## Hooks
 

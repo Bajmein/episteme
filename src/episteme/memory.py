@@ -1200,6 +1200,22 @@ def review(
         ):
             stale.append({"path": r["path"], "title": r["title"], "days": days})
 
+    # Past valid_until, still active. Checkpoints are left out: checkpoint archives them.
+    iso = now.isoformat()
+    expired = [
+        {
+            "path": r["path"],
+            "title": r["title"],
+            "type": r["type"],
+            "valid_until": r["valid_until"],
+        }
+        for r in active
+        if r["valid_until"]
+        and r["valid_until"] < iso
+        and not (r["type"] == "session" and r["path"].rsplit("/", 1)[-1].startswith("checkpoint-"))
+    ]
+    expired.sort(key=lambda e: (e["valid_until"], e["path"]))
+
     linked: set[tuple[str, str]] = set()
     for row in engine.index.conn.execute(
         "select src, dst_path from links where kind in ('supersedes', 'contradicts', 'related') "
@@ -1278,6 +1294,7 @@ def review(
     flagged = [r["path"] for r in mems if r["flagged"]]
     found: dict[str, list[Any]] = {
         "stale": stale,
+        "expired": expired,
         "contradictions": contradictions,
         "similar": similar,
         "cut_titles": cut_titles,
