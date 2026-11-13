@@ -230,9 +230,9 @@ def _is_recallable(row: Any, iso: str) -> bool:
     return not (row["valid_until"] and row["valid_until"] < iso)
 
 
-def _strong_words(engine: Engine, path: str, row: Any) -> set[str]:
+def _strong_words(engine: Engine, row: Any) -> set[str]:
     """The words of the note's title, tags and keywords."""
-    props = engine.index.props(path)
+    props = engine.index.props(row["path"])
     words = set(tokens(row["title"] or ""))
     for key in ("tags", "keywords"):
         for item in _as_list(props.get(key)):
@@ -240,9 +240,8 @@ def _strong_words(engine: Engine, path: str, row: Any) -> set[str]:
     return words
 
 
-def _enough_hits(strong: set[str], counted: list[str], body_words: set[str]) -> bool:
+def _enough_hits(hit_terms: set[str], counted: list[str]) -> bool:
     """Whether the note holds enough of the message's terms (or the message has few terms)."""
-    hit_terms = strong | {t for t in counted if t in body_words}
     return len(hit_terms) >= RECALL_MIN_HIT_TERMS or len(counted) <= RECALL_FEW_TERMS
 
 
@@ -253,14 +252,14 @@ def _score(
     row = engine.index.note(path)
     if row is None or not _is_recallable(row, iso):
         return None
-    words = _strong_words(engine, path, row)
+    words = _strong_words(engine, row)
     strong = {t for t in counted if t in words}
     if not strong:
         return None
     body_words = set(tokens(row["search_text"] or ""))
-    if not _enough_hits(strong, counted, body_words):
-        return None
     hit_terms = strong | {t for t in counted if t in body_words}
+    if not _enough_hits(hit_terms, counted):
+        return None
     return (-len(strong), -len(hit_terms), pos, row)
 
 
