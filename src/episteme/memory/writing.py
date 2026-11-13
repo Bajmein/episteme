@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import difflib
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from episteme.errors import invalid
 from episteme.index import STOPWORDS_ES
@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 
 SLUG_WORDS = 5
 SLUG_CHARS = 40
+MAX_CANDIDATES = 5
+MIN_SHARED_TAGS = 2
 _SLUG_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[a-z0-9]+")
 _SLUG_OK = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 _SLUG_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -87,23 +89,24 @@ def _new_tags(engine: Engine, tags: list[str]) -> list[dict[str, Any]]:
     ]
 
 
+def _active_memories(engine: Engine, project: str) -> list[Any]:
+    """Active memories of the project and of the shared zone (all of them for ``SHARED``)."""
+    if project == SHARED:
+        return engine.index.memories("status = 'active'")
+    return engine.index.memories("status = 'active' and project in (?, ?)", (project, SHARED))
+
+
 def _link_candidates(
     engine: Engine, project: str, fm: dict[str, Any], skip: set[str]
 ) -> list[dict[str, str]]:
     """Up to 5 active memories sharing a ``files`` value or 2+ tags with the new one."""
     my_files = set(fm.get("files") or [])
     my_tags = set(fm.get("tags") or [])
-    if not my_files and len(my_tags) < 2:
+    if not my_files and len(my_tags) < MIN_SHARED_TAGS:
         return []
-    if project == SHARED:
-        rows = engine.index.memories("status = 'active'")
-    else:
-        rows = engine.index.memories(
-            "status = 'active' and project in (?, ?)", (project, SHARED)
-        )
     files = _files_of(engine)
     found = []
-    for row in rows:
+    for row in _active_memories(engine, project):
         if row["path"] in skip:
             continue
         shared_files = sorted(my_files & set(files.get(row["path"], [])))
@@ -111,7 +114,7 @@ def _link_candidates(
         shared_tags = sorted(my_tags & set(_as_list(raw_tags)))
         if shared_files:
             reason = f"shares file {shared_files[0]}"
-        elif len(shared_tags) >= 2:
+        elif len(shared_tags) >= MIN_SHARED_TAGS:
             reason = f"shares tags {', '.join(shared_tags)}"
         else:
             continue
@@ -121,7 +124,135 @@ def _link_candidates(
     found.sort(key=lambda f: f[2])
     found.sort(key=lambda f: f[1], reverse=True)
     found.sort(key=lambda f: f[0], reverse=True)
-    return [{"path": p, "title": t, "reason": r} for _, _, p, t, r in found[:5]]
+    return [{"path": p, "title": t, "reason": r} for _, _, p, t, r in found[:MAX_CANDIDATES]]
+
+
+class _Links(NamedTuple):
+    related: list[str]
+    old_rel: str | None
+    old_note: NoteFile | None
+
+
+def _check_args(
+    engine: Engine,
+    type: str,
+    title: str,
+    body: str,
+    secret_fields: tuple[tuple[str, Any], ...],
+) -> tuple[Any, str]:
+    """Validate the arguments and return the memory zone and the cleaned title."""
+    zone = engine.vault.memory_zone
+    if zone is None:
+        raise invalid('the vault has no zone with mode = "memory". Declare one in episteme.toml.')
+    if type not in TYPES:
+        raise schema_error(f"type must be one of {', '.join(TYPES)}, got {type!r}.")
+    title = " ".join((title or "").split())
+    if not title:
+        raise invalid("title is empty. Pass a short title.")
+    if not (body or "").strip():
+        raise invalid("body is empty. Describe the memory and name the files or tools involved.")
+    for field, value in (("title", title), ("body", body), *secret_fields):
+        _reject_secrets(field, value)
+    return zone, title
+
+
+def _resolve_links(engine: Engine, related: list[str] | None, supersedes: str | None) -> _Links:
+    """Resolve ``related`` to wikilinks and mark the superseded memory (not yet saved)."""
+    related_links = [wikilink(engine, engine.resolve_note(r)) for r in related or []]
+    if not supersedes:
+        return _Links(related_links, None, None)
+    old_rel = engine.resolve_note(supersedes)
+    if engine.vault.check_writable(old_rel) != MEMORY:
+        raise invalid(f"{old_rel} is not a memory, so it cannot be superseded.")
+    old_note = NoteFile(engine, old_rel)
+    old_note.set_fields({"status": "superseded"})
+    validate(old_note.fm)
+    return _Links(related_links, old_rel, old_note)
+
+
+def _clean_body(body: str) -> str:
+    """The body without its leading ``# title`` line, which ``remember`` writes itself."""
+    text_body = body.strip()
+    if text_body.split("\n", 1)[0].strip().startswith("# "):
+        return body_without_title(text_body)
+    return text_body
+
+
+def _find_similar(
+    engine: Engine, project: str, type: str, title: str, text_body: str, old_rel: str | None
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Memories close to the new one, and the closest duplicate that blocks the save."""
+    mine = dedup_tokens(title, text_body)
+    similar: list[dict[str, Any]] = []
+    blocking: dict[str, Any] | None = None
+    for row in _active_memories(engine, project):
+        if row["path"] == old_rel:
+            continue
+        theirs = dedup_tokens(row["title"] or "", body_without_title(row["body"]))
+        score = similarity(mine, theirs)
+        if score < SIMILAR:
+            continue
+        item = {
+            "path": row["path"],
+            "title": row["title"],
+            "similarity": round(score, 3),
+            "type": row["type"],
+            "project": row["project"],
+        }
+        similar.append(item)
+        if score >= DUPLICATE and row["project"] == project and row["type"] == type:
+            if blocking is None or (-item["similarity"], item["path"]) < (
+                -blocking["similarity"],
+                blocking["path"],
+            ):
+                blocking = item
+    similar.sort(key=lambda s: (-s["similarity"], s["path"]))
+    return similar, blocking
+
+
+def _duplicate_reply(similar: list[dict[str, Any]], blocking: dict[str, Any]) -> dict[str, Any]:
+    """The answer when a near-duplicate blocks the save: nothing is written."""
+    similar.remove(blocking)
+    similar.insert(0, blocking)
+    hint = (
+        f"Already saved as {blocking['path']}. If it happened again, "
+        f'revise(note="{blocking["path"]}", action="feedback", value="helpful"). '
+        "If it changed, call remember again with "
+        f'supersedes="{blocking["path"]}". '
+        "Use force=true only for a genuinely different memory."
+    )
+    return {"created": False, "path": None, "similar": similar, "hint": hint}
+
+
+def _extras(engine: Engine, project: str, fm: dict[str, Any], skip: set[str]) -> dict[str, Any]:
+    """Hints for the caller: tags no other note has and memories worth linking."""
+    extras: dict[str, Any] = {}
+    new_tags = _new_tags(engine, fm.get("tags") or [])
+    if new_tags:
+        extras["new_tags"] = new_tags
+    candidates = _link_candidates(engine, project, fm, skip)
+    if candidates:
+        extras["link_candidates"] = candidates
+    return extras
+
+
+def _numbered_rel(folder: str, base: str, n: int) -> str:
+    """Path of the n-th try for a file name: ``base.md``, ``base-2.md``, ``base-3.md``..."""
+    return f"{folder}/{base}.md" if n == 1 else f"{folder}/{base}-{n}.md"
+
+
+def _write_new(engine: Engine, folder: str, base: str, content: str, dry_run: bool) -> str:
+    """Create the file under the first free numbered name (only look for it if ``dry_run``)."""
+    n = 1
+    if dry_run:
+        while engine.vault.resolve(_numbered_rel(folder, base, n)).exists():
+            n += 1
+        return _numbered_rel(folder, base, n)
+    while True:
+        rel = _numbered_rel(folder, base, n)
+        if not engine.vault.resolve(rel).exists() and engine.vault.create_exclusive(rel, content):
+            return rel
+        n += 1
 
 
 def remember(
@@ -149,38 +280,11 @@ def remember(
 ) -> dict[str, Any]:
     """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration."""
     project = engine.need_project(project)
-    zone = engine.vault.memory_zone
-    if zone is None:
-        raise invalid('the vault has no zone with mode = "memory". Declare one in episteme.toml.')
-    if type not in TYPES:
-        raise schema_error(f"type must be one of {', '.join(TYPES)}, got {type!r}.")
-    title = " ".join((title or "").split())
-    if not title:
-        raise invalid("title is empty. Pass a short title.")
-    if not (body or "").strip():
-        raise invalid("body is empty. Describe the memory and name the files or tools involved.")
-
-    for field, value in (
-        ("title", title),
-        ("body", body),
-        ("keywords", keywords),
-        ("source", source),
-        ("tags", tags),
-        ("files", files),
-    ):
-        _reject_secrets(field, value)
+    secret_fields = (("keywords", keywords), ("source", source), ("tags", tags), ("files", files))
+    zone, title = _check_args(engine, type, title, body, secret_fields)
 
     slug = _check_slug(slug) if slug is not None else memory_slug(title, project, type)
-    related_links = [wikilink(engine, engine.resolve_note(r)) for r in related or []]
-    old_rel = None
-    old_note = None
-    if supersedes:
-        old_rel = engine.resolve_note(supersedes)
-        if engine.vault.check_writable(old_rel) != MEMORY:
-            raise invalid(f"{old_rel} is not a memory, so it cannot be superseded.")
-        old_note = NoteFile(engine, old_rel)
-        old_note.set_fields({"status": "superseded"})
-        validate(old_note.fm)
+    links = _resolve_links(engine, related, supersedes)
 
     created = created or today()
     fm = ordered(
@@ -195,8 +299,8 @@ def remember(
             "tags": [t.strip().lstrip("#") for t in tags or []],
             "keywords": [k.strip() if isinstance(k, str) else k for k in keywords or []],
             "files": list(files or []),
-            "supersedes": wikilink(engine, old_rel) if old_rel else None,
-            "related": related_links,
+            "supersedes": wikilink(engine, links.old_rel) if links.old_rel else None,
+            "related": links.related,
             "source": source,
             "helpful": helpful,
             "due": _date_arg("due", due),
@@ -204,79 +308,24 @@ def remember(
     )
     validate(fm)
 
-    text_body = body.strip()
-    first = text_body.split("\n", 1)[0].strip()
-    if first.startswith("# "):
-        text_body = body_without_title(text_body)
-    mine = dedup_tokens(title, text_body)
-    similar = []
-    blocking = None
-    if project == SHARED:
-        rows = engine.index.memories("status = 'active'")
-    else:
-        rows = engine.index.memories(
-            "status = 'active' and project in (?, ?)", (project, SHARED)
-        )
-    for row in rows:
-        if row["path"] == old_rel:
-            continue
-        theirs = dedup_tokens(row["title"] or "", body_without_title(row["body"]))
-        score = similarity(mine, theirs)
-        if score >= SIMILAR:
-            item = {
-                "path": row["path"],
-                "title": row["title"],
-                "similarity": round(score, 3),
-                "type": row["type"],
-                "project": row["project"],
-            }
-            similar.append(item)
-            if score >= DUPLICATE and row["project"] == project and row["type"] == type:
-                if blocking is None or (-item["similarity"], item["path"]) < (
-                    -blocking["similarity"],
-                    blocking["path"],
-                ):
-                    blocking = item
-    similar.sort(key=lambda s: (-s["similarity"], s["path"]))
+    text_body = _clean_body(body)
+    similar, blocking = _find_similar(engine, project, type, title, text_body, links.old_rel)
     if blocking is not None and not force:
-        similar.remove(blocking)
-        similar.insert(0, blocking)
-        hint = (
-            f"Already saved as {blocking['path']}. If it happened again, "
-            f'revise(note="{blocking["path"]}", action="feedback", value="helpful"). '
-            "If it changed, call remember again with "
-            f'supersedes="{blocking["path"]}". '
-            "Use force=true only for a genuinely different memory."
-        )
-        return {"created": False, "path": None, "similar": similar, "hint": hint}
-    extras: dict[str, Any] = {}
-    new_tags = _new_tags(engine, fm.get("tags") or [])
-    if new_tags:
-        extras["new_tags"] = new_tags
+        return _duplicate_reply(similar, blocking)
     skip = {engine.resolve_note(r) for r in related or []}
-    if old_rel:
-        skip.add(old_rel)
-    candidates = _link_candidates(engine, project, fm, skip)
-    if candidates:
-        extras["link_candidates"] = candidates
+    if links.old_rel:
+        skip.add(links.old_rel)
+    extras = _extras(engine, project, fm, skip)
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"
     base = f"{created.isoformat()}-{slug}"
     engine.vault.check_writable(f"{folder}/{base}.md")
-    n = 1
+    rel = _write_new(engine, folder, base, content, dry_run)
     if dry_run:
-        while engine.vault.resolve(f"{folder}/{base}{'' if n == 1 else f'-{n}'}.md").exists():
-            n += 1
-        path = f"{folder}/{base}{'' if n == 1 else f'-{n}'}.md"
-        return {"created": True, "path": path, "similar": similar, "dry_run": True, **extras}
-    while True:
-        rel = f"{folder}/{base}.md" if n == 1 else f"{folder}/{base}-{n}.md"
-        if not engine.vault.resolve(rel).exists() and engine.vault.create_exclusive(rel, content):
-            break
-        n += 1
+        return {"created": True, "path": rel, "similar": similar, "dry_run": True, **extras}
     engine.index.reindex(rel)
 
-    if old_note is not None:
-        old_note.save()
+    if links.old_note is not None:
+        links.old_note.save()
     return {"created": True, "path": rel, "similar": similar, **extras}
