@@ -544,7 +544,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                         note = ""
                     try:
                         maintenance.start_backup(engine.vault, store)
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
                 if welcomed:
                     text, found = memory.welcome(engine, project)
