@@ -237,8 +237,9 @@ def _split_body(lines: list[str]) -> _Body:
         elif section is None:
             text.append(line)
         elif section == "Related":
-            related.extend(filter(None, [_related_id(line)]))
-        else:
+            if (rid := _related_id(line)) is not None:
+                related.append(rid)
+        elif section == "Metadata":
             source = _source_of(line) or source
     return _Body("\n".join(text).strip(), related, source)
 
