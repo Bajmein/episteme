@@ -57,6 +57,33 @@ def _result_paths(text: str) -> list[str]:
         return []
 
 
+def _error_text(exc: ToolError) -> str | None:
+    """The message for a tool error caused by episteme or validation, else None."""
+    cause = exc.__cause__
+    if isinstance(cause, EpistemeError):
+        return str(cause)
+    if isinstance(cause, ValidationError):
+        return _validation_message(cause)
+    return None
+
+
+def _result_text(result: Any) -> str:
+    """The concatenated text blocks of a tool result."""
+    return "".join(getattr(b, "text", "") for b in getattr(result, "content", None) or [])
+
+
+def _track_result(name: str, arguments: dict[str, Any], text: str) -> None:
+    """Count writes and track the notes written or read by a successful tool call."""
+    if name in ("remember", "revise") and "hook_event" not in arguments:
+        if name == "revise" or _created(text):
+            prompting.WRITES += 1
+            for path in _result_paths(text):
+                prompting.track(path, "written")
+    elif name == "read":
+        for path in _result_paths(text):
+            prompting.track(path, "read")
+
+
 class EpistemeServer(MCPServer):
     """MCPServer whose tool errors read ``<code>: <what failed>. <what to do>``."""
 
@@ -69,24 +96,13 @@ class EpistemeServer(MCPServer):
         try:
             result = await super().call_tool(name, arguments, context)
         except ToolError as exc:
-            cause = exc.__cause__
-            if isinstance(cause, EpistemeError):
-                text = str(cause)
-            elif isinstance(cause, ValidationError):
-                text = _validation_message(cause)
-            else:
+            text = _error_text(exc)
+            if text is None:
                 raise
             self._log(name, arguments, text, start, False)
             return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)
-        text = "".join(getattr(b, "text", "") for b in getattr(result, "content", None) or [])
-        if name in ("remember", "revise") and "hook_event" not in arguments:
-            if name == "revise" or _created(text):
-                prompting.WRITES += 1
-                for path in _result_paths(text):
-                    prompting.track(path, "written")
-        elif name == "read":
-            for path in _result_paths(text):
-                prompting.track(path, "read")
+        text = _result_text(result)
+        _track_result(name, arguments, text)
         self._log(name, arguments, text, start, True)
         return result
 
