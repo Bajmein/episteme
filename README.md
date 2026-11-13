@@ -50,7 +50,7 @@ En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por 
 
 1. `claude mcp list` (o `/mcp` dentro de Claude Code) muestra `episteme` conectado. La primera vez tarda: uv descarga el repo y las dependencias. Una sesión abierta antes del registro no ve los tools (ni sus subagentes) hasta reiniciar Claude Code.
 2. Copia el bloque de [Hooks](#hooks) y los permisos recomendados en `.claude/settings.local.json` del proyecto, o en `.claude/settings.json` si todo el equipo tiene episteme registrado (con el servidor en scope local, a quien no lo tenga le fallarían los hooks). En modo auto, Claude Code no deja que el agente edite estos archivos: lo hace la persona.
-3. Añade al `CLAUDE.md` del proyecto: «Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` no están disponibles en la sesión, dilo antes de seguir.»
+3. Añade al `CLAUDE.md` del proyecto: «Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` salen como diferidos, cárgalos con ToolSearch (`select:mcp__episteme__context,mcp__episteme__search,mcp__episteme__read,mcp__episteme__remember,mcp__episteme__revise`) antes de usarlos; si no aparecen ni diferidos, dilo antes de seguir.»
 
 ### La skill `episteme-setup`
 
@@ -71,6 +71,8 @@ New-Item -ItemType Junction -Path "$HOME\.claude\skills\episteme-setup" -Target 
 ```
 
 Se invoca a mano (`/episteme-setup`), desde la raíz del proyecto que se quiere conectar; Claude no la carga solo. Después de instalarla, reinicia Claude Code.
+
+Además de registrar el servidor, la skill fusiona en el proyecto la clave `autoMemoryEnabled: false` (con permiso de la persona): la memoria automática de Claude Code (`MEMORY.md`) compite con episteme. También hace una comprobación de solo lectura de la configuración: compara `.claude/settings.local.json`, `.claude/settings.json` y el `settings.json` de usuario con el de la skill, y lista hooks que faltan, repetidos o con `matcher`/`input` distintos, permisos que faltan y `autoMemoryEnabled`. Muestra el diff y solo fusiona si la persona lo aprueba.
 
 ### Uso
 
@@ -163,6 +165,10 @@ due:                    # obligatorio en reminder
 flagged: false
 ```
 
+**Credenciales.** `remember` rechaza (`invalid_argument`, sin repetir el valor) un `title`, `body`, `keywords` o `source` que parezca una credencial: bloque PEM de clave privada, claves AWS (`AKIA`/`ASIA`), tokens de GitHub, Anthropic, `sk-`, Stripe, npm, Hugging Face, Slack, Google, JWT y URL con `usuario:clave@`. Son patrones de alta precisión con longitud mínima, así que mencionar un prefijo («empieza por `ghp_`») no dispara. `revise` revisa solo el texto que entra (`new`, `text`, valores de `fields`), no el cuerpo final: una nota con un falso positivo sigue siendo editable. No se redacta en silencio; se dice dónde está guardado el secreto.
+
+**Duplicado bloqueado.** La respuesta `created: false` lleva `hint`: si volvió a ocurrir, `revise(action="feedback", value="helpful")` sobre la existente; si cambió, `remember` con `supersedes=<ruta>`; `force=true` solo para una memoria distinta de verdad.
+
 ### Mantención
 
 episteme no fusiona ni borra nada por su cuenta; `review` solo da los candidatos. El ciclo, siempre con la aprobación de la persona y grupo por grupo:
@@ -170,7 +176,8 @@ episteme no fusiona ni borra nada por su cuenta; `review` solo da los candidatos
 1. `review(project="*", zone="memory")`.
 2. Por cada grupo de `similar`: leer las memorias, guardar la unificada con `remember` y marcar cada antigua con `revise(action="supersede", by=…)`.
 3. Archivar lo que ya no aplica con `revise(action="archive")` (reversible).
-4. Corregir los `cut_titles` (el título quedó cortado y repetido en la primera línea del cuerpo).
+4. Revisar las `expired` (memorias activas con `valid_until` ya pasado, sin contar los checkpoints, que gestiona `checkpoint`): `revise(action="archive")` o una memoria nueva con `supersedes`.
+5. Corregir los `cut_titles` (el título quedó cortado y repetido en la primera línea del cuerpo).
 
 ## Hooks
 
@@ -224,7 +231,7 @@ Bloque para el `settings.json` del proyecto:
 
 Si el servidor va empaquetado en un plugin, `server` pasa a ser el nombre con scope (`plugin:fabrik:episteme`).
 
-Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`) y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El [`settings.json`](skills/episteme-setup/settings.json) de la skill `episteme-setup` trae los hooks y los permisos juntos, listos para fusionar.
+Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`) y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El [`settings.json`](skills/episteme-setup/settings.json) de la skill `episteme-setup` trae los hooks y los permisos juntos, listos para fusionar. Tras actualizar la skill, pídele la comprobación de configuración: lista lo que falta o está repetido en los tres `settings` sin tocar nada hasta que apruebes el diff.
 
 ### Comprobar que los hooks llegan al modelo
 
@@ -294,3 +301,15 @@ uv run scripts/bench_calls.py ab --vault ~/.episteme --project <proyecto> --prom
 
 - `replay` toma la ráfaga más larga de `search` y `read` del registro (llamadas del mismo proceso separadas por menos de `--gap` segundos; `--pid` la limita a un proceso) y la repite dos veces sobre la copia: tal como quedó registrada y por lotes (las búsquedas de una palabra con los mismos filtros, en un `search` con `match="any"`; las lecturas de nota entera, en `read(notes=[…])`). Imprime llamadas, caracteres y milisegundos de cada variante, las rutas únicas que devuelve `search` y cuántas de las notas leídas salen en el `search` por lote. Las consultas y las rutas solo se imprimen con `--show`.
 - `ab` lanza `claude -p` con el mismo prompt contra dos servidores, cada uno con su copia del vault: el de referencia (`--baseline-cmd`, por defecto el tag `v0.6.0`) y el de este checkout. Alterna `--runs` corridas por variante y cuenta lo que cada una deja en el registro de su copia: llamadas por tool, cuántas usan `match="any"` (`search_any`) y `notes` (`read_batch`), caracteres, turnos y coste. Las respuestas quedan en `--out` (por defecto `~/.cache/episteme-bench/<fecha>/`) para juzgar la calidad a mano.
+
+### Medir si las memorias entregadas se leen
+
+Para saber si lo que los hooks entregan (`context`, `surface`, `constraints`) llega a leerse, el script cruza el registro de actividad con las lecturas del agente. Es de solo lectura: abre `.index/activity.db` con `mode=ro` y lee la fecha `created` de las memorias desde las notas; no abre ni crea el índice.
+
+```bash
+uv run scripts/measure_uptake.py --vault ~/.episteme [--project <proyecto>] [--days 30] [--min-deliveries 3] [--old-days 90]
+```
+
+Imprime una tabla por memoria (entregas por hook, lecturas del agente, las que ocurren en la misma sesión después de una entrega y apariciones en `search`) y un resumen: (a) porcentaje de entregas seguidas de lectura, (b) memorias entregadas `--min-deliveries` veces o más y nunca leídas, (c) memorias de más de `--old-days` días con y sin lectura, (d) sesiones con lecturas y sin ninguna llamada a `remember` o `revise`, (e) búsquedas del agente sin resultados agrupadas por consulta, `match` y `zone`, por frecuencia (es el dato que decide el reintento con prefijo).
+
+Límites: una fila de `context` no distingue la bienvenida del recall, así que se cuentan juntas (`welcome` es solo el subconjunto con `mode=welcome`); las entregas sin sesión no se pueden emparejar con una lectura y cuentan como no seguidas.

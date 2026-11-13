@@ -23,7 +23,7 @@ episteme is the project memory and documentation vault. Use only these tools; ne
 - Look before you answer or act. When you start work, call context(mode="task", task="<what you are about to do>"). When the user asks what is known about a person, a client, a decision or a past event, call search, even if they did not mention the vault; then read the best hits in one call with read(notes=[...]).
 - search is literal: it matches whole words. To look up several names, or a word with its plural, abbreviation and proper name (mkt marketing, a surname), put them in one query with match="any" instead of one search per word; add zone="memory" when you want memories, not documentation. tags follow a topic across projects; project is optional.
 - Before deciding something that may already have been decided, call search, then read the best hit.
-- Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact from another source because the vault did not have it; or the user says "remember". Name the files, tools, commands and people involved in the body: that is what is searched later.
+- Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact from another source because the vault did not have it; or the user says "remember". Name the files, tools, commands and people involved in the body: that is what is searched later. Save project knowledge with remember, not in Claude Code's auto memory (MEMORY.md).
 - When a memory is wrong or replaced, call revise (action="supersede" or "archive"), never remember a contradiction next to it.
 - Notes under read-only zones (docs/claude-code) cannot be changed. Errors say what failed and what to do."""  # noqa: E501
 
@@ -356,8 +356,13 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         stays in the H1. A name that already exists gets -2, -3...
 
         Validates the schema and looks for near-duplicates of the same project and type: at
-        similarity >= 0.8 nothing is created (created: false) unless force=true. `similar` also
-        lists active memories of any type in the project or _shared (they only warn).
+        similarity >= 0.8 nothing is created (created: false) and the answer carries a "hint":
+        revise(action="feedback", value="helpful") if it happened again, remember again with
+        supersedes=<path> if it changed, force=true only for a genuinely different memory.
+        `similar` also lists active memories of any type in the project or _shared (they only
+        warn). title, body, keywords and source are refused (invalid_argument) when they look
+        like a credential (private key, cloud/API token, JWT, password in a URL): say where
+        the secret is stored instead.
         Returns JSON {"created", "path", "similar": [{"path", "title", "similarity", "type",
         "project"}], "new_tags": [{"tag", "similar"}] (tags no other note has, with close
         spellings), "link_candidates": [{"path", "title", "reason"}] (up to 5 memories sharing
@@ -416,9 +421,10 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """Change a note in a read-write or memory zone. Read-only zones are refused.
 
         supersede, feedback, archive and dismiss (archives a reminder) only apply to memories.
-        Memories are validated against the schema before anything is written. set on a memory
-        that changes type or project moves the file to memory/<project>/<type folder>/ (same
-        name, so [[name]] links keep working) and returns the new path with "moved_from".
+        Memories are validated against the schema before anything is written. Incoming text
+        (new, text, string values in fields) that looks like a credential is refused. set on a
+        memory that changes type or project moves the file to memory/<project>/<type folder>/
+        (same name, so [[name]] links keep working) and returns the new path with "moved_from".
         Returns JSON {"path", "action", "changed"}.
         """
         with engine.session():
@@ -442,15 +448,19 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             Field(description='Only notes of this zone, as in episteme.toml (e.g. "memory").'),
         ] = None,
     ) -> str:
-        """Vault health: stale memories, possible contradictions, groups of similar
-        memories, cut titles, orphans, broken links, invalid frontmatter and memories
+        """Vault health: stale memories, expired memories, possible contradictions, groups of
+        similar memories, cut titles, orphans, broken links, invalid frontmatter and memories
         flagged as outdated.
 
-        Returns JSON {"totals", "stale", "contradictions", "similar", "cut_titles",
+        Returns JSON {"totals", "stale", "expired", "contradictions", "similar", "cut_titles",
         "orphans", "broken_links", "invalid_frontmatter", "flagged", "read_only"}.
         "similar" lists groups {"paths", "similarity"} of active memories (any type or
         project, not session or reminder) to merge; "cut_titles" lists memories whose
-        first body line repeats the title and goes on. "totals" counts every item per
+        first body line repeats the title and goes on. "expired" lists active memories
+        {"path", "title", "type", "valid_until"} whose valid_until is before today
+        (checkpoints are left out: checkpoint manages them); it only reports, so for each
+        one call revise(action="archive"), or remember a new memory with supersedes if it
+        still applies in updated form. "totals" counts every item per
         category (the lists are cut at limit). Problems in read-only zones (you cannot fix
         them here; in practice broken links and invalid frontmatter, since memories live in
         memory zones) are not mixed in: they go under "read_only", with the same categories

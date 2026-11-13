@@ -83,6 +83,71 @@ MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
 MEMORY_ACTIONS = ("supersede", "feedback", "archive", "dismiss")
 UPCOMING_DAYS = 7
+SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("private key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
+    ("AWS access key", re.compile(r"(?<![A-Za-z0-9_-])(?:AKIA|ASIA)[A-Z0-9]{16}\b")),
+    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{36}")),
+    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{22,}")),
+    ("Anthropic API key", re.compile(r"(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}")),
+    ("API key", re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{32,}")),
+    ("Stripe live key", re.compile(r"(?<![A-Za-z0-9_-])sk_live_[A-Za-z0-9]{16,}")),
+    ("npm token", re.compile(r"(?<![A-Za-z0-9_-])npm_[A-Za-z0-9]{36}")),
+    ("Hugging Face token", re.compile(r"(?<![A-Za-z0-9_-])hf_[A-Za-z0-9]{30,}")),
+    ("Slack token", re.compile(r"(?<![A-Za-z0-9_-])xox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("Google API key", re.compile(r"(?<![A-Za-z0-9_-])AIza[A-Za-z0-9_-]{35}")),
+    (
+        "JWT",
+        re.compile(
+            r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{7,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{10,}"
+        ),
+    ),
+)
+_URL_CREDENTIALS = re.compile(r"://[^\s/:@]+:([^\s/@]{6,})@")
+_PLACEHOLDER_PASSWORDS = {
+    "pass",
+    "password",
+    "passwd",
+    "clave",
+    "secret",
+    "changeme",
+    "example",
+    "redacted",
+    "your_password",
+    "your-password",
+    "yourpassword",
+    "contraseña",
+    "tu_clave",
+}
+
+
+def _is_placeholder(password: str) -> bool:
+    return (
+        password[0] in "<${[%*"
+        or set(password) <= {"*", "x", "X", "."}
+        or password.lower() in _PLACEHOLDER_PASSWORDS
+    )
+
+
+def find_secrets(text: str) -> str | None:
+    """Name of the first credential type found in ``text`` (never the value), else None."""
+    for name, pattern in SECRET_PATTERNS:
+        if pattern.search(text):
+            return name
+    for m in _URL_CREDENTIALS.finditer(text):
+        if not _is_placeholder(m.group(1)):
+            return "password in URL"
+    return None
+
+
+def _reject_secrets(field: str, value: Any) -> None:
+    values = value if isinstance(value, list) else [value]
+    for item in values:
+        found = find_secrets(item) if isinstance(item, str) else None
+        if found:
+            raise invalid(
+                f"{field} looks like a secret ({found}). "
+                "Remove it and say where it is stored instead."
+            )
 
 
 def kind_for(type_: str) -> str:
@@ -381,6 +446,16 @@ def remember(
     if not (body or "").strip():
         raise invalid("body is empty. Describe the memory and name the files or tools involved.")
 
+    for field, value in (
+        ("title", title),
+        ("body", body),
+        ("keywords", keywords),
+        ("source", source),
+        ("tags", tags),
+        ("files", files),
+    ):
+        _reject_secrets(field, value)
+
     slug = _check_slug(slug) if slug is not None else memory_slug(title, project, type)
     related_links = [wikilink(engine, engine.resolve_note(r)) for r in related or []]
     old_rel = None
@@ -425,7 +500,9 @@ def remember(
     if project == SHARED:
         rows = engine.index.memories("status = 'active'")
     else:
-        rows = engine.index.memories("status = 'active' and project in (?, ?)", (project, SHARED))
+        rows = engine.index.memories(
+            "status = 'active' and project in (?, ?)", (project, SHARED)
+        )
     for row in rows:
         if row["path"] == old_rel:
             continue
@@ -450,7 +527,14 @@ def remember(
     if blocking is not None and not force:
         similar.remove(blocking)
         similar.insert(0, blocking)
-        return {"created": False, "path": None, "similar": similar}
+        hint = (
+            f"Already saved as {blocking['path']}. If it happened again, "
+            f'revise(note="{blocking["path"]}", action="feedback", value="helpful"). '
+            "If it changed, call remember again with "
+            f'supersedes="{blocking["path"]}". '
+            "Use force=true only for a genuinely different memory."
+        )
+        return {"created": False, "path": None, "similar": similar, "hint": hint}
     extras: dict[str, Any] = {}
     new_tags = _new_tags(engine, fm.get("tags") or [])
     if new_tags:
@@ -511,6 +595,8 @@ def revise(
     if action == "edit":
         if not old or new is None:
             raise invalid("edit needs old (text to replace) and new.")
+        if find_secrets(new) != find_secrets(old):  # editing around an old false positive is fine
+            _reject_secrets("new", new)
         count = nf.body.count(old)
         if count != 1:
             raise invalid(
@@ -522,11 +608,14 @@ def revise(
     elif action == "append":
         if not text:
             raise invalid("append needs text.")
+        _reject_secrets("text", text)
         nf.body = _append(nf, text, heading)
         result["changed"] = ["body"]
     elif action == "set":
         if not fields:
             raise invalid('set needs fields, e.g. {"priority": 5}.')
+        for key, value_ in fields.items():
+            _reject_secrets(f"fields.{key}", value_)
         fields = {k: _coerce(k, v) for k, v in fields.items()}
         result["changed"] = nf.set_fields(fields)
         if mode == MEMORY and {"type", "project"} & set(result["changed"]):
@@ -686,6 +775,19 @@ def entry_line(row: Any) -> str:
     return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']}){tail}"
 
 
+WELCOME_RESERVE = 160  # welcome: minimum chars of the 4000 held back for the "no caben aquí" line
+
+
+def welcome_notice(project: str, norms: int, reminders: int) -> str:
+    parts = []
+    if norms:
+        parts.append(f"+{norms} normas")
+    if reminders:
+        parts.append(f"+{reminders} recordatorios")
+    return (
+        f"({' y '.join(parts)} no caben aquí: "
+        f'search(project="{project}", zone="memory", type="reminder") o review)'
+    )
 SHARED_MAX = 3  # welcome: most `_shared` memories listed ahead of the project's own
 
 
@@ -698,7 +800,10 @@ def welcome(
     its age), "Vencen pronto" (reminders due within ``upcoming_days``) and "Memorias" (the
     10 best by score, without the norms already listed). At most ``SHARED_MAX`` of those are
     ``_shared`` ones (when the project is not ``_shared``); the extra ``_shared`` memories only
-    fill the slots left once the others are listed.
+    fill the slots left once the others are listed. A reserve of ``max(WELCOME_RESERVE, longest
+    notice for the project)`` characters is held back: if an overdue reminder or a priority-5
+    norm did not fit, a last line says how many were left out; otherwise the reserve goes back
+    to the memories.
     """
     project = engine.need_project(project)
     now = today()
@@ -728,8 +833,10 @@ def welcome(
     header = f"episteme · memoria de {project}"
     lines = [header]
     entries: list[dict[str, Any]] = []
-    budget = 4000 - len(header) - 1
+    reserve = max(WELCOME_RESERVE, len(welcome_notice(project, 99999, 99999)) + 1)
+    budget = 4000 - len(header) - 1 - reserve
     ranked = 0
+    missed = {"norms": 0, "reminders": 0}
 
     def add(line: str, section: str | None, ranked_entry: bool = False) -> bool:
         nonlocal budget, ranked
@@ -743,22 +850,27 @@ def welcome(
         ranked += ranked_entry
         return True
 
-    def reminder_lines(rows_: list[Any], section: str) -> None:
+    def reminder_lines(rows_: list[Any], section: str, count_missed: bool = False) -> None:
         first = True
-        for r in rows_:
+        for i, r in enumerate(rows_):
             line = f"- [{r['due']}] {r['title']} ({r['path']})"
             if not add(line, section if first else None):
+                if count_missed:
+                    missed["reminders"] += len(rows_) - i
                 break
             first = False
             entries.append({"path": r["path"], "score": None, "kind": "reminder"})
 
-    reminder_lines(overdue, "Recordatorios vencidos:")
+    reminder_lines(overdue, "Recordatorios vencidos:", True)
     first = True
-    for r in norms:
+    for i, r in enumerate(norms):
         if not add(entry_line(r), "Normas:" if first else None):
+            missed["norms"] += len(norms) - i
             break
         first = False
         entries.append({"path": r["path"], "score": None, "kind": "norm"})
+    if not any(missed.values()):
+        budget += reserve  # nothing to warn about: the reserve goes back to the rest
     reminder_lines(upcoming, f"Vencen pronto ({upcoming_days} días):")
     first = True
     shared_used = 0
@@ -780,8 +892,10 @@ def welcome(
             break
         first = False
         entries.append({"path": r["path"], "score": round(score, 4), "kind": "memory"})
-    if not entries:
+    if not entries and not any(missed.values()):
         return "", []
+    if any(missed.values()):
+        lines.append(welcome_notice(project, missed["norms"], missed["reminders"]))
     return "\n".join(lines), entries
 
 
@@ -1177,6 +1291,22 @@ def review(
         ):
             stale.append({"path": r["path"], "title": r["title"], "days": days})
 
+    # Past valid_until, still active. Checkpoints are left out: checkpoint manages them.
+    iso = now.isoformat()
+    expired = [
+        {
+            "path": r["path"],
+            "title": r["title"],
+            "type": r["type"],
+            "valid_until": r["valid_until"],
+        }
+        for r in active
+        if r["valid_until"]
+        and r["valid_until"] < iso
+        and not (r["type"] == "session" and r["path"].rsplit("/", 1)[-1].startswith("checkpoint-"))
+    ]
+    expired.sort(key=lambda e: (e["valid_until"], e["path"]))
+
     linked: set[tuple[str, str]] = set()
     for row in engine.index.conn.execute(
         "select src, dst_path from links where kind in ('supersedes', 'contradicts', 'related') "
@@ -1255,6 +1385,7 @@ def review(
     flagged = [r["path"] for r in mems if r["flagged"]]
     found: dict[str, list[Any]] = {
         "stale": stale,
+        "expired": expired,
         "contradictions": contradictions,
         "similar": similar,
         "cut_titles": cut_titles,
