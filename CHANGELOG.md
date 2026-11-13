@@ -7,6 +7,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Cambiado
 
 - Refactor interno para bajar la complejidad del código (PR #63 a #75), guiado por el análisis de CodeScene: funciones más cortas y con menos anidación en el motor de búsqueda y lectura, el vault, el parser de Markdown, el índice, las memorias y los hooks. No cambia nada de lo que se usa: las herramientas, sus parámetros, sus respuestas y sus mensajes de error son los mismos.
+- Segunda ronda del mismo refactor (PR #77 a #84): el motor, la memoria de cada mensaje, el registro de las herramientas y los scripts `migrate_omega.py`, `bench_calls.py` y `measure_uptake.py`. Tampoco cambia nada de lo que se usa: las opciones y la salida de los scripts son las mismas.
 
 ### Corregido
 
