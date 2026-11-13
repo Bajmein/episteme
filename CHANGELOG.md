@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.9.1] - 2026-11-13
+
 ### Cambiado
 
 - `review` solo marca como contradicción posible un par de decisiones o constraints con similitud de texto de 0,15 o más. Antes bastaba con compartir un archivo de `files`, y las decisiones que tocan un archivo concurrido (`server.py`) salían todas emparejadas entre sí.
@@ -163,7 +165,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.9.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/Bajmein/episteme/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/Bajmein/episteme/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Bajmein/episteme/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Bajmein/episteme/compare/v0.6.0...v0.7.0
