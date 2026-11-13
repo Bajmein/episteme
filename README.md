@@ -163,6 +163,10 @@ due:                    # obligatorio en reminder
 flagged: false
 ```
 
+**Credenciales.** `remember` rechaza (`invalid_argument`, sin repetir el valor) un `title`, `body`, `keywords` o `source` que parezca una credencial: bloque PEM de clave privada, claves AWS (`AKIA`/`ASIA`), tokens de GitHub, Anthropic, `sk-`, Stripe, npm, Hugging Face, Slack, Google, JWT y URL con `usuario:clave@`. Son patrones de alta precisión con longitud mínima, así que mencionar un prefijo («empieza por `ghp_`») no dispara. `revise` revisa solo el texto que entra (`new`, `text`, valores de `fields`), no el cuerpo final: una nota con un falso positivo sigue siendo editable. No se redacta en silencio; se dice dónde está guardado el secreto.
+
+**Duplicado bloqueado.** La respuesta `created: false` lleva `hint`: si volvió a ocurrir, `revise(action="feedback", value="helpful")` sobre la existente; si cambió, `remember` con `supersedes=<ruta>`; `force=true` solo para una memoria distinta de verdad.
+
 ### Mantención
 
 episteme no fusiona ni borra nada por su cuenta; `review` solo da los candidatos. El ciclo, siempre con la aprobación de la persona y grupo por grupo:
