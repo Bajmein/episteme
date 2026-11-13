@@ -109,12 +109,8 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
             text, data = memory.surface(
                 engine, file, project_dir, project, limit, relative_path, skip
             )
-        if st is not None:
-            paths = [m["path"] for m in data["memories"]]
-            st.delivered.update(paths)
-            if hook_event:
-                st.surfaced.update(paths)
-        return hookmode.render(hook_event, text) if hook_event else dump(data)
+        _track_surfaced(st, data, hook_event)
+        return _reply(hook_event, text, data)
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def constraints(
@@ -131,7 +127,7 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
         hookmode.check(hook_event)
         with engine.session():
             text, data = memory.constraints(engine, file, project_dir, project, relative_path)
-        return hookmode.render(hook_event, text) if hook_event else dump(data)
+        return _reply(hook_event, text, data)
 
     @server.tool(structured_output=False)
     def checkpoint(
@@ -158,20 +154,54 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
         of tasks with no active state are archived. Never blocks compaction.
         """
         hookmode.check(hook_event)
-        notice = ""
         with engine.session():
             if action == "save":
-                data = checkpoints.save(engine, project_dir, project)
-                text = f"episteme · checkpoint saved: {data['path']}" if data["saved"] else ""
+                data, text, notice = _checkpoint_save(engine, project_dir, project)
             elif action == "restore":
-                data = checkpoints.restore(engine, project, project_dir, task_title)
-                text = data["content"]
-                if data["found"]:
-                    origin = "estado.md" if data["source"] == "state" else "checkpoint guardado"
-                    notice = f"episteme · tarea retomada: «{data['task_title']}» ({origin})"
+                data, text, notice = _checkpoint_restore(engine, project, project_dir, task_title)
             else:
                 raise invalid(f'action must be "save" or "restore", got "{action}".')
-        return hookmode.render(hook_event, text, notice) if hook_event else dump(data)
+        return _reply(hook_event, text, data, notice)
+
+
+def _reply(hook_event: str | None, text: str, data: Any, notice: str = "") -> str:
+    """Render for a hook when hook_event is set, else dump the JSON data."""
+    if hook_event:
+        return hookmode.render(hook_event, text, notice)
+    return dump(data)
+
+
+def _track_surfaced(
+    st: prompting.SessionState | None, data: dict[str, Any], hook_event: str | None
+) -> None:
+    """Record the memories surface returned in the session state."""
+    if st is None:
+        return
+    paths = [m["path"] for m in data["memories"]]
+    st.delivered.update(paths)
+    if hook_event:
+        st.surfaced.update(paths)
+
+
+def _checkpoint_save(
+    engine: Engine, project_dir: str | None, project: str | None
+) -> tuple[dict[str, Any], str, str]:
+    """Save the active task state and return (data, text, notice)."""
+    data = checkpoints.save(engine, project_dir, project)
+    text = f"episteme · checkpoint saved: {data['path']}" if data["saved"] else ""
+    return data, text, ""
+
+
+def _checkpoint_restore(
+    engine: Engine, project: str | None, project_dir: str | None, task_title: str | None
+) -> tuple[dict[str, Any], str, str]:
+    """Restore the latest task state and return (data, text, notice)."""
+    data = checkpoints.restore(engine, project, project_dir, task_title)
+    notice = ""
+    if data["found"]:
+        origin = "estado.md" if data["source"] == "state" else "checkpoint guardado"
+        notice = f"episteme · tarea retomada: «{data['task_title']}» ({origin})"
+    return data, data["content"], notice
 
 
 def _maintenance_note(engine: Engine, store: maintenance.Store, project: str) -> str:
@@ -235,41 +265,61 @@ def _welcome(
     """
     project = engine.need_project(project)
     st, welcomed, resend, note = _turn(engine, store, session, project, hook_event)
-    blocks: list[str] = []
-    entries: list[dict[str, Any]] = []
+    out = _Blocks()
     if welcomed:
-        text, found = memory.welcome(engine, project)
-        blocks.append(text)
-        if note:
-            blocks.append(note)
-        entries += found
-        st.delivered.update(e["path"] for e in found)
+        _head_block(engine, project, st, out, note)
     elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:
-        text, found = prompting.overdue_block(engine, project)
-        blocks.append(text)
-        entries += found
-        st.delivered.update(e["path"] for e in found)
+        out.add(*prompting.overdue_block(engine, project), st)
         st.reminded_at = st.prompts
     if prompt:
-        text, found = prompting.recall(
-            engine, prompt, project, st, {e["path"] for e in entries}
-        )
-        blocks.append(text)
-        entries += found
+        out.add(*prompting.recall(engine, prompt, project, st, out.paths()))
     if not welcomed:
-        blocks.append(prompting.nudge(st))
-    notice = ""
-    if resend:
-        listed = len(entries)
-        text, found = prompting.trail_block(engine, {e["path"] for e in entries})
-        blocks.append(text)
-        entries += found
-        st.delivered.update(e["path"] for e in found)
-        notice = prompting.recovered_notice(source, listed, len(found))
-    text = "\n\n".join(b for b in blocks if b)
+        out.blocks.append(prompting.nudge(st))
+    notice = _trail_block(engine, st, out, source) if resend else ""
+    text = "\n\n".join(b for b in out.blocks if b)
     if hook_event:
         return hookmode.render(hook_event, text, notice)
-    return dump({"text": text, "entries": entries, "already_sent": not welcomed})
+    return dump({"text": text, "entries": out.entries, "already_sent": not welcomed})
+
+
+class _Blocks:
+    """Text blocks of a welcome and the entries they list."""
+
+    def __init__(self) -> None:
+        self.blocks: list[str] = []
+        self.entries: list[dict[str, Any]] = []
+
+    def add(
+        self, text: str, found: list[dict[str, Any]], st: prompting.SessionState | None = None
+    ) -> None:
+        """Append a block and its entries; mark them delivered when st is given."""
+        self.blocks.append(text)
+        self.entries += found
+        if st is not None:
+            st.delivered.update(e["path"] for e in found)
+
+    def paths(self) -> set[str]:
+        """Paths of the entries listed so far."""
+        return {e["path"] for e in self.entries}
+
+
+def _head_block(
+    engine: Engine, project: str, st: prompting.SessionState, out: _Blocks, note: str
+) -> None:
+    """Add the welcome proper, then the maintenance note."""
+    out.add(*memory.welcome(engine, project), st)
+    if note:
+        out.blocks.append(note)
+
+
+def _trail_block(
+    engine: Engine, st: prompting.SessionState, out: _Blocks, source: str | None
+) -> str:
+    """Add the trail of a resent welcome and return the recovered notice."""
+    listed = len(out.entries)
+    text, found = prompting.trail_block(engine, out.paths())
+    out.add(text, found, st)
+    return prompting.recovered_notice(source, listed, len(found))
 
 
 def _task(
