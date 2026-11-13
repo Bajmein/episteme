@@ -7,6 +7,7 @@ import re
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -104,11 +105,8 @@ class Engine:
             "line": h.line,
             "snippet": h.snippet,
             "score": h.score,
+            **_optional_fields(h),
         }
-        for key in ("zone", "type", "status", "project", "created", "priority"):
-            value = getattr(h, key)
-            if value is not None:
-                row[key] = value
         heading = self.index.heading_at(h.path, h.line)
         if heading:
             row["heading"] = heading
@@ -129,20 +127,11 @@ class Engine:
             rows.append(row)
         return rows
 
-    def _hints(
-        self,
-        query: str | None,
-        path: str | None,
-        type: str | None,
-        tags: list[str] | None,
-        project: str | None,
-        status: str | None,
-        zones: list[str],
-    ) -> list[str]:
+    def _hints(self, query: str | None, f: _Filters, zones: list[str]) -> list[str]:
         hints = [
-            *self._unknown_value_hints(type, project, status),
-            *self._unknown_tag_hints(tags),
-            *self._unknown_path_hints(path, zones),
+            *self._unknown_value_hints(f.type, f.project, f.status),
+            *self._unknown_tag_hints(f.tags),
+            *self._unknown_path_hints(f.path, zones),
         ]
         if not hints and query is not None:
             hints.append(NO_MATCH_HINT)
@@ -151,23 +140,35 @@ class Engine:
     def _unknown_value_hints(
         self, type: str | None, project: str | None, status: str | None
     ) -> list[str]:
-        hints: list[str] = []
-        for label, value in (("type", type), ("project", project)):
-            if value:
-                known = self.index.known(label)
-                if value not in known:
-                    hints.append(
-                        f'no note has {label} "{value}". '
-                        f"{label.capitalize()}s in the vault: {', '.join(known)}."
-                    )
-        if status and status != "any":
-            known = self.index.known("status")
-            if status not in known:
-                hints.append(
-                    f'no note has status "{status}". Statuses in the vault: {", ".join(known)}. '
-                    '"any" includes superseded and archived.'
-                )
-        return hints
+        hints = [
+            hint
+            for label, value in (("type", type), ("project", project))
+            if (hint := self._unknown_label_hint(label, value))
+        ]
+        status_hint = self._unknown_status_hint(status)
+        return [*hints, status_hint] if status_hint else hints
+
+    def _unknown_label_hint(self, label: str, value: str | None) -> str | None:
+        if not value:
+            return None
+        known = self.index.known(label)
+        if value in known:
+            return None
+        return (
+            f'no note has {label} "{value}". '
+            f"{label.capitalize()}s in the vault: {', '.join(known)}."
+        )
+
+    def _unknown_status_hint(self, status: str | None) -> str | None:
+        if not status or status == "any":
+            return None
+        known = self.index.known("status")
+        if status in known:
+            return None
+        return (
+            f'no note has status "{status}". Statuses in the vault: {", ".join(known)}. '
+            '"any" includes superseded and archived.'
+        )
 
     def _unknown_tag_hints(self, tags: list[str] | None) -> list[str]:
         if not tags:
@@ -217,27 +218,46 @@ class Engine:
             self.check_path(path.strip().rstrip("/") or "/")
         zones = sorted(z.path for z in self.vault.config.zones)
         zone = _check_zone(zone, zones)
-        projects: str | list[str] | None = project
-        if project and project != "_shared":
-            projects = [project, "_shared"]
-        kwargs: dict[str, Any] = {
-            "path": path,
-            "type": type,
-            "tags": tags,
-            "project": projects,
-            "status": status,
-            "zone": zone,
-        }
+        f = _Filters(path, type, tags, project, status, zone)
+        kwargs = f.as_kwargs()
+        hits, total, fallback = self._run_query(query, f, kwargs, any_mode, limit, facets)
+        out = self._build_search_out(query, hits, total, fallback, any_mode, kwargs)
+        if total == 0:
+            hints = self._hints(query, f, zones)
+            if hints:
+                out["hints"] = hints
+        if facets:
+            out["facets"] = self.index.facets(query, any_term=fallback or any_mode, **kwargs)
+        return out
+
+    def _run_query(
+        self,
+        query: str | None,
+        f: _Filters,
+        kwargs: dict[str, Any],
+        any_mode: bool,
+        limit: int,
+        facets: bool,
+    ) -> tuple[list[Any], int, bool]:
+        """Run the search; return the hits, the total and whether it fell back to OR."""
         index = self.index
-        if query is None and facets and not (path or type or tags or project or zone or status):
-            hits: list[Any] = []
-            total = index.search(None, limit=1, snippets=False, **kwargs)[1]
-        else:
-            hits, total = index.search(query, any_term=any_mode, limit=limit, **kwargs)
-        fallback = False
-        if not any_mode and total == 0 and query is not None and len(query_terms(query)) > 1:
-            hits, total = index.search(query, any_term=True, limit=limit, **kwargs)
-            fallback = bool(hits)
+        if _only_facets(query, f, facets):
+            return [], index.search(None, limit=1, snippets=False, **kwargs)[1], False
+        hits, total = index.search(query, any_term=any_mode, limit=limit, **kwargs)
+        if not _should_fall_back(any_mode, total, query):
+            return hits, total, False
+        hits, total = index.search(query, any_term=True, limit=limit, **kwargs)
+        return hits, total, bool(hits)
+
+    def _build_search_out(
+        self,
+        query: str | None,
+        hits: list[Any],
+        total: int,
+        fallback: bool,
+        any_mode: bool,
+        kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         out: dict[str, Any] = {
             "results": self._rows(hits, query if (any_mode or fallback) else None),
             "total": total,
@@ -247,19 +267,13 @@ class Engine:
             out["note"] = "No note has all the words; showing notes with any of them (OR)."
         elif not any_mode and query is not None:
             self._add_partial(out, query, hits, total, kwargs)
-        if total == 0:
-            hints = self._hints(query, path, type, tags, project, status, zones)
-            if hints:
-                out["hints"] = hints
-        if facets:
-            out["facets"] = index.facets(query, any_term=fallback or any_mode, **kwargs)
         return out
 
     def _add_partial(
         self, out: dict[str, Any], query: str, hits: list[Any], total: int, kwargs: dict[str, Any]
     ) -> None:
         """Few AND matches: also list notes that have some of the words."""
-        if not (1 <= total < PARTIAL_BELOW and total == len(hits) and len(query_terms(query)) > 1):
+        if not _wants_partial(query, hits, total):
             return
         seen = {h.path for h in hits}
         more, _ = self.index.search(query, any_term=True, limit=PARTIAL_MAX + len(seen), **kwargs)
@@ -278,30 +292,20 @@ class Engine:
         outline: bool | None = None,
         content: bool = True,
     ) -> dict[str, Any]:
-        if heading is not None and lines is not None:
-            raise invalid("pass heading or lines, not both.")
-        if not content and (heading is not None or lines is not None or outline is False):
-            raise invalid(
-                "content=false returns only the outline. Drop heading, lines and outline=false."
-            )
+        _check_read_args(heading, lines, outline, content)
         rel = self.resolve_note(note)
         parsed = self.load(rel)
         partial = heading is not None or lines is not None
         start, end, cap = _read_window(parsed, rel, heading, lines, content)
         text, truncated, shown_end = _truncate("\n".join(parsed.lines[start:end]), start, end, cap)
-        out: dict[str, Any] = {
-            "path": rel,
-            "frontmatter": jsonable(parsed.frontmatter),
-            "fm_valid": parsed.fm_valid,
-        }
-        if outline is True or (outline is None and not partial):
-            out["outline"] = _outline(parsed)
-        out["content"] = text
-        out["truncated"] = truncated
-        out["total_lines"] = len(parsed.lines)
-        if partial:
-            out["range"] = f"{start + 1}-{shown_end}"
-        return out
+        return _read_result(
+            rel,
+            parsed,
+            text=text,
+            truncated=truncated,
+            with_outline=_wants_outline(outline, partial),
+            line_range=f"{start + 1}-{shown_end}" if partial else None,
+        )
 
     def read_many(
         self,
@@ -312,19 +316,20 @@ class Engine:
         content: bool = True,
     ) -> dict[str, Any]:
         """Several whole notes in one call; a note that fails is reported, not raised."""
-        if heading is not None or lines is not None:
-            raise invalid("heading and lines apply to one note. Use note, or drop them.")
-        if not content and outline is False:
-            raise invalid("content=false returns only the outline. Drop outline=false.")
-        if not isinstance(notes, list) or not notes:
-            raise invalid("notes is empty. Pass 1-20 paths or note names.")
-        if len(notes) > BATCH_MAX:
-            raise invalid(
-                f"notes takes at most {BATCH_MAX} notes, got {len(notes)}. Split the list."
-            )
+        _check_batch_args(notes, heading, lines, outline, content)
         wanted = None if not content else bool(outline)
+        out_notes, pending = self._read_batch(notes, wanted, content)
+        out: dict[str, Any] = {"notes": out_notes}
+        if pending:
+            out["pending"] = pending
+            out["note"] = "Output limit reached; call read again with the notes in pending."
+        return out
+
+    def _read_batch(
+        self, notes: list[str], wanted: bool | None, content: bool
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """Read each note; return the items and the notes left over once BATCH_CAP is hit."""
         out_notes: list[dict[str, Any]] = []
-        pending: list[str] = []
         seen: set[str] = set()
         used = 0
         for pos, raw in enumerate(notes):
@@ -339,58 +344,170 @@ class Engine:
             # outline=true the outline is what weighs.
             size = len(to_json(item))
             if seen and used + size > BATCH_CAP:
-                pending = notes[pos:]
-                break
+                return out_notes, notes[pos:]
             seen.add(item["path"])
             used += size
             out_notes.append(item)
-        out: dict[str, Any] = {"notes": out_notes}
-        if pending:
-            out["pending"] = pending
-            out["note"] = "Output limit reached; call read again with the notes in pending."
-        return out
+        return out_notes, []
 
     # -- links -------------------------------------------------------------
 
     def links(self, note: str, direction: str = "both", depth: int = 1) -> dict[str, Any]:
-        if direction not in ("out", "in", "both"):
-            raise invalid(f'direction must be "out", "in" or "both", got "{direction}".')
-        if not (1 <= depth <= LINKS_DEPTH_MAX):
-            raise invalid(f"depth must be 1-{LINKS_DEPTH_MAX}, got {depth}.")
+        _check_links_args(direction, depth)
         rel = self.resolve_note(note)
         out: dict[str, Any] = {"path": rel, "outgoing": [], "backlinks": []}
         if direction in ("out", "both"):
-            out["outgoing"] = [
-                {
-                    "target": r["dst_raw"] or f"#{r['heading'] or ''}",
-                    "path": r["dst_path"],
-                    "kind": r["kind"],
-                    "heading": r["heading"],
-                    "line": r["line"],
-                    "resolved": r["dst_path"] is not None and not r["heading_missing"],
-                }
-                for r in self.index.outgoing(rel)
-            ]
+            out["outgoing"] = self._outgoing_rows(rel)
         if direction in ("in", "both"):
-            out["backlinks"] = [
-                {"path": r["src"], "kind": r["kind"], "line": r["line"]}
-                for r in self.index.backlinks(rel)
-            ]
+            out["backlinks"] = self._backlink_rows(rel)
         if depth > 1:
-
-            def neighbours(p: str) -> list[str]:
-                return sorted(
-                    {
-                        r["dst_path"]
-                        for r in self.index.outgoing(p)
-                        if r["dst_path"] and r["dst_path"] != p
-                    }
-                )
-
             out["reachable"] = [
-                {"path": p, "distance": d} for p, d in reachable(rel, neighbours, depth)
+                {"path": p, "distance": d} for p, d in reachable(rel, self._neighbours, depth)
             ]
         return out
+
+    def _outgoing_rows(self, rel: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "target": r["dst_raw"] or f"#{r['heading'] or ''}",
+                "path": r["dst_path"],
+                "kind": r["kind"],
+                "heading": r["heading"],
+                "line": r["line"],
+                "resolved": r["dst_path"] is not None and not r["heading_missing"],
+            }
+            for r in self.index.outgoing(rel)
+        ]
+
+    def _backlink_rows(self, rel: str) -> list[dict[str, Any]]:
+        return [
+            {"path": r["src"], "kind": r["kind"], "line": r["line"]}
+            for r in self.index.backlinks(rel)
+        ]
+
+    def _neighbours(self, p: str) -> list[str]:
+        return sorted(
+            {
+                r["dst_path"]
+                for r in self.index.outgoing(p)
+                if r["dst_path"] and r["dst_path"] != p
+            }
+        )
+
+
+@dataclass(frozen=True)
+class _Filters:
+    """The search filters as the caller gave them (``project`` not yet expanded)."""
+
+    path: str | None
+    type: str | None
+    tags: list[str] | None
+    project: str | None
+    status: str | None
+    zone: str | None
+
+    def as_kwargs(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "type": self.type,
+            "tags": self.tags,
+            "project": _project_scope(self.project),
+            "status": self.status,
+            "zone": self.zone,
+        }
+
+    def is_empty(self) -> bool:
+        return not (self.path or self.type or self.tags or self.project or self.zone or self.status)
+
+
+def _project_scope(project: str | None) -> str | list[str] | None:
+    """A project also sees the ``_shared`` memories."""
+    if project and project != "_shared":
+        return [project, "_shared"]
+    return project
+
+
+def _only_facets(query: str | None, f: _Filters, facets: bool) -> bool:
+    return query is None and facets and f.is_empty()
+
+
+def _should_fall_back(any_mode: bool, total: int, query: str | None) -> bool:
+    """An AND search with no hits and several words is retried as OR."""
+    return not any_mode and total == 0 and query is not None and len(query_terms(query)) > 1
+
+
+def _wants_partial(query: str, hits: list[Any], total: int) -> bool:
+    return 1 <= total < PARTIAL_BELOW and total == len(hits) and len(query_terms(query)) > 1
+
+
+def _optional_fields(h: Any) -> dict[str, Any]:
+    """The hit fields that are set, in row order."""
+    keys = ("zone", "type", "status", "project", "created", "priority")
+    return {key: getattr(h, key) for key in keys if getattr(h, key) is not None}
+
+
+def _check_read_args(
+    heading: str | None, lines: str | None, outline: bool | None, content: bool
+) -> None:
+    if heading is not None and lines is not None:
+        raise invalid("pass heading or lines, not both.")
+    if not content and (heading is not None or lines is not None or outline is False):
+        raise invalid(
+            "content=false returns only the outline. Drop heading, lines and outline=false."
+        )
+
+
+def _wants_outline(outline: bool | None, partial: bool) -> bool:
+    return outline is True or (outline is None and not partial)
+
+
+def _read_result(
+    rel: str,
+    parsed: ParsedNote,
+    *,
+    text: str,
+    truncated: bool,
+    with_outline: bool,
+    line_range: str | None,
+) -> dict[str, Any]:
+    """The read payload; ``line_range`` is None unless a heading or lines were asked for."""
+    out: dict[str, Any] = {
+        "path": rel,
+        "frontmatter": jsonable(parsed.frontmatter),
+        "fm_valid": parsed.fm_valid,
+    }
+    if with_outline:
+        out["outline"] = _outline(parsed)
+    out["content"] = text
+    out["truncated"] = truncated
+    out["total_lines"] = len(parsed.lines)
+    if line_range is not None:
+        out["range"] = line_range
+    return out
+
+
+def _check_batch_args(
+    notes: list[str],
+    heading: str | None,
+    lines: str | None,
+    outline: bool | None,
+    content: bool,
+) -> None:
+    if heading is not None or lines is not None:
+        raise invalid("heading and lines apply to one note. Use note, or drop them.")
+    if not content and outline is False:
+        raise invalid("content=false returns only the outline. Drop outline=false.")
+    if not isinstance(notes, list) or not notes:
+        raise invalid("notes is empty. Pass 1-20 paths or note names.")
+    if len(notes) > BATCH_MAX:
+        raise invalid(f"notes takes at most {BATCH_MAX} notes, got {len(notes)}. Split the list.")
+
+
+def _check_links_args(direction: str, depth: int) -> None:
+    if direction not in ("out", "in", "both"):
+        raise invalid(f'direction must be "out", "in" or "both", got "{direction}".')
+    if not (1 <= depth <= LINKS_DEPTH_MAX):
+        raise invalid(f"depth must be 1-{LINKS_DEPTH_MAX}, got {depth}.")
 
 
 def _check_query(query: str | None, match: str, limit: int, has_filter: bool) -> str | None:
