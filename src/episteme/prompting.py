@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from episteme import memory
-from episteme.index import STOPWORDS_ES
+from episteme.index import STOPWORDS_ES, is_past
 from episteme.markdown import tokens
 from episteme.memory import STOPWORDS_EN
 from episteme.vault import MEMORY, today
@@ -209,14 +209,16 @@ def _recall_terms(prompt: str) -> list[str]:
     return terms[:RECALL_TERMS]
 
 
-def _rare_terms(engine: Engine, terms: list[str], project: str) -> list[str]:
-    """The ``terms`` that appear in few of the project's active memories."""
-    rows = engine.index.memories("project in (?, '_shared') and status = 'active'", (project,))
+def _rare_terms(engine: Engine, terms: list[str], scope: list[str]) -> list[str]:
+    """The ``terms`` that appear in few of the active memories of ``scope``."""
+    marks = ", ".join("?" * len(scope))
+    clause = f"project in ({marks}) and status = 'active'"  # nosec B608
+    rows = engine.index.memories(clause, tuple(scope))
     limit = max(RECALL_RARE_FLOOR, len(rows) // RECALL_RARE_SHARE)
     counted = []
     for t in terms:
         _, df = engine.index.search(
-            t, mode=MEMORY, project=[project, "_shared"], status="active", limit=1, snippets=False
+            t, mode=MEMORY, project=scope, status="active", limit=1, snippets=False
         )
         if 1 <= df <= limit:
             counted.append(t)
@@ -227,7 +229,7 @@ def _is_recallable(row: Any, iso: str) -> bool:
     """Whether a note can be recalled: it is not a reminder and has not expired."""
     if row["type"] == "reminder":
         return False
-    return not (row["valid_until"] and row["valid_until"] < iso)
+    return not is_past(row["valid_until"], iso)
 
 
 def _strong_words(engine: Engine, row: Any) -> set[str]:
@@ -298,10 +300,11 @@ def recall(
     terms = _recall_terms(prompt)
     if not terms:
         return "", []
-    counted = _rare_terms(engine, terms, project)
+    scope = [project, "_shared"]
+    counted = _rare_terms(engine, terms, scope)
     if not counted:
         return "", []
-    hits = _search_memories(engine, counted, [project, "_shared"])
+    hits = _search_memories(engine, counted, scope)
     chosen = _rank_hits(engine, hits, counted, skip | st.delivered)
     if not chosen:
         return "", []
