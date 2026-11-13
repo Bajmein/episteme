@@ -37,6 +37,12 @@ class SessionState:
 
 _SESSIONS: dict[str, SessionState] = {}
 
+TRAIL_MAX = 30
+TRAIL_SHOWN = 8
+# Notes the agent wrote or read in this process, oldest first. It is per process, not per
+# session id: /clear starts a new session id in the same process, and the trail must cross it.
+TRAIL: dict[str, str] = {}
+
 
 def _store(session: str, st: SessionState) -> SessionState:
     _SESSIONS.pop(session, None)
@@ -54,6 +60,56 @@ def state(session: str) -> SessionState:
 def reset(session: str) -> SessionState:
     """Replace the state of ``session`` with a new one."""
     return _store(session, SessionState())
+
+
+def track(path: str, kind: str) -> None:
+    """Note that this process wrote (``"written"``) or read (``"read"``) the note ``path``."""
+    if not path:
+        return
+    written = kind == "written" or TRAIL.pop(path, "") == "written"
+    TRAIL.pop(path, None)
+    TRAIL[path] = "written" if written else "read"
+    while len(TRAIL) > TRAIL_MAX:
+        del TRAIL[next(iter(TRAIL))]
+
+
+def trail_block(engine: Engine, skip: set[str]) -> tuple[str, list[dict[str, Any]]]:
+    """The active memories this process wrote or read, for the welcome after compact or clear.
+
+    Written ones first, then read ones, newest first within each; ``TRAIL_SHOWN`` at most,
+    without those in ``skip`` (already listed in the welcome).
+    """
+    paths = [p for p in reversed(TRAIL) if p not in skip]
+    if not paths:
+        return "", []
+    marks = ",".join("?" * len(paths))
+    found = engine.index.memories(f"path in ({marks}) and status = 'active'", tuple(paths))  # nosec B608
+    rows = {r["path"]: r for r in found}
+    ordered = [p for p in paths if TRAIL[p] == "written"] + [p for p in paths if TRAIL[p] == "read"]
+    chosen = [rows[p] for p in ordered if p in rows][:TRAIL_SHOWN]
+    if not chosen:
+        return "", []
+    labels = {"written": "escrita", "read": "leída"}
+    lines = ["De esta sesión, antes de compactar o limpiar (ábrelas con read si hacen falta):"]
+    lines += [
+        f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']}) · {labels[TRAIL[r['path']]]}"
+        for r in chosen
+    ]
+    entries = [{"path": r["path"], "score": None, "kind": "trail"} for r in chosen]
+    return "\n".join(lines), entries
+
+
+def recovered_notice(source: str | None, memories: int, trail: int) -> str:
+    """The line shown to the person when the welcome is resent after compact or clear."""
+    after = {"compact": "tras compactar", "clear": "tras /clear"}.get(
+        (source or "").strip(), "tras compactar o limpiar"
+    )
+    if not memories and not trail:
+        return f"episteme · {after}: no había memorias que recuperar"
+    parts = [f"{memories} memorias del proyecto"] if memories else []
+    if trail:
+        parts.append(f"{trail} de esta sesión" if memories else f"{trail} memorias de esta sesión")
+    return f"episteme · contexto recuperado {after}: {' y '.join(parts)}"
 
 
 def overdue_block(engine: Engine, project: str) -> tuple[str, list[dict[str, Any]]]:

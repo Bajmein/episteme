@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- Después de compactar o de `/clear`, la bienvenida trae además las memorias que el agente escribió o leyó antes en esa sesión («De esta sesión», hasta 8), y la persona ve en el terminal una línea en verde que dice qué se recuperó y qué tarea se retomó. El hook `SessionStart` de `context` pasa a recibir `"source": "${source}"`: quien ya tenga los hooks instalados puede añadirlo con la skill `episteme-setup` (sin él, el aviso no distingue entre compactar y `/clear`).
+
 ### Cambiado
 
 - El `README.md` pasa a ser una presentación en lenguaje simple, con dos diagramas (arquitectura y hooks de una sesión, en `static/diagrams/`). El detalle que tenía se mueve sin cambios a `docs/`: instalación, configuración, tools y memorias, hooks, mantención, migración de OMEGA y desarrollo.

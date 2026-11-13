@@ -4,7 +4,7 @@
 
 ![Secuencia de una sesión: cada evento de hook llama a un tool de episteme y recibe contexto para el modelo](../static/diagrams/hooks-sesion.png)
 
-Los hooks son `type: "mcp_tool"` y llaman a los mismos tools. En `UserPromptSubmit`, `SessionStart`, `PreToolUse` y `PostToolUse` el tool devuelve el objeto JSON `{"hookSpecificOutput": {"hookEventName", "additionalContext"}}` (en Claude Code 2.1.322 el texto plano de un hook `mcp_tool` no llega al modelo); en `PreCompact`, nada. Sin nada que decir, la salida es una cadena vacía. Nunca devuelve `decision`, `permissionDecision` ni `continue: false`.
+Los hooks son `type: "mcp_tool"` y llaman a los mismos tools. En `UserPromptSubmit`, `SessionStart`, `PreToolUse` y `PostToolUse` el tool devuelve el objeto JSON `{"hookSpecificOutput": {"hookEventName", "additionalContext"}}` (en Claude Code 2.1.322 el texto plano de un hook `mcp_tool` no llega al modelo); en `SessionStart` puede llevar además un `systemMessage` para la persona; en `PreCompact`, nada. Sin nada que decir, la salida es una cadena vacía. Nunca devuelve `decision`, `permissionDecision` ni `continue: false`.
 
 Bloque para el `settings.json` del proyecto:
 
@@ -46,11 +46,26 @@ Bloque para el `settings.json` del proyecto:
                                "hook_event": "${hook_event_name}" } },
                   { "type": "mcp_tool", "server": "episteme", "tool": "context",
                     "input": { "mode": "welcome", "session": "${session_id}",
-                               "hook_event": "${hook_event_name}" } }] }
+                               "hook_event": "${hook_event_name}",
+                               "source": "${source}" } }] }
     ]
   }
 }
 ```
+
+## Después de compactar o de `/clear`
+
+No hay que hacer nada a mano: los dos hooks de `SessionStart` (`compact|clear`) corren solos.
+
+| Qué vuelve | De dónde sale |
+|---|---|
+| La tarea en curso | El `estado.md` activo del proyecto; si no hay, el último checkpoint guardado en `PreCompact` |
+| La bienvenida | Normas, recordatorios y las memorias mejor puntuadas del proyecto |
+| «De esta sesión» | Hasta 8 memorias que el agente escribió (`remember`, `revise`) o leyó (`read`) antes, primero las escritas; las que ya salen en la bienvenida no se repiten |
+
+La persona ve en el terminal una línea en verde por cada hook que recuperó algo, por ejemplo `SessionStart:clear says: episteme · contexto recuperado tras /clear: 12 memorias del proyecto y 3 de esta sesión` y `episteme · tarea retomada: «…» (estado.md)`. Con la variable de entorno `NO_COLOR` en el servidor, el texto sale sin color.
+
+Límites: el rastro «De esta sesión» vive en el proceso del servidor, así que se pierde al cerrar Claude Code (no al compactar ni con `/clear`). En un proyecto sin `estado.md` no hay tarea que retomar: tras `/clear` vuelven la bienvenida y el rastro, no la conversación.
 
 Si el servidor va empaquetado en un plugin, `server` pasa a ser el nombre con scope (`plugin:fabrik:episteme`).
 

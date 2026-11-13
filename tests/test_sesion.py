@@ -103,3 +103,42 @@ async def test_recall_skips_what_welcome_delivered(vault: Path) -> None:
         assert made["path"] in first["text"]
         r = await c.ok("context", mode="welcome", session="rw", prompt="sobre zorbflux")
         assert made["path"] not in r["text"]
+
+
+async def test_welcome_after_compact_or_clear_brings_the_session_trail(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        await c.ok("context", mode="welcome", session="antes")
+        made = await c.ok(
+            "remember",
+            type="insight",
+            title="Rastro zeta de la sesión",
+            body="Algo aprendido antes de compactar. " * 3,
+            project="otro",  # not in fabrik's welcome, so only the trail can bring it back
+        )
+        first = await c.ok("context", mode="welcome", session="antes")
+        assert first["already_sent"] and "De esta sesión" not in first["text"]
+        # /clear: a new session id, same server process
+        raw = await c.ok(
+            "context", mode="welcome", session="despues", hook_event="SessionStart", source="clear"
+        )
+        out = json.loads(raw)
+        text = out["hookSpecificOutput"]["additionalContext"]
+        assert "De esta sesión, antes de compactar o limpiar" in text
+        assert f"({made['path']}) · escrita" in text
+        assert "contexto recuperado tras /clear" in out["systemMessage"]
+        assert "de esta sesión" in out["systemMessage"]
+        # the first prompt after it does not repeat the welcome nor the notice
+        nxt = await c.ok(
+            "context", mode="welcome", session="despues", hook_event="UserPromptSubmit"
+        )
+        assert "systemMessage" not in nxt and "De esta sesión" not in nxt
+
+
+def test_recovered_notice_wording() -> None:
+    assert prompting.recovered_notice("compact", 12, 2) == (
+        "episteme · contexto recuperado tras compactar: 12 memorias del proyecto y 2 de esta sesión"
+    )
+    assert prompting.recovered_notice("${source}", 0, 1).endswith(
+        "tras compactar o limpiar: 1 memorias de esta sesión"
+    )
+    assert "no había memorias" in prompting.recovered_notice(None, 0, 0)

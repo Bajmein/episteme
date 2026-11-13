@@ -9,6 +9,7 @@ paths:
 Los hooks `type: "mcp_tool"` de Claude Code tratan lo que devuelve el tool como el stdout de un hook de comando. La salida depende de `hook_event`:
 
 - `UserPromptSubmit`, `SessionStart`, `PreToolUse` y `PostToolUse`: un único objeto `{"hookSpecificOutput": {"hookEventName": …, "additionalContext": …}}`. No se usa texto plano: Claude Code 2.1.322 no lo entrega al modelo en hooks `mcp_tool` (comprobado el 11-11-2026).
+- `SessionStart` admite además un `systemMessage` (`render(..., notice)`): una línea para la persona, en negrita verde salvo con `NO_COLOR`. Claude Code 2.1.323 la muestra como «SessionStart:clear says: …» y conserva el color (comprobado el 13-11-2026). En los demás eventos el aviso se descarta.
 - `PreCompact`: cadena vacía.
 - Cualquier otro evento: `invalid_argument`.
 

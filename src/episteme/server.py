@@ -79,6 +79,16 @@ def _created(text: str) -> bool:
         return False
 
 
+def _result_paths(text: str) -> list[str]:
+    """The note paths of a ``remember``, ``revise`` or ``read`` result (one note or several)."""
+    try:
+        data = json.loads(text)
+        notes = data.get("notes") if isinstance(data.get("notes"), list) else [data]
+        return [n["path"] for n in notes if isinstance(n, dict) and isinstance(n.get("path"), str)]
+    except (ValueError, AttributeError):
+        return []
+
+
 class EpistemeServer(MCPServer):
     """MCPServer whose tool errors read ``<code>: <what failed>. <what to do>``."""
 
@@ -104,6 +114,11 @@ class EpistemeServer(MCPServer):
         if name in ("remember", "revise") and "hook_event" not in arguments:
             if name == "revise" or _created(text):
                 prompting.WRITES += 1
+                for path in _result_paths(text):
+                    prompting.track(path, "written")
+        elif name == "read":
+            for path in _result_paths(text):
+                prompting.track(path, "read")
         self._log(name, arguments, text, start, True)
         return result
 
@@ -494,13 +509,19 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             int, Field(description="task: size of the context pack (1 token ~ 4 chars).")
         ] = 2000,
         hook_event: HookEvent = None,
+        source: Annotated[
+            str | None,
+            Field(description="Only for the SessionStart hook: ${source} (compact or clear)."),
+        ] = None,
     ) -> str:
         """Load project memory: the session welcome, or a context pack for a task.
 
         welcome: overdue reminders, the active priority-5 norms, reminders due within 7 days,
         then the highest-scoring active memories (at most 3 from _shared); sent once per session
         (not repeated on --resume, whose context already has it; resent on SessionStart
-        compact|clear). With session, later calls add: overdue reminders every 10 messages; with
+        compact|clear, followed by up to 8 memories the agent wrote or read before it, kind
+        "trail", and with a coloured systemMessage telling the person what was recovered).
+        With session, later calls add: overdue reminders every 10 messages; with
         prompt, up to 5 memories whose title, tags or keywords hold a rare word of the message;
         and a nudge to save when the session has written no memory.
         task: decisions, constraints and lessons matching the task (Spanish and English stopwords
@@ -567,9 +588,17 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                     entries += found
                 if session and not welcomed:
                     blocks.append(prompting.nudge(st))
+                notice = ""
+                if session and resend:
+                    listed = len(entries)
+                    text, found = prompting.trail_block(engine, {e["path"] for e in entries})
+                    blocks.append(text)
+                    entries += found
+                    st.delivered.update(e["path"] for e in found)
+                    notice = prompting.recovered_notice(source, listed, len(found))
                 text = "\n\n".join(b for b in blocks if b)
                 if hook_event:
-                    return hookmode.render(hook_event, text)
+                    return hookmode.render(hook_event, text, notice)
                 return dump({"text": text, "entries": entries, "already_sent": already_sent})
             if mode == "task":
                 if not task or not task.strip():
@@ -656,6 +685,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         of tasks with no active state are archived. Never blocks compaction.
         """
         hookmode.check(hook_event)
+        notice = ""
         with engine.session():
             if action == "save":
                 data = checkpoints.save(engine, project_dir, project)
@@ -663,8 +693,11 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             elif action == "restore":
                 data = checkpoints.restore(engine, project, project_dir, task_title)
                 text = data["content"]
+                if data["found"]:
+                    origin = "estado.md" if data["source"] == "state" else "checkpoint guardado"
+                    notice = f"episteme · tarea retomada: «{data['task_title']}» ({origin})"
             else:
                 raise invalid(f'action must be "save" or "restore", got "{action}".')
-        return hookmode.render(hook_event, text) if hook_event else dump(data)
+        return hookmode.render(hook_event, text, notice) if hook_event else dump(data)
 
     return server
