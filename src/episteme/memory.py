@@ -1482,7 +1482,7 @@ def _similar_groups(rows: list[Any], token_sets: dict[str, set[str]]) -> list[di
     members: dict[int, list[str]] = {}
     for i in {k for p in pairs for k in p[:2]}:
         members.setdefault(find(i), []).append(rows[i]["path"])
-    groups = [
+    groups: list[dict[str, Any]] = [
         {"paths": sorted(paths), "similarity": round(best[root], 3)}
         for root, paths in members.items()
     ]

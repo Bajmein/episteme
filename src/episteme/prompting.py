@@ -22,7 +22,7 @@ RECALL_TERMS = 40
 MAX_SESSIONS = 50
 OVERDUE_MAX = 5
 
-WRITES = 0  # memories written in this process by agent calls (remember, revise); see server
+WRITES: int = 0  # memories written in this process by agent calls (remember, revise); see server
 
 
 @dataclass
