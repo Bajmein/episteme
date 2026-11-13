@@ -29,7 +29,9 @@ CodeScene Cloud analiza `main` cada día y revisa cada PR: el check «CodeScene 
 Para bajar la complejidad sin cambiar lo que ve el agente:
 
 - Se extraen funciones privadas en el mismo módulo, se nombran las condiciones compuestas con un predicado (`_is_…`, `_wants_…`) y se usan retornos anticipados o `continue` en vez de anidar.
-- No se tocan las firmas de los tools ni las funciones que las reflejan (`Engine.search`, `Engine.read`, `memory.remember`…): el SDK saca el esquema de la firma. Las funciones `register(...)` de `tools/` son largas a propósito (CodeScene las marca como «Large Method»).
+- No se tocan las firmas de los tools ni las funciones que las reflejan (`Engine.search`, `Engine.read`, `memory.remember`…): el SDK saca el esquema de la firma.
+- Cada módulo de `tools/` tiene un `register(...)` corto que llama a un `_register_<tool>(...)` por tool, en el orden de `list_tools`. El tool se define dentro de su `_register_<tool>`, con su docstring, porque el SDK saca de la función el nombre, la descripción y el esquema. Los argumentos con `Annotated` van como alias privados del módulo (`_LimitArg`…).
+- La meta es 9 o más en cada archivo de `src/` y `scripts/`. Un archivo nuevo o tocado no baja de 9.
 - Los tests no se modifican: son la red del refactor. CodeScene avisa entonces «Absence of Expected Change Pattern», que en un refactor es esperable.
 - Se compara la foto del contrato antes y después: arrancar el servidor por stdio, volcar las instrucciones y `list_tools` a JSON con las claves ordenadas y comprobar con `cmp` que no cambió.
 
@@ -53,6 +55,19 @@ El refactor de noviembre de 2026 (PR #63 a #75) partió de 8,73 de code health y
 | `memory/revising.py` | 8,62 | 9,10 |
 | `index/ingest.py` | 8,82 | 9,69 |
 | `server.py` | 9,14 | 9,54 |
+
+Tras ese refactor, el análisis 8419179 sobre `0dd494b` dio 9,29 de code health y 8,99 en hotspots. Una segunda ronda (PR #77 a #84) llevó a 9 o más los archivos que quedaban por debajo, incluidos los scripts. En esa ronda, los `register(...)` de `tools/` dejaron de ser un método largo y se partieron en un `_register_<tool>` por tool:
+
+| Archivo | Antes | Después |
+| :-- | --: | --: |
+| `scripts/bench_calls.py` | 6,75 | 9,24 |
+| `scripts/migrate_omega.py` | 7,20 | 9,24 |
+| `scripts/measure_uptake.py` | 8,11 | 9,69 |
+| `engine.py` | 8,42 | 9,69 |
+| `prompting.py` | 8,74 | 9,69 |
+| `tools/reading.py` | 8,88 | 10,00 |
+| `tools/memories.py` | 8,99 | 10,00 |
+| `tools/hooks.py` | 8,99 | 9,69 |
 
 ## Medir variantes de búsqueda
 
