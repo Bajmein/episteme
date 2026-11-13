@@ -14,8 +14,8 @@ jobs:
     env:
       PYTHONUTF8: "1"   # los tests leen fixtures UTF-8 con read_text() sin encoding
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
       - run: uv sync
       - run: uv run ruff check
       - run: uv run pytest
