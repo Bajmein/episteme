@@ -11,6 +11,7 @@ CONTEXT_EVENTS = ("UserPromptSubmit", "SessionStart", "PreToolUse", "PostToolUse
 SILENT_EVENTS = ("PreCompact",)
 EVENTS = CONTEXT_EVENTS + SILENT_EVENTS
 CAP = 10_000
+CUT_MARK = f"\n[episteme: output cut at {CAP:,} characters]"
 
 
 def check(event: str | None) -> None:
@@ -28,7 +29,9 @@ def render(event: str, text: str) -> str:
     check(event)
     if event in SILENT_EVENTS or not text.strip():
         return ""
-    text = clip_at_newline(text.strip("\n"), CAP)
+    text = text.strip("\n")
+    if len(text) > CAP:
+        text = clip_at_newline(text, CAP - len(CUT_MARK)) + CUT_MARK
     return json.dumps(
         {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}},
         ensure_ascii=False,
