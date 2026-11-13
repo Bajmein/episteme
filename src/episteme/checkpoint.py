@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 SECTIONS = ("Plan", "Progreso", "Decisiones", "Trampas", "Siguientes pasos")
 VALID_DAYS = 7
+CHECKPOINT_PRIORITY = 3
+CHECKPOINT_HELPFUL = 0
 TASK_CHECKBOX = re.compile(r"^[-*]\s*\[([ xX~])\]\s*(\S+)", re.MULTILINE)
 BRANCH_CHANGE = re.compile(r"refs/heads/[a-z]+/(\d{3}-[a-z0-9][a-z0-9-]*)$")
 
@@ -37,6 +39,11 @@ def _project_dir(project_dir: str | None) -> Path:
     if not path.is_dir():
         raise invalid(f'project_dir "{raw}" does not exist.')
     return Path(os.path.realpath(path))
+
+
+def _normalized_dir(project_dir: str | None) -> str:
+    """The resolved ``project_dir`` as it is compared with a checkpoint's ``worktree``."""
+    return os.path.normcase(_project_dir(project_dir).as_posix())
 
 
 def _git_head(base: Path) -> str:
@@ -153,11 +160,11 @@ def save(engine: Engine, project_dir: str | None, project: str | None) -> dict[s
         "type": "session",
         "kind": "episodic",
         "project": project,
-        "priority": 3,
+        "priority": CHECKPOINT_PRIORITY,
         "status": "active",
         "created": now,
         "valid_until": now + dt.timedelta(days=VALID_DAYS),
-        "helpful": 0,
+        "helpful": CHECKPOINT_HELPFUL,
         "task_title": title,
     }
     if project_dir:  # without it the base is the server's cwd, which says nothing of the session
@@ -183,15 +190,23 @@ def _saved(engine: Engine, project: str) -> list[Any]:
     return [r for r in rows if not (r["valid_until"] and r["valid_until"] < iso)]
 
 
+def _row_title(engine: Engine, row: Any) -> str:
+    """The task title of a saved checkpoint row."""
+    return engine.index.props(row["path"]).get("task_title") or row["title"]
+
+
 def _same_worktree(engine: Engine, row: Any, here: str) -> bool:
     """True when the checkpoint was saved in ``here`` or predates the ``worktree`` key."""
     saved = engine.index.props(row["path"]).get("worktree")
     return not saved or os.path.normcase(str(saved)) == here
 
 
-def _saved_result(engine: Engine, row: Any) -> dict[str, Any]:
-    props = engine.index.props(row["path"])
-    title = props.get("task_title") or row["title"]
+def _saved_result(engine: Engine, rows: list[Any]) -> dict[str, Any]:
+    """The newest of the saved ``rows`` as a restore result, or the empty result."""
+    if not rows:
+        return {"found": False, "path": None, "task_title": None, "content": "", "source": None}
+    row = max(rows, key=lambda r: (r["created"] or "", r["mtime_ns"] or 0, r["path"]))
+    title = _row_title(engine, row)
     body = f"# Checkpoint · {title}\n\n{body_without_title(row['body'] or '')}".strip()
     content = (
         f"Saved checkpoint from {row['created']}, not the live state: check it against the "
@@ -214,15 +229,56 @@ def _archive_stale(
     Only those of this worktree (or without the ``worktree`` key): another worktree's
     checkpoints are not this state's to judge.
     """
-    here = os.path.normcase(_project_dir(project_dir).as_posix())
+    here = _normalized_dir(project_dir)
     for row in _saved(engine, project):
         if not _same_worktree(engine, row, here):
             continue
-        title = engine.index.props(row["path"]).get("task_title") or row["title"]
-        if title not in active_titles:
+        if _row_title(engine, row) not in active_titles:
             nf = NoteFile(engine, row["path"])
             nf.set_fields({"status": "archived"})
             nf.save()
+
+
+def _restore_live(
+    engine: Engine, project: str, project_dir: str | None, task_title: str | None
+) -> dict[str, Any] | None:
+    """The live-state result (the requested task, else the branch's or newest), or None."""
+    states = active_states(engine, project_dir) if project_dir else []
+    if task_title:
+        wanted = task_title.strip()
+        chosen = next((s for s in states if _title(*s) == wanted), None)
+    else:
+        chosen = _pick(states, project_dir)
+        if chosen is not None:
+            # A saved checkpoint of a task that is no longer active must not come back later.
+            _archive_stale(engine, project, {_title(*s) for s in states}, project_dir)
+    if chosen is None:
+        return None
+    path, note = chosen
+    title, body = _render(path, note)
+    base = _project_dir(project_dir)
+    content = f"{flow_line(path, note)}\n\n{body}".strip()
+    return {
+        "found": True,
+        "path": path.relative_to(base).as_posix(),
+        "task_title": title,
+        "content": content,
+        "source": "state",
+    }
+
+
+def _restore_saved(
+    engine: Engine, project: str, project_dir: str | None, task_title: str | None
+) -> dict[str, Any]:
+    """The saved-checkpoint result for this worktree (and task, if asked), or the empty one."""
+    rows = _saved(engine, project)
+    if project_dir:
+        here = _normalized_dir(project_dir)
+        rows = [r for r in rows if _same_worktree(engine, r, here)]
+    if task_title:
+        wanted = task_title.strip()
+        rows = [r for r in rows if _row_title(engine, r) == wanted]
+    return _saved_result(engine, rows)
 
 
 def restore(
@@ -239,40 +295,7 @@ def restore(
     content starts with a notice that it is not the live state.
     """
     project = engine.need_project(project)
-    states = active_states(engine, project_dir) if project_dir else []
-    chosen: tuple[Path, ParsedNote] | None = None
-    if task_title:
-        wanted = task_title.strip()
-        chosen = next((s for s in states if _title(*s) == wanted), None)
-    else:
-        chosen = _pick(states, project_dir)
-        if chosen is not None:
-            # A saved checkpoint of a task that is no longer active must not come back later.
-            _archive_stale(engine, project, {_title(*s) for s in states}, project_dir)
-    if chosen is not None:
-        path, note = chosen
-        title, body = _render(path, note)
-        base = _project_dir(project_dir)
-        content = f"{flow_line(path, note)}\n\n{body}".strip()
-        return {
-            "found": True,
-            "path": path.relative_to(base).as_posix(),
-            "task_title": title,
-            "content": content,
-            "source": "state",
-        }
-    rows = _saved(engine, project)
-    if project_dir:
-        here = os.path.normcase(_project_dir(project_dir).as_posix())
-        rows = [r for r in rows if _same_worktree(engine, r, here)]
-    if task_title:
-        wanted = task_title.strip()
-        rows = [
-            r
-            for r in rows
-            if (engine.index.props(r["path"]).get("task_title") or r["title"]) == wanted
-        ]
-    if not rows:
-        return {"found": False, "path": None, "task_title": None, "content": "", "source": None}
-    best = max(rows, key=lambda r: (r["created"] or "", r["mtime_ns"] or 0, r["path"]))
-    return _saved_result(engine, best)
+    live = _restore_live(engine, project, project_dir, task_title)
+    if live is not None:
+        return live
+    return _restore_saved(engine, project, project_dir, task_title)
