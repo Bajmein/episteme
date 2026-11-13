@@ -24,7 +24,7 @@ claude mcp add --scope local episteme-dev -- \
   uv run --directory '${HOME}/src/episteme' episteme --project fabrik
 ```
 
-Las comillas simples guardan `${HOME}/src` tal cual y Claude Code lo expande al arrancar el servidor, así la config no lleva la ruta de la máquina. Con comillas dobles la shell lo expande al registrar y queda la ruta completa.
+Las comillas simples guardan `${HOME}` tal cual y Claude Code lo expande al arrancar el servidor, así la config no lleva la ruta de la máquina. Con comillas dobles la shell lo expande al registrar y queda la ruta completa.
 
 ## Windows
 

@@ -31,7 +31,7 @@ claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajme
 ```
 
 - Sin `--vault` usa el vault global y lo crea si falta. Para otro vault, `--vault '<ruta absoluta>'` (en Windows vale `C:\Users\ana\notas`).
-- Comillas **simples** en `'${HOME}…'` (o en otra variable, como `'${HOME}/src…'`): Claude Code la expande al arrancar y la config no lleva la ruta de la máquina. Con comillas dobles, la shell la expande al registrar y queda la ruta absoluta.
+- Comillas **simples** en `'${HOME}…'` (o en otra variable de entorno tuya, como `'${EPISTEME_REPO}…'`): Claude Code la expande al arrancar y la config no lleva la ruta de la máquina. Con comillas dobles, la shell la expande al registrar y queda la ruta absoluta.
 - Scope local porque el proyecto (`--project`) es de la máquina.
 - **Varias cuentas de Claude Code en la máquina** (`CLAUDE_CONFIG_DIR` definido, o lanzadores como `claude-gmail`): el scope local se guarda en el `.claude.json` de *una* cuenta, la del `claude` con que se registre. En una shell con lanzadores, `claude` a secas puede ser otra cuenta que la de la sesión: comprueba en la salida de `mcp add` qué archivo dice `File modified`.
   - Si el proyecto solo se abre desde una cuenta, registra con su lanzador (`claude-<cuenta> mcp add --scope local …`).
