@@ -1,7 +1,7 @@
 ---
 paths:
   - src/episteme/vault.py
-  - src/episteme/index.py
+  - src/episteme/index/**
   - src/episteme/__main__.py
 ---
 
