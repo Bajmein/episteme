@@ -11,6 +11,7 @@ Guía para Claude Code en este repo.
 - `plugin/skills/` trae tres skills de uso diario, que no tocan el servidor: `pausa`, `mantencion` y `reminder` (`/episteme:pausa`…). Si cambia un tool que nombran (`remember`, `revise`, `review`, `search`), revisa sus `SKILL.md`.
 - `plugin/skills/setup/` (`/episteme:setup`) es la skill que conecta un proyecto (registro con `claude mcp add`, permisos, hooks y `CLAUDE.md`), en Linux, macOS y Windows. Si cambian la instalación, los hooks, los permisos o los tools, actualiza a la vez `README.md`, el documento de `docs/` que corresponda, `SKILL.md` y su `settings.json`.
 - Alcance cerrado: no hay tools para mover, renombrar, borrar o crear notas fuera de `memory/`, ni sync, web, HTTP o embeddings.
+- El código está en `src/episteme/`. `memory/` e `index/` son paquetes cuyo `__init__.py` reexporta lo que se usa desde fuera (se importa `from episteme import memory`, no el módulo interno). Los tools viven en `tools/` (`reading`, `memories`, `hooks`), cada módulo con una función `register(server, engine…)` que los define dentro: el SDK saca nombre, descripción y esquema de la propia función. `server.py` solo tiene las instrucciones, el formato de errores y `build_server`.
 - Los invariantes por módulo están en `.claude/rules/` y se cargan al tocar esos archivos. El porqué de las decisiones está en las memorias de episteme (`search` con `project="episteme"`).
 
 ## Cómo se trabaja
