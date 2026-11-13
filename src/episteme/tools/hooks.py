@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from typing import Annotated, Any, NamedTuple
 
 from mcp.server.mcpserver import MCPServer
@@ -21,38 +22,68 @@ from episteme.tools.args import (
     dump,
 )
 
+_ModeArg = Annotated[str, Field(description='"welcome" (session start) or "task" (needs task).')]
+_WelcomeSessionArg = Annotated[
+    str | None,
+    Field(description="welcome: session id; the welcome is sent once per session."),
+]
+_TaskArg = Annotated[
+    str | None, Field(description="task: what you are about to do, in a few words.")
+]
+_PromptArg = Annotated[
+    str | None,
+    Field(
+        description="welcome, from the UserPromptSubmit hook: the user's message "
+        "(${prompt}); adds up to 5 memories that match its rare words."
+    ),
+]
+_BudgetArg = Annotated[
+    int, Field(description="task: size of the context pack (1 token ~ 4 chars).")
+]
+_SourceArg = Annotated[
+    str | None,
+    Field(description="Only for the SessionStart hook: ${source} (compact or clear)."),
+]
+_LimitArg = Annotated[int, Field(description="Maximum memories, 1-50.")]
+_SurfaceSessionArg = Annotated[
+    str | None,
+    Field(
+        description="Hooks pass ${session_id}: a memory already shown by surface in"
+        " this session is not repeated."
+    ),
+]
+_ActionArg = Annotated[str, Field(description='"save" or "restore".')]
+_CheckpointDirArg = Annotated[
+    str | None,
+    Field(description="Absolute project directory (hooks pass ${cwd})."),
+]
+_TaskTitleArg = Annotated[
+    str | None,
+    Field(description="restore only: resume this task (exact title) instead of the branch's."),
+]
+
 
 def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> None:
     """Register the hook-facing tools on ``server``."""
+    _register_context(server, engine, store)
+    _register_surface(server, engine)
+    _register_constraints(server, engine)
+    _register_checkpoint(server, engine)
+
+
+def _register_context(server: MCPServer, engine: Engine, store: maintenance.Store) -> None:
+    """Register the context tool on ``server``."""
 
     @server.tool(structured_output=False)
     def context(
-        mode: Annotated[
-            str, Field(description='"welcome" (session start) or "task" (needs task).')
-        ] = "welcome",
-        session: Annotated[
-            str | None,
-            Field(description="welcome: session id; the welcome is sent once per session."),
-        ] = None,
+        mode: _ModeArg = "welcome",
+        session: _WelcomeSessionArg = None,
         project: ProjectArg = None,
-        task: Annotated[
-            str | None, Field(description="task: what you are about to do, in a few words.")
-        ] = None,
-        prompt: Annotated[
-            str | None,
-            Field(
-                description="welcome, from the UserPromptSubmit hook: the user's message "
-                "(${prompt}); adds up to 5 memories that match its rare words."
-            ),
-        ] = None,
-        budget_tokens: Annotated[
-            int, Field(description="task: size of the context pack (1 token ~ 4 chars).")
-        ] = 2000,
+        task: _TaskArg = None,
+        prompt: _PromptArg = None,
+        budget_tokens: _BudgetArg = 2000,
         hook_event: HookEvent = None,
-        source: Annotated[
-            str | None,
-            Field(description="Only for the SessionStart hook: ${source} (compact or clear)."),
-        ] = None,
+        source: _SourceArg = None,
     ) -> str:
         """Load project memory: the session welcome, or a context pack for a task.
 
@@ -77,10 +108,15 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
         hookmode.check(hook_event)
         with engine.session():
             if mode == "welcome":
-                return _welcome(engine, store, session, project, prompt, hook_event, source)
+                call = _Call(engine, store, session, project, hook_event)
+                return _welcome(call, prompt, source)
             if mode == "task":
-                return _task(engine, task, project, budget_tokens, hook_event)
+                return _task(engine, _TaskArgs(task, project, budget_tokens, hook_event))
             raise invalid(f'mode must be "welcome" or "task", got "{mode}".')
+
+
+def _register_surface(server: MCPServer, engine: Engine) -> None:
+    """Register the surface tool on ``server``."""
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def surface(
@@ -88,29 +124,26 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
         project_dir: ProjectDir = None,
         project: ProjectArg = None,
         relative_path: RelativePathArg = None,
-        limit: Annotated[int, Field(description="Maximum memories, 1-50.")] = 5,
+        limit: _LimitArg = 5,
         hook_event: HookEvent = None,
-        session: Annotated[
-            str | None,
-            Field(
-                description="Hooks pass ${session_id}: a memory already shown by surface in"
-                " this session is not repeated."
-            ),
-        ] = None,
+        session: _SurfaceSessionArg = None,
     ) -> str:
         """Memories (not constraints) about a file: listed in its files, or mentioned in the body.
 
         Returns JSON {"file", "memories": [{"path", "title", "type", "priority", "match"}]}.
         """
         hookmode.check(hook_event)
-        st = prompting.state(session) if session else None
-        skip = st.surfaced if st is not None and hook_event else None
+        st, skip = _surface_skip(session, hook_event)
         with engine.session():
             text, data = memory.surface(
                 engine, file, project_dir, project, limit, relative_path, skip
             )
         _track_surfaced(st, data, hook_event)
         return _reply(hook_event, text, data)
+
+
+def _register_constraints(server: MCPServer, engine: Engine) -> None:
+    """Register the constraints tool on ``server``."""
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def constraints(
@@ -129,20 +162,16 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
             text, data = memory.constraints(engine, file, project_dir, project, relative_path)
         return _reply(hook_event, text, data)
 
+
+def _register_checkpoint(server: MCPServer, engine: Engine) -> None:
+    """Register the checkpoint tool on ``server``."""
+
     @server.tool(structured_output=False)
     def checkpoint(
-        action: Annotated[str, Field(description='"save" or "restore".')],
-        project_dir: Annotated[
-            str | None,
-            Field(description="Absolute project directory (hooks pass ${cwd})."),
-        ] = None,
+        action: _ActionArg,
+        project_dir: _CheckpointDirArg = None,
         project: ProjectArg = None,
-        task_title: Annotated[
-            str | None,
-            Field(
-                description="restore only: resume this task (exact title) instead of the branch's."
-            ),
-        ] = None,
+        task_title: _TaskTitleArg = None,
         hook_event: HookEvent = None,
     ) -> str:
         """Save the active task state (estado.md) as a session memory, or restore the latest.
@@ -155,13 +184,9 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
         """
         hookmode.check(hook_event)
         with engine.session():
-            if action == "save":
-                data, text, notice = _checkpoint_save(engine, project_dir, project)
-            elif action == "restore":
-                data, text, notice = _checkpoint_restore(engine, project, project_dir, task_title)
-            else:
-                raise invalid(f'action must be "save" or "restore", got "{action}".')
+            data, text, notice = _checkpoint_run(engine, action, project_dir, project, task_title)
         return _reply(hook_event, text, data, notice)
+
 
 
 def _reply(hook_event: str | None, text: str, data: Any, notice: str = "") -> str:
@@ -169,6 +194,15 @@ def _reply(hook_event: str | None, text: str, data: Any, notice: str = "") -> st
     if hook_event:
         return hookmode.render(hook_event, text, notice)
     return dump(data)
+
+
+def _surface_skip(
+    session: str | None, hook_event: str | None
+) -> tuple[prompting.SessionState | None, set[str] | None]:
+    """Return the session state and the paths surface must not repeat."""
+    st = prompting.state(session) if session else None
+    skip = st.surfaced if st is not None and hook_event else None
+    return st, skip
 
 
 def _track_surfaced(
@@ -204,6 +238,21 @@ def _checkpoint_restore(
     return data, data["content"], notice
 
 
+def _checkpoint_run(
+    engine: Engine,
+    action: str,
+    project_dir: str | None,
+    project: str | None,
+    task_title: str | None,
+) -> tuple[dict[str, Any], str, str]:
+    """Run the save or restore action and return (data, text, notice)."""
+    if action == "save":
+        return _checkpoint_save(engine, project_dir, project)
+    if action == "restore":
+        return _checkpoint_restore(engine, project, project_dir, task_title)
+    raise invalid(f'action must be "save" or "restore", got "{action}".')
+
+
 def _maintenance_note(engine: Engine, store: maintenance.Store, project: str) -> str:
     """Run the configured maintenance of a first welcome and return its notice."""
     try:
@@ -226,14 +275,30 @@ class _Turn(NamedTuple):
     note: str
 
 
-def _turn(
-    engine: Engine,
-    store: maintenance.Store,
-    session: str | None,
-    project: str,
-    hook_event: str | None,
-) -> _Turn:
+@dataclass(frozen=True)
+class _Call:
+    """Arguments of a context call shared by its helpers."""
+
+    engine: Engine
+    store: maintenance.Store
+    session: str | None
+    project: str | None
+    hook_event: str | None
+
+
+@dataclass(frozen=True)
+class _TaskArgs:
+    """Arguments of a context call in task mode."""
+
+    task: str | None
+    project: str | None
+    budget_tokens: int
+    hook_event: str | None
+
+
+def _turn(call: _Call, project: str) -> _Turn:
     """Advance the session counters and say whether this call carries the welcome."""
+    engine, session, hook_event = call.engine, call.session, call.hook_event
     if not session:
         return _Turn(prompting.SessionState(), welcomed=True, resend=False, note="")
     resend = hook_event == "SessionStart"
@@ -246,28 +311,23 @@ def _turn(
     welcomed = fresh or resend
     if welcomed:
         st.reminded_at = st.prompts
-    note = _maintenance_note(engine, store, project) if fresh else ""
+    note = _maintenance_note(engine, call.store, project) if fresh else ""
     return _Turn(st, welcomed, resend, note)
 
 
-def _welcome(
-    engine: Engine,
-    store: maintenance.Store,
-    session: str | None,
-    project: str | None,
-    prompt: str | None,
-    hook_event: str | None,
-    source: str | None,
-) -> str:
+def _welcome(call: _Call, prompt: str | None, source: str | None) -> str:
     """Build the session welcome: norms, reminders, recalled memories and the trail.
 
     Call it inside engine.session().
     """
-    project = engine.need_project(project)
-    st, welcomed, resend, note = _turn(engine, store, session, project, hook_event)
+    engine, hook_event = call.engine, call.hook_event
+    project = engine.need_project(call.project)
+    call = replace(call, project=project)
+    turn = _turn(call, project)
+    st, welcomed, resend = turn.state, turn.welcomed, turn.resend
     out = _Blocks()
     if welcomed:
-        _head_block(engine, project, st, out, note)
+        _head_block(engine, project, turn, out)
     elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:
         out.add(*prompting.overdue_block(engine, project), st)
         st.reminded_at = st.prompts
@@ -303,13 +363,11 @@ class _Blocks:
         return {e["path"] for e in self.entries}
 
 
-def _head_block(
-    engine: Engine, project: str, st: prompting.SessionState, out: _Blocks, note: str
-) -> None:
+def _head_block(engine: Engine, project: str, turn: _Turn, out: _Blocks) -> None:
     """Add the welcome proper, then the maintenance note."""
-    out.add(*memory.welcome(engine, project), st)
-    if note:
-        out.blocks.append(note)
+    out.add(*memory.welcome(engine, project), turn.state)
+    if turn.note:
+        out.blocks.append(turn.note)
 
 
 def _trail_block(
@@ -322,17 +380,11 @@ def _trail_block(
     return prompting.recovered_notice(source, listed, len(found))
 
 
-def _task(
-    engine: Engine,
-    task: str | None,
-    project: str | None,
-    budget_tokens: int,
-    hook_event: str | None,
-) -> str:
+def _task(engine: Engine, args: _TaskArgs) -> str:
     """Build the context pack for a task. Call it inside engine.session()."""
-    if not task or not task.strip():
+    if not args.task or not args.task.strip():
         raise invalid('mode "task" needs task.')
-    text, entries = memory.task_context(engine, task, project, budget_tokens)
-    if hook_event:
-        return hookmode.render(hook_event, text)
+    text, entries = memory.task_context(engine, args.task, args.project, args.budget_tokens)
+    if args.hook_event:
+        return hookmode.render(args.hook_event, text)
     return dump({"text": text, "entries": entries})
