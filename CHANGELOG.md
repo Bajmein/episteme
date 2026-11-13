@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.10.0] - 2026-11-13
+
 ### Añadido
 
 - El plugin `episteme` de Claude Code, con el propio repo como marketplace (`claude plugin marketplace add Bajmein/episteme` y `claude plugin install episteme@episteme`). Trae las skills y no el servidor, que se sigue registrando por proyecto. Además de `/episteme:setup`, suma tres skills: `/episteme:pausa` (guarda el estado de la tarea antes de `/clear` o de cerrar y lo retoma después, para los proyectos sin `estado.md`), `/episteme:mantencion` (guía la revisión de memorias que informa `review`, con aprobación grupo por grupo) y `/episteme:reminder` (un recordatorio de prioridad 5 del proyecto). Las skills se actualizan con `claude plugin update episteme@episteme` cuando sale una versión nueva.
@@ -12,7 +14,6 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Cambiado
 
 - La skill `episteme-setup` pasa a ser `/episteme:setup` y se instala con el plugin, no enlazando una carpeta del clone. Quien la tenía enlazada borra el enlace (`~/.claude/skills/episteme-setup`) e instala el plugin; si no, quedan las dos.
-
 - El `README.md` pasa a ser una presentación en lenguaje simple, con dos diagramas (arquitectura y hooks de una sesión, en `static/diagrams/`). El detalle que tenía se mueve sin cambios a `docs/`: instalación, configuración, tools y memorias, hooks, mantención, migración de OMEGA y desarrollo.
 
 ## [0.9.1] - 2026-11-13
@@ -176,7 +177,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.9.1...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Bajmein/episteme/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/Bajmein/episteme/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/Bajmein/episteme/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Bajmein/episteme/compare/v0.7.0...v0.8.0
