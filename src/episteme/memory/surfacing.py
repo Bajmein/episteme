@@ -44,6 +44,57 @@ def _by_files(rows: list[Any], files: dict[str, list[str]], file: str, rel: str)
     )
 
 
+def _mention_matches(
+    engine: Engine,
+    rel: str,
+    project: str,
+    rows: list[Any],
+    files: dict[str, list[str]],
+    by_files: list[Any],
+) -> list[Any]:
+    """The rows whose text mentions the file, not already matched by ``files``, by priority."""
+    seen = {r["path"] for r in by_files}
+    name = PurePosixPath(rel).name
+    query = f'"{rel}"' + (f' "{name}"' if _name_is_unambiguous(rel, name, files) else "")
+    hits, _ = engine.index.search(
+        query,
+        any_term=True,
+        mode=MEMORY,
+        project=[project, "_shared"],
+        limit=1000,
+        snippets=False,
+    )
+    hit_paths = {h.path for h in hits}
+    return _by_priority([r for r in rows if r["path"] in hit_paths and r["path"] not in seen])
+
+
+def _surface_text(rel: str, chosen: list[tuple[Any, str]], skip: set[str] | None) -> str:
+    """The hook text for the chosen memories, leaving out the paths in ``skip``."""
+    fresh = [r for r, _ in chosen if r["path"] not in (skip or ())]
+    if not fresh:
+        return ""
+    shown = len(chosen) - len(fresh)
+    head = f"Memories about {rel}" + (f" (+{shown} ya mostradas)" if shown else "") + ":"
+    return "\n".join([head] + [entry_line(r) for r in fresh])
+
+
+def _surface_data(rel: str, chosen: list[tuple[Any, str]]) -> dict[str, Any]:
+    """The structured result for the chosen memories (``skip`` does not apply)."""
+    return {
+        "file": rel,
+        "memories": [
+            {
+                "path": r["path"],
+                "title": r["title"],
+                "type": r["type"],
+                "priority": r["priority"],
+                "match": match,
+            }
+            for r, match in chosen
+        ],
+    }
+
+
 def surface(
     engine: Engine,
     file: str,
@@ -65,41 +116,9 @@ def surface(
         engine, project, "type not in ('constraint', 'session', 'reminder')"
     )
     by_files = _by_files(rows, files, file, rel)
-    seen = {r["path"] for r in by_files}
-    name = PurePosixPath(rel).name
-    query = f'"{rel}"' + (f' "{name}"' if _name_is_unambiguous(rel, name, files) else "")
-    hits, _ = engine.index.search(
-        query,
-        any_term=True,
-        mode=MEMORY,
-        project=[project, "_shared"],
-        limit=1000,
-        snippets=False,
-    )
-    hit_paths = {h.path for h in hits}
-    by_mention = _by_priority([r for r in rows if r["path"] in hit_paths and r["path"] not in seen])
-    chosen = [(r, "files") for r in by_files] + [(r, "mention") for r in by_mention]
-    chosen = chosen[:limit]
-    text = ""
-    fresh = [r for r, _ in chosen if r["path"] not in (skip or ())]
-    if fresh:
-        shown = len(chosen) - len(fresh)
-        head = f"Memories about {rel}" + (f" (+{shown} ya mostradas)" if shown else "") + ":"
-        text = "\n".join([head] + [entry_line(r) for r in fresh])
-    data = {
-        "file": rel,
-        "memories": [
-            {
-                "path": r["path"],
-                "title": r["title"],
-                "type": r["type"],
-                "priority": r["priority"],
-                "match": match,
-            }
-            for r, match in chosen
-        ],
-    }
-    return text, data
+    by_mention = _mention_matches(engine, rel, project, rows, files, by_files)
+    chosen = ([(r, "files") for r in by_files] + [(r, "mention") for r in by_mention])[:limit]
+    return _surface_text(rel, chosen, skip), _surface_data(rel, chosen)
 
 
 def constraints(

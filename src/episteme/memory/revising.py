@@ -55,24 +55,39 @@ def _append_text(nf: NoteFile, text: str | None, heading: str | None) -> list[st
     return ["body"]
 
 
+def _reject_field_secrets(fields: dict[str, Any]) -> None:
+    for key, value in fields.items():
+        _reject_secrets(f"fields.{key}", value)
+
+
+def _needs_move(changed: list[str], is_memory: bool) -> bool:
+    """True when a memory's type or project changed, so its folder may change."""
+    return is_memory and bool({"type", "project"} & set(changed))
+
+
+def _sync_kind(nf: NoteFile, changed: list[str]) -> list[str]:
+    """Set ``kind`` from the new ``type`` when the type changed to a known one."""
+    if "type" in changed and nf.fm.get("type") in TYPES:
+        return nf.set_fields({"kind": kind_for(nf.fm["type"])})
+    return []
+
+
 def _set(
     engine: Engine, nf: NoteFile, fields: dict[str, Any] | None, is_memory: bool
 ) -> tuple[list[str], str]:
     """Set frontmatter fields; return what changed and the path the note ends up at."""
     if not fields:
         raise invalid('set needs fields, e.g. {"priority": 5}.')
-    for key, value in fields.items():
-        _reject_secrets(f"fields.{key}", value)
+    _reject_field_secrets(fields)
     changed = nf.set_fields({k: _coerce(k, v) for k, v in fields.items()})
-    if not is_memory or not {"type", "project"} & set(changed):
+    if not _needs_move(changed, is_memory):
         return changed, nf.rel
-    if "type" in changed and nf.fm.get("type") in TYPES:
-        changed += nf.set_fields({"kind": kind_for(nf.fm["type"])})
+    changed += _sync_kind(nf, changed)
     return changed, _move_memory(engine, nf)
 
 
-def _supersede(engine: Engine, nf: NoteFile, by: str | None) -> tuple[list[str], str]:
-    """Mark the note as superseded by ``by``, save both notes and return the path of ``by``."""
+def _resolve_replacement(engine: Engine, nf: NoteFile, by: str | None) -> tuple[str, NoteFile]:
+    """The memory that replaces ``nf``: its path and loaded note."""
     if not by:
         raise invalid("supersede needs by (the note that replaces this one).")
     by_rel = engine.resolve_note(by)
@@ -80,14 +95,22 @@ def _supersede(engine: Engine, nf: NoteFile, by: str | None) -> tuple[list[str],
         raise invalid("a note cannot supersede itself.")
     if engine.vault.check_writable(by_rel) != MEMORY:
         raise invalid(f"{by_rel} is not a memory. Create the replacement with remember.")
-    newer = NoteFile(engine, by_rel)
-    link = wikilink(engine, nf.rel)
-    current = newer.fm.get("supersedes")
+    return by_rel, NoteFile(engine, by_rel)
+
+
+def _merged_supersedes(current: Any, link: str) -> Any:
+    """The ``supersedes`` value of the replacement once ``link`` is added."""
     if current and current != link:
         current = current if isinstance(current, list) else [current]
-        link_value: Any = current + ([link] if link not in current else [])
-    else:
-        link_value = link
+        return current + ([link] if link not in current else [])
+    return link
+
+
+def _supersede(engine: Engine, nf: NoteFile, by: str | None) -> tuple[list[str], str]:
+    """Mark the note as superseded by ``by``, save both notes and return the path of ``by``."""
+    by_rel, newer = _resolve_replacement(engine, nf, by)
+    link = wikilink(engine, nf.rel)
+    link_value = _merged_supersedes(newer.fm.get("supersedes"), link)
     changed = nf.set_fields({"status": "superseded"})
     newer.set_fields({"supersedes": link_value})
     validate(nf.fm)

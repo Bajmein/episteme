@@ -56,15 +56,16 @@ def _is_placeholder(password: str) -> bool:
     )
 
 
+def _has_url_password(text: str) -> bool:
+    return any(not _is_placeholder(m.group(1)) for m in _URL_CREDENTIALS.finditer(text))
+
+
 def find_secrets(text: str) -> str | None:
     """Name of the first credential type found in ``text`` (never the value), else None."""
     for name, pattern in SECRET_PATTERNS:
         if pattern.search(text):
             return name
-    for m in _URL_CREDENTIALS.finditer(text):
-        if not _is_placeholder(m.group(1)):
-            return "password in URL"
-    return None
+    return "password in URL" if _has_url_password(text) else None
 
 
 def _reject_secrets(field: str, value: Any) -> None:
