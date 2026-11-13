@@ -53,11 +53,12 @@ def _join_slug(words: list[str]) -> str:
     for word in words:
         if len(picked) == SLUG_WORDS:
             break
-        if len("-".join([*picked, word])) > SLUG_CHARS:
-            if not picked:
-                picked.append(word[:SLUG_CHARS].strip("-"))
-            break
-        picked.append(word)
+        if len("-".join([*picked, word])) <= SLUG_CHARS:
+            picked.append(word)
+            continue
+        if not picked:
+            picked.append(word[:SLUG_CHARS].strip("-"))
+        break
     return "-".join(picked)
 
 
@@ -96,6 +97,32 @@ def _active_memories(engine: Engine, project: str) -> list[Any]:
     return engine.index.memories("status = 'active' and project in (?, ?)", (project, SHARED))
 
 
+def _match_reason(
+    engine: Engine,
+    row: Any,
+    my_files: set[str],
+    my_tags: set[str],
+    files: dict[str, list[str]],
+) -> str | None:
+    """Why a memory is worth linking (a shared file or 2+ shared tags), or ``None``."""
+    shared_files = sorted(my_files & set(files.get(row["path"], [])))
+    if shared_files:
+        return f"shares file {shared_files[0]}"
+    raw_tags = engine.index.props(row["path"]).get("tags")
+    shared_tags = sorted(my_tags & set(_as_list(raw_tags)))
+    if len(shared_tags) >= MIN_SHARED_TAGS:
+        return f"shares tags {', '.join(shared_tags)}"
+    return None
+
+
+def _top_candidates(found: list[tuple[Any, ...]]) -> list[dict[str, str]]:
+    """The best ``MAX_CANDIDATES``: priority, then newest, then path (stable sorts)."""
+    found.sort(key=lambda f: f[2])
+    found.sort(key=lambda f: f[1], reverse=True)
+    found.sort(key=lambda f: f[0], reverse=True)
+    return [{"path": p, "title": t, "reason": r} for _, _, p, t, r in found[:MAX_CANDIDATES]]
+
+
 def _link_candidates(
     engine: Engine, project: str, fm: dict[str, Any], skip: set[str]
 ) -> list[dict[str, str]]:
@@ -105,32 +132,54 @@ def _link_candidates(
     if not my_files and len(my_tags) < MIN_SHARED_TAGS:
         return []
     files = _files_of(engine)
-    found = []
+    found: list[tuple[Any, ...]] = []
     for row in _active_memories(engine, project):
         if row["path"] in skip:
             continue
-        shared_files = sorted(my_files & set(files.get(row["path"], [])))
-        raw_tags = engine.index.props(row["path"]).get("tags")
-        shared_tags = sorted(my_tags & set(_as_list(raw_tags)))
-        if shared_files:
-            reason = f"shares file {shared_files[0]}"
-        elif len(shared_tags) >= MIN_SHARED_TAGS:
-            reason = f"shares tags {', '.join(shared_tags)}"
-        else:
+        reason = _match_reason(engine, row, my_files, my_tags, files)
+        if reason is None:
             continue
         found.append(
             (row["priority"] or 0, row["created"] or "", row["path"], row["title"], reason)
         )
-    found.sort(key=lambda f: f[2])
-    found.sort(key=lambda f: f[1], reverse=True)
-    found.sort(key=lambda f: f[0], reverse=True)
-    return [{"path": p, "title": t, "reason": r} for _, _, p, t, r in found[:MAX_CANDIDATES]]
+    return _top_candidates(found)
 
 
 class _Links(NamedTuple):
     related: list[str]
     old_rel: str | None
     old_note: NoteFile | None
+
+
+def _memory_zone(engine: Engine) -> Any:
+    """The vault's memory zone, or an error if it has none."""
+    zone = engine.vault.memory_zone
+    if zone is None:
+        raise invalid('the vault has no zone with mode = "memory". Declare one in episteme.toml.')
+    return zone
+
+
+def _check_type(type: str) -> None:
+    if type not in TYPES:
+        raise schema_error(f"type must be one of {', '.join(TYPES)}, got {type!r}.")
+
+
+def _clean_title(title: str) -> str:
+    """The title with its whitespace collapsed; an error if it is empty."""
+    title = " ".join((title or "").split())
+    if not title:
+        raise invalid("title is empty. Pass a short title.")
+    return title
+
+
+def _check_body(body: str) -> None:
+    if not (body or "").strip():
+        raise invalid("body is empty. Describe the memory and name the files or tools involved.")
+
+
+def _reject_all_secrets(fields: tuple[tuple[str, Any], ...]) -> None:
+    for field, value in fields:
+        _reject_secrets(field, value)
 
 
 def _check_args(
@@ -141,18 +190,11 @@ def _check_args(
     secret_fields: tuple[tuple[str, Any], ...],
 ) -> tuple[Any, str]:
     """Validate the arguments and return the memory zone and the cleaned title."""
-    zone = engine.vault.memory_zone
-    if zone is None:
-        raise invalid('the vault has no zone with mode = "memory". Declare one in episteme.toml.')
-    if type not in TYPES:
-        raise schema_error(f"type must be one of {', '.join(TYPES)}, got {type!r}.")
-    title = " ".join((title or "").split())
-    if not title:
-        raise invalid("title is empty. Pass a short title.")
-    if not (body or "").strip():
-        raise invalid("body is empty. Describe the memory and name the files or tools involved.")
-    for field, value in (("title", title), ("body", body), *secret_fields):
-        _reject_secrets(field, value)
+    zone = _memory_zone(engine)
+    _check_type(type)
+    title = _clean_title(title)
+    _check_body(body)
+    _reject_all_secrets((("title", title), ("body", body), *secret_fields))
     return zone, title
 
 
@@ -178,6 +220,28 @@ def _clean_body(body: str) -> str:
     return text_body
 
 
+def _similar_item(row: Any, score: float) -> dict[str, Any]:
+    return {
+        "path": row["path"],
+        "title": row["title"],
+        "similarity": round(score, 3),
+        "type": row["type"],
+        "project": row["project"],
+    }
+
+
+def _blocks(row: Any, score: float, project: str, type: str) -> bool:
+    """Whether a close memory is a duplicate that blocks the save."""
+    return score >= DUPLICATE and row["project"] == project and row["type"] == type
+
+
+def _better_blocker(item: dict[str, Any], blocking: dict[str, Any] | None) -> bool:
+    """Whether ``item`` is closer than the current blocker (ties go to the first path)."""
+    if blocking is None:
+        return True
+    return (-item["similarity"], item["path"]) < (-blocking["similarity"], blocking["path"])
+
+
 def _find_similar(
     engine: Engine, project: str, type: str, title: str, text_body: str, old_rel: str | None
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
@@ -192,20 +256,10 @@ def _find_similar(
         score = similarity(mine, theirs)
         if score < SIMILAR:
             continue
-        item = {
-            "path": row["path"],
-            "title": row["title"],
-            "similarity": round(score, 3),
-            "type": row["type"],
-            "project": row["project"],
-        }
+        item = _similar_item(row, score)
         similar.append(item)
-        if score >= DUPLICATE and row["project"] == project and row["type"] == type:
-            if blocking is None or (-item["similarity"], item["path"]) < (
-                -blocking["similarity"],
-                blocking["path"],
-            ):
-                blocking = item
+        if _blocks(row, score, project, type) and _better_blocker(item, blocking):
+            blocking = item
     similar.sort(key=lambda s: (-s["similarity"], s["path"]))
     return similar, blocking
 
@@ -241,18 +295,77 @@ def _numbered_rel(folder: str, base: str, n: int) -> str:
     return f"{folder}/{base}.md" if n == 1 else f"{folder}/{base}-{n}.md"
 
 
-def _write_new(engine: Engine, folder: str, base: str, content: str, dry_run: bool) -> str:
-    """Create the file under the first free numbered name (only look for it if ``dry_run``)."""
+def _first_free_rel(engine: Engine, folder: str, base: str) -> str:
+    """Path of the first numbered name that does not exist yet."""
     n = 1
-    if dry_run:
-        while engine.vault.resolve(_numbered_rel(folder, base, n)).exists():
-            n += 1
-        return _numbered_rel(folder, base, n)
+    while engine.vault.resolve(_numbered_rel(folder, base, n)).exists():
+        n += 1
+    return _numbered_rel(folder, base, n)
+
+
+def _create_numbered(engine: Engine, folder: str, base: str, content: str) -> str:
+    """Create the file under the first numbered name nobody took meanwhile."""
+    n = 1
     while True:
         rel = _numbered_rel(folder, base, n)
         if not engine.vault.resolve(rel).exists() and engine.vault.create_exclusive(rel, content):
             return rel
         n += 1
+
+
+def _write_new(engine: Engine, folder: str, base: str, content: str, dry_run: bool) -> str:
+    """Create the file under the first free numbered name (only look for it if ``dry_run``)."""
+    if dry_run:
+        return _first_free_rel(engine, folder, base)
+    return _create_numbered(engine, folder, base, content)
+
+
+def _frontmatter(engine: Engine, raw: dict[str, Any], links: _Links) -> dict[str, Any]:
+    """Normalise the raw fields of a new memory, then put them in key order and validate."""
+    priority = raw["priority"]
+    fm = ordered(
+        {
+            **raw,
+            "kind": kind_for(raw["type"]),
+            "priority": priority if priority is not None else default_priority(raw["type"]),
+            "valid_until": _date_arg("valid_until", raw["valid_until"]),
+            "tags": [t.strip().lstrip("#") for t in raw["tags"] or []],
+            "keywords": [k.strip() if isinstance(k, str) else k for k in raw["keywords"] or []],
+            "files": list(raw["files"] or []),
+            "supersedes": wikilink(engine, links.old_rel) if links.old_rel else None,
+            "related": links.related,
+            "due": _date_arg("due", raw["due"]),
+        }
+    )
+    validate(fm)
+    return fm
+
+
+def _skip_paths(engine: Engine, related: list[str] | None, links: _Links) -> set[str]:
+    """Paths that are already linked and so are not suggested as link candidates."""
+    skip = {engine.resolve_note(r) for r in related or []}
+    if links.old_rel:
+        skip.add(links.old_rel)
+    return skip
+
+
+def _persist(
+    engine: Engine,
+    folder: str,
+    base: str,
+    content: str,
+    links: _Links,
+    dry_run: bool,
+) -> str:
+    """Write the memory, index it and save the superseded one (never on a dry run)."""
+    engine.vault.check_writable(f"{folder}/{base}.md")
+    rel = _write_new(engine, folder, base, content, dry_run)
+    if dry_run:
+        return rel
+    engine.index.reindex(rel)
+    if links.old_note is not None:
+        links.old_note.save()
+    return rel
 
 
 def remember(
@@ -287,45 +400,32 @@ def remember(
     links = _resolve_links(engine, related, supersedes)
 
     created = created or today()
-    fm = ordered(
-        {
-            "type": type,
-            "kind": kind_for(type),
-            "project": project,
-            "priority": priority if priority is not None else default_priority(type),
-            "status": status,
-            "created": created,
-            "valid_until": _date_arg("valid_until", valid_until),
-            "tags": [t.strip().lstrip("#") for t in tags or []],
-            "keywords": [k.strip() if isinstance(k, str) else k for k in keywords or []],
-            "files": list(files or []),
-            "supersedes": wikilink(engine, links.old_rel) if links.old_rel else None,
-            "related": links.related,
-            "source": source,
-            "helpful": helpful,
-            "due": _date_arg("due", due),
-        }
-    )
-    validate(fm)
+    raw = {
+        "type": type,
+        "project": project,
+        "priority": priority,
+        "status": status,
+        "created": created,
+        "valid_until": valid_until,
+        "tags": tags,
+        "keywords": keywords,
+        "files": files,
+        "source": source,
+        "helpful": helpful,
+        "due": due,
+    }
+    fm = _frontmatter(engine, raw, links)
 
     text_body = _clean_body(body)
     similar, blocking = _find_similar(engine, project, type, title, text_body, links.old_rel)
     if blocking is not None and not force:
         return _duplicate_reply(similar, blocking)
-    skip = {engine.resolve_note(r) for r in related or []}
-    if links.old_rel:
-        skip.add(links.old_rel)
-    extras = _extras(engine, project, fm, skip)
+    extras = _extras(engine, project, fm, _skip_paths(engine, related, links))
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"
     base = f"{created.isoformat()}-{slug}"
-    engine.vault.check_writable(f"{folder}/{base}.md")
-    rel = _write_new(engine, folder, base, content, dry_run)
+    rel = _persist(engine, folder, base, content, links, dry_run)
     if dry_run:
         return {"created": True, "path": rel, "similar": similar, "dry_run": True, **extras}
-    engine.index.reindex(rel)
-
-    if links.old_note is not None:
-        links.old_note.save()
     return {"created": True, "path": rel, "similar": similar, **extras}
