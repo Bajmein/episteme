@@ -41,10 +41,81 @@ class Zone:
     mode: str
 
 
+@dataclass(frozen=True)
+class Maintenance:
+    every_days: int = 1
+    notify: bool = True
+    archive_expired: bool = False
+
+
+@dataclass(frozen=True)
+class Backup:
+    dir: Path | None = None
+    keep: int = 14
+
+
 @dataclass
 class Config:
     zones: list[Zone] = field(default_factory=list)
     state_glob: str | None = None
+    maintenance: Maintenance = field(default_factory=Maintenance)
+    backup: Backup = field(default_factory=Backup)
+
+
+def _table(data: dict, name: str, allowed: tuple[str, ...]) -> dict:
+    """Return ``[name]`` from the TOML data, rejecting non-tables and unknown keys."""
+    table = data.get(name, {})
+    if not isinstance(table, dict):
+        raise StartupError(f"[{name}] in episteme.toml must be a table.")
+    for key in table:
+        if key not in allowed:
+            raise StartupError(
+                f'[{name}] has unknown key "{key}"; valid keys are {", ".join(allowed)}.'
+            )
+    return table
+
+
+def _int_min1(table: dict, name: str, key: str, default: int) -> int:
+    value = table.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise StartupError(f"[{name}] {key} must be an integer >= 1.")
+    return value
+
+
+def _flag(table: dict, name: str, key: str, default: bool) -> bool:
+    value = table.get(key, default)
+    if not isinstance(value, bool):
+        raise StartupError(f"[{name}] {key} must be true or false.")
+    return value
+
+
+def _load_maintenance(data: dict) -> Maintenance:
+    table = _table(data, "maintenance", ("every_days", "notify", "archive_expired"))
+    return Maintenance(
+        every_days=_int_min1(table, "maintenance", "every_days", 1),
+        notify=_flag(table, "maintenance", "notify", True),
+        archive_expired=_flag(table, "maintenance", "archive_expired", False),
+    )
+
+
+def _load_backup(data: dict, root: Path) -> Backup:
+    table = _table(data, "backup", ("dir", "keep"))
+    if "backup" not in data:
+        return Backup()
+    raw = table.get("dir")
+    if not isinstance(raw, str) or not raw.strip():
+        raise StartupError("[backup] dir must be a non-empty string.")
+    try:
+        target = Path(raw).expanduser()
+    except RuntimeError as exc:
+        raise StartupError(f'[backup] dir "{raw}" cannot be expanded: {exc}.') from exc
+    if not target.is_absolute():
+        raise StartupError(f'[backup] dir "{raw}" must be an absolute path.')
+    real = Path(os.path.normcase(os.path.realpath(target)))
+    real_root = Path(os.path.normcase(os.path.realpath(root)))
+    if real == real_root or real_root in real.parents:
+        raise StartupError(f'[backup] dir "{raw}" must be outside the vault.')
+    return Backup(dir=target, keep=_int_min1(table, "backup", "keep", 14))
 
 
 def load_config(root: Path) -> Config:
@@ -78,7 +149,7 @@ def load_config(root: Path) -> Config:
         state_glob = checkpoint["state_glob"]
         if not isinstance(state_glob, str) or not state_glob:
             raise StartupError("[checkpoint] state_glob must be a non-empty string.")
-    return Config(zones, state_glob)
+    return Config(zones, state_glob, _load_maintenance(data), _load_backup(data, root))
 
 
 def today() -> dt.date:
