@@ -71,6 +71,11 @@ MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
 MEMORY_ACTIONS = ("supersede", "feedback", "archive", "dismiss")
 UPCOMING_DAYS = 7
+PRIORITY_MIN = 1
+PRIORITY_MAX = 5
+DEFAULT_PRIORITY = 3
+HIGH_PRIORITY = 4  # decisions and constraints
+DEDUP_MIN_TOKEN = 3
 
 
 def kind_for(type_: str) -> str:
@@ -82,7 +87,7 @@ def kind_for(type_: str) -> str:
 
 
 def default_priority(type_: str) -> int:
-    return 4 if type_ in ("decision", "constraint") else 3
+    return HIGH_PRIORITY if type_ in ("decision", "constraint") else DEFAULT_PRIORITY
 
 
 def schema_error(message: str) -> EpistemeError:
@@ -106,7 +111,11 @@ def validate(fm: dict[str, Any]) -> None:
     if "/" in project or "\\" in project or project in (".", ".."):
         raise schema_error(f'project must be a plain name without "/" or "..", got {project!r}.')
     priority = fm.get("priority")
-    if isinstance(priority, bool) or not isinstance(priority, int) or not 1 <= priority <= 5:
+    if (
+        isinstance(priority, bool)
+        or not isinstance(priority, int)
+        or not PRIORITY_MIN <= priority <= PRIORITY_MAX
+    ):
         raise schema_error(f"priority must be 1-5, got {priority!r}.")
     if fm.get("status") not in STATUSES:
         raise schema_error(
@@ -180,7 +189,7 @@ def similarity(a: set[str], b: set[str]) -> float:
 
 
 def dedup_tokens(title: str, body: str) -> set[str]:
-    toks = tokens(f"{title}\n{body}", min_len=3)
+    toks = tokens(f"{title}\n{body}", min_len=DEDUP_MIN_TOKEN)
     return {t for t in toks if t not in STOPWORDS_ES}
 
 
