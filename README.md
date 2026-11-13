@@ -3,6 +3,7 @@
 ![episteme: Agentic Memory & Knowledge Vault. Persistent Knowledge Engine for AI Workflows.](static/banner-episteme.jpg)
 
 [![CI](https://github.com/Bajmein/episteme/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Bajmein/episteme/actions/workflows/ci.yml)
+[![CodeScene general](https://codescene.io/images/analyzed-by-codescene-badge.svg)](https://codescene.io/projects/87754)
 [![Versión](https://img.shields.io/badge/versi%C3%B3n-v0.10.1-8B5CF6)](https://github.com/Bajmein/episteme/tags)
 [![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/uv-Astral-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
