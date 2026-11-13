@@ -2,15 +2,15 @@
 
 ![episteme: Agentic Memory & Knowledge Vault. Persistent Knowledge Engine for AI Workflows.](static/banner-episteme.jpg)
 
-[![CI](https://github.com/Bajmein/episteme/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Bajmein/episteme/actions/workflows/ci.yml)
-[![CodeScene general](https://codescene.io/images/analyzed-by-codescene-badge.svg)](https://codescene.io/projects/87754)
-[![Versión](https://img.shields.io/badge/versi%C3%B3n-v0.10.1-8B5CF6)](https://github.com/Bajmein/episteme/tags)
-[![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![uv](https://img.shields.io/badge/uv-Astral-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
-[![MCP SDK](https://img.shields.io/badge/MCP_SDK-2.x-005571)](https://github.com/modelcontextprotocol/python-sdk)
-[![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html)
-[![Obsidian](https://img.shields.io/badge/Obsidian-vault_Markdown-7C3AED?logo=obsidian&logoColor=white)](https://obsidian.md/)
-[![Plataformas](https://img.shields.io/badge/Linux_%7C_macOS_%7C_Windows-soportados-2EA44F)](#instalación)
+<a href="https://github.com/Bajmein/episteme/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Bajmein/episteme/actions/workflows/ci.yml/badge.svg?branch=main" height="24"></a>
+<a href="https://codescene.io/projects/87754"><img alt="CodeScene general" src="https://codescene.io/images/analyzed-by-codescene-badge.svg" height="24"></a>
+<a href="https://github.com/Bajmein/episteme/tags"><img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-v0.10.1-8B5CF6" height="24"></a>
+<a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white" height="24"></a>
+<a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/uv-Astral-DE5FE9?logo=uv&logoColor=white" height="24"></a>
+<a href="https://github.com/modelcontextprotocol/python-sdk"><img alt="MCP SDK" src="https://img.shields.io/badge/MCP_SDK-2.x-005571" height="24"></a>
+<a href="https://www.sqlite.org/fts5.html"><img alt="SQLite FTS5" src="https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white" height="24"></a>
+<a href="https://obsidian.md/"><img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-vault_Markdown-7C3AED?logo=obsidian&logoColor=white" height="24"></a>
+<a href="#instalación"><img alt="Plataformas" src="https://img.shields.io/badge/Linux_%7C_macOS_%7C_Windows-soportados-2EA44F" height="24"></a>
 
 # episteme
 
