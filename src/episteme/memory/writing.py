@@ -320,41 +320,21 @@ def _write_new(engine: Engine, folder: str, base: str, content: str, dry_run: bo
     return _create_numbered(engine, folder, base, content)
 
 
-def _build_frontmatter(
-    engine: Engine,
-    links: _Links,
-    *,
-    type: str,
-    project: str,
-    priority: int | None,
-    status: str,
-    created: dt.date,
-    valid_until: str | None,
-    tags: list[str] | None,
-    keywords: list[str] | None,
-    files: list[str] | None,
-    source: str | None,
-    helpful: int,
-    due: str | None,
-) -> dict[str, Any]:
-    """The validated frontmatter of the new memory, in canonical key order."""
+def _frontmatter(engine: Engine, raw: dict[str, Any], links: _Links) -> dict[str, Any]:
+    """Normalise the raw fields of a new memory, then put them in key order and validate."""
+    priority = raw["priority"]
     fm = ordered(
         {
-            "type": type,
-            "kind": kind_for(type),
-            "project": project,
-            "priority": priority if priority is not None else default_priority(type),
-            "status": status,
-            "created": created,
-            "valid_until": _date_arg("valid_until", valid_until),
-            "tags": [t.strip().lstrip("#") for t in tags or []],
-            "keywords": [k.strip() if isinstance(k, str) else k for k in keywords or []],
-            "files": list(files or []),
+            **raw,
+            "kind": kind_for(raw["type"]),
+            "priority": priority if priority is not None else default_priority(raw["type"]),
+            "valid_until": _date_arg("valid_until", raw["valid_until"]),
+            "tags": [t.strip().lstrip("#") for t in raw["tags"] or []],
+            "keywords": [k.strip() if isinstance(k, str) else k for k in raw["keywords"] or []],
+            "files": list(raw["files"] or []),
             "supersedes": wikilink(engine, links.old_rel) if links.old_rel else None,
             "related": links.related,
-            "source": source,
-            "helpful": helpful,
-            "due": _date_arg("due", due),
+            "due": _date_arg("due", raw["due"]),
         }
     )
     validate(fm)
@@ -420,22 +400,21 @@ def remember(
     links = _resolve_links(engine, related, supersedes)
 
     created = created or today()
-    fm = _build_frontmatter(
-        engine,
-        links,
-        type=type,
-        project=project,
-        priority=priority,
-        status=status,
-        created=created,
-        valid_until=valid_until,
-        tags=tags,
-        keywords=keywords,
-        files=files,
-        source=source,
-        helpful=helpful,
-        due=due,
-    )
+    raw = {
+        "type": type,
+        "project": project,
+        "priority": priority,
+        "status": status,
+        "created": created,
+        "valid_until": valid_until,
+        "tags": tags,
+        "keywords": keywords,
+        "files": files,
+        "source": source,
+        "helpful": helpful,
+        "due": due,
+    }
+    fm = _frontmatter(engine, raw, links)
 
     text_body = _clean_body(body)
     similar, blocking = _find_similar(engine, project, type, title, text_body, links.old_rel)
