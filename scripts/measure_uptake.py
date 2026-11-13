@@ -65,6 +65,7 @@ class Row(NamedTuple):
 class _Scan:
     """What one pass over the rows collects; mutated only by the ``_record_*`` helpers."""
 
+    zone: str
     stats: dict[str, Counter] = field(default_factory=lambda: defaultdict(Counter))
     first_delivery: dict[tuple[str, str], int] = field(default_factory=dict)  # -> row index
     reads_at: dict[tuple[str, str], list[int]] = field(default_factory=lambda: defaultdict(list))
@@ -72,6 +73,15 @@ class _Scan:
     sessions_read: set[str] = field(default_factory=set)
     sessions_wrote: set[str] = field(default_factory=set)
     empty: Counter = field(default_factory=Counter)
+
+
+class _Call(NamedTuple):
+    """One decoded row: its position, JSON args and normalised result paths."""
+
+    row: Row
+    index: int
+    args: dict
+    paths: list[str]
 
 
 def _json[T](text: str | None, default: T) -> T:
@@ -99,27 +109,51 @@ def _open_ro(vault_root: Path) -> sqlite3.Connection:
         raise EpistemeError(NOT_FOUND, f"cannot open {db} read-only: {e}. Check --vault.") from e
 
 
+def _created_date(raw: object) -> date | None:
+    """A frontmatter ``created`` value as a date, or None if it is not one."""
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    if not isinstance(raw, str):
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _note_created(vault: Vault, rel: str) -> date | None:
+    """The ``created`` date of one note, or None if unreadable or missing."""
+    try:
+        fm = parse((vault.root / rel).read_text(encoding="utf-8"), rel).frontmatter
+    except (OSError, UnicodeDecodeError):
+        return None
+    return _created_date(fm.get("created"))
+
+
 def _created(vault: Vault, zone: str) -> dict[str, date]:
     """Memory path -> ``created`` date, from the notes' frontmatter."""
     out: dict[str, date] = {}
     for rel, _stat in vault.iter_notes():
         if not rel.startswith(zone + "/"):
             continue
-        try:
-            fm = parse((vault.root / rel).read_text(encoding="utf-8"), rel).frontmatter
-        except (OSError, UnicodeDecodeError):
-            continue
-        c = fm.get("created")
-        if isinstance(c, datetime):
-            c = c.date()
-        elif isinstance(c, str):
-            try:
-                c = date.fromisoformat(c[:10])
-            except ValueError:
-                c = None
-        if isinstance(c, date):
-            out[rel] = c
+        created = _note_created(vault, rel)
+        if created is not None:
+            out[rel] = created
     return out
+
+
+def _asked_notes(args: dict) -> list[str]:
+    """Normalised note names the call asked for (``note`` and ``notes`` args)."""
+    asked: list[str] = []
+    note = args.get("note")
+    if isinstance(note, str):
+        asked.append(note)
+    notes = args.get("notes")
+    if isinstance(notes, list):
+        asked += [n for n in notes if isinstance(n, str)]
+    return [_norm(n) for n in asked]
 
 
 def _read_paths(args: dict, paths: list[str]) -> list[str]:
@@ -128,14 +162,7 @@ def _read_paths(args: dict, paths: list[str]) -> list[str]:
     ``paths`` is scraped from the result text, so it can also hold linked notes; when the
     request used bare names, only as many leading paths as names are trusted.
     """
-    asked: list[str] = []
-    note = args.get("note")
-    if isinstance(note, str):
-        asked.append(note)
-    notes = args.get("notes")
-    if isinstance(notes, list):
-        asked += [n for n in notes if isinstance(n, str)]
-    asked = [_norm(n) for n in asked]
+    asked = _asked_notes(args)
     if asked and all(n.endswith(".md") for n in asked):
         return list(dict.fromkeys(asked))
     return list(dict.fromkeys(paths[: len(asked) or len(paths)]))
@@ -154,65 +181,122 @@ def _load_rows(vault_root: Path, since: str, project: str | None) -> list[Row]:
     return rows
 
 
-def _record_delivery(
-    scan: _Scan, row: Row, i: int, args: dict, paths: list[str], zone: str
-) -> None:
-    for p in dict.fromkeys(p for p in paths if p.startswith(zone + "/")):
+def _in_zone(scan: _Scan, paths: list[str]) -> list[str]:
+    """The distinct paths that live in the memory zone, in order."""
+    return [p for p in dict.fromkeys(paths) if p.startswith(scan.zone + "/")]
+
+
+def _record_delivery(scan: _Scan, call: _Call) -> None:
+    row, i = call.row, call.index
+    for p in _in_zone(scan, call.paths):
         scan.stats[p][row.tool] += 1
-        if row.tool == "context" and args.get("mode") == "welcome":
+        if row.tool == "context" and call.args.get("mode") == "welcome":
             scan.stats[p]["welcome"] += 1
         scan.deliveries.append((row.session, p, i))
         if row.session:
             scan.first_delivery.setdefault((row.session, p), i)
 
 
-def _record_read(scan: _Scan, row: Row, i: int, args: dict, paths: list[str], zone: str) -> None:
-    mems = [p for p in _read_paths(args, paths) if p.startswith(zone + "/")]
+def _record_read(scan: _Scan, call: _Call) -> None:
+    session = call.row.session
+    mems = [p for p in _read_paths(call.args, call.paths) if p.startswith(scan.zone + "/")]
     for p in mems:
         scan.stats[p]["reads"] += 1
-        if row.session:
-            scan.reads_at[(row.session, p)].append(i)
-    if mems and row.session:
-        scan.sessions_read.add(row.session)
+        if session:
+            scan.reads_at[(session, p)].append(call.index)
+    if mems and session:
+        scan.sessions_read.add(session)
 
 
-def _record_search(scan: _Scan, args: dict, paths: list[str], zone: str) -> None:
-    for p in dict.fromkeys(p for p in paths if p.startswith(zone + "/")):
+def _record_search(scan: _Scan, call: _Call) -> None:
+    for p in _in_zone(scan, call.paths):
         scan.stats[p]["searches"] += 1
-    if not paths:
+    if not call.paths:
+        args = call.args
         key = (str(args.get("query", "")), str(args.get("match", "")), str(args.get("zone", "")))
         scan.empty[key] += 1
 
 
+def _decode(row: Row, index: int) -> _Call:
+    """Parse the JSON columns of a row into a ``_Call``."""
+    args = _json(row.args, {})
+    paths = [_norm(p) for p in _json(row.paths, []) if isinstance(p, str)]
+    return _Call(row, index, args, paths)
+
+
+def _note_write(scan: _Scan, row: Row) -> None:
+    """Remember the sessions that called ``remember`` or ``revise``."""
+    if row.tool in WRITE_TOOLS and row.session:
+        scan.sessions_wrote.add(row.session)
+
+
+def _dispatch(scan: _Scan, call: _Call) -> None:
+    """Route one successful call to the recorder for its kind."""
+    row = call.row
+    if row.hook and row.tool in DELIVERY_TOOLS:
+        _record_delivery(scan, call)
+    elif row.tool == "read" and not row.hook:
+        _record_read(scan, call)
+    elif row.tool == "search" and not row.hook:
+        _record_search(scan, call)
+
+
 def _scan_rows(rows: list[Row], zone: str) -> _Scan:
-    scan = _Scan()
+    scan = _Scan(zone)
     for i, row in enumerate(rows):
-        args = _json(row.args, {})
-        paths = [_norm(p) for p in _json(row.paths, []) if isinstance(p, str)]
         if not row.ok:
             continue
-        if row.tool in WRITE_TOOLS and row.session:
-            scan.sessions_wrote.add(row.session)
-        if row.hook and row.tool in DELIVERY_TOOLS:
-            _record_delivery(scan, row, i, args, paths, zone)
-        elif row.tool == "read" and not row.hook:
-            _record_read(scan, row, i, args, paths, zone)
-        elif row.tool == "search" and not row.hook:
-            _record_search(scan, args, paths, zone)
+        _note_write(scan, row)
+        _dispatch(scan, _decode(row, i))
     return scan
 
 
-def _count_followed(scan: _Scan) -> int:
-    """Deliveries with a read of the same memory later in the same session; fills reads_after."""
-    followed = 0
-    for session, p, i in scan.deliveries:
-        if session and any(j > i for j in scan.reads_at.get((session, p), ())):
-            followed += 1
+def _followed_deliveries(scan: _Scan) -> int:
+    """Deliveries with a read of the same memory later in the same session."""
+    return sum(
+        1
+        for session, p, i in scan.deliveries
+        if session and any(j > i for j in scan.reads_at.get((session, p), ()))
+    )
+
+
+def _fill_reads_after(scan: _Scan) -> None:
+    """Count, per memory, the reads after its first delivery in the same session."""
     for (session, p), idxs in scan.reads_at.items():
         first = scan.first_delivery.get((session, p))
         if first is not None:
             scan.stats[p]["reads_after"] += sum(1 for j in idxs if j > first)
+
+
+def _count_followed(scan: _Scan) -> int:
+    """Followed deliveries; also fills reads_after."""
+    followed = _followed_deliveries(scan)
+    _fill_reads_after(scan)
     return followed
+
+
+def _since(now: datetime, days: int) -> str:
+    """ISO timestamp of the start of the window."""
+    return (now - timedelta(days=days)).isoformat(timespec="seconds")
+
+
+def _n_delivered(stats: dict[str, Counter], p: str) -> int:
+    """Deliveries of one memory by every delivery tool."""
+    return sum(stats[p][t] for t in DELIVERY_TOOLS)
+
+
+def _never_read(stats: dict[str, Counter], min_deliveries: int) -> list[str]:
+    """Memories delivered ``min_deliveries`` times or more and never read, most first."""
+    return sorted(
+        (p for p in stats if _n_delivered(stats, p) >= min_deliveries and not stats[p]["reads"]),
+        key=lambda p: (-_n_delivered(stats, p), p),
+    )
+
+
+def _old_memories(vault: Vault, zone: str, now: datetime, old_days: int) -> list[str]:
+    """Memories created before the ``old_days`` cutoff."""
+    cutoff = now.date() - timedelta(days=old_days)
+    return [p for p, c in _created(vault, zone).items() if c < cutoff]
 
 
 def measure(
@@ -228,21 +312,12 @@ def measure(
     zone_obj = vault.memory_zone
     zone = zone_obj.path if zone_obj else "memory"
     now = now or datetime.now(UTC)
-    since = (now - timedelta(days=days)).isoformat(timespec="seconds")
+    since = _since(now, days)
     rows = _load_rows(vault.root, since, project)
     scan = _scan_rows(rows, zone)
     followed = _count_followed(scan)
     stats = scan.stats
-
-    def n_delivered(p: str) -> int:
-        return sum(stats[p][t] for t in DELIVERY_TOOLS)
-
-    never_read = sorted(
-        (p for p in stats if n_delivered(p) >= min_deliveries and not stats[p]["reads"]),
-        key=lambda p: (-n_delivered(p), p),
-    )
-    cutoff = now.date() - timedelta(days=old_days)
-    old = [p for p, c in _created(vault, zone).items() if c < cutoff]
+    old = _old_memories(vault, zone, now, old_days)
     old_read = [p for p in old if p in stats and stats[p]["reads"]]
     return {
         "days": days,
@@ -252,7 +327,7 @@ def measure(
         "deliveries": len(scan.deliveries),
         "followed": followed,
         "min_deliveries": min_deliveries,
-        "never_read": [(p, n_delivered(p)) for p in never_read],
+        "never_read": [(p, _n_delivered(stats, p)) for p in _never_read(stats, min_deliveries)],
         "old_days": old_days,
         "old_total": len(old),
         "old_read": sorted(old_read),
