@@ -3,7 +3,7 @@
 ![episteme: Agentic Memory & Knowledge Vault. Persistent Knowledge Engine for AI Workflows.](static/banner-episteme.jpg)
 
 [![CI](https://github.com/Bajmein/episteme/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Bajmein/episteme/actions/workflows/ci.yml)
-[![Versión](https://img.shields.io/badge/versi%C3%B3n-v0.8.0-8B5CF6)](https://github.com/Bajmein/episteme/tags)
+[![Versión](https://img.shields.io/badge/versi%C3%B3n-v0.9.0-8B5CF6)](https://github.com/Bajmein/episteme/tags)
 [![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/uv-Astral-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![MCP SDK](https://img.shields.io/badge/MCP_SDK-2.x-005571)](https://github.com/modelcontextprotocol/python-sdk)
@@ -19,7 +19,7 @@
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
-> Estado: v0.8.0 (10 tools, índice SQLite con caché incremental, modo hook con `additionalContext`, búsqueda en español con filtros y pistas, consultas por lote en `search` y `read`, sugerencias de memorias por mensaje que no repiten lo ya mostrado, rechazo de credenciales al guardar, registro de actividad, mantención asistida con `review` (incluidas las memorias vencidas), checkpoint por rama y worktree, migración de OMEGA v2, vault global por defecto en `~/.episteme` y soporte de Windows nativo).
+> Estado: v0.9.0 (10 tools, índice SQLite con caché incremental, modo hook con `additionalContext`, búsqueda en español con filtros y pistas, consultas por lote en `search` y `read`, sugerencias de memorias por mensaje que no repiten lo ya mostrado, rechazo de credenciales al guardar, registro de actividad, mantención asistida con `review` (incluidas las memorias vencidas) y automática en la bienvenida (aviso, archivado de vencidas y backup, configurables), checkpoint por rama y worktree, migración de OMEGA v2, vault global por defecto en `~/.episteme` y soporte de Windows nativo).
 
 ## Instalación
 
@@ -33,7 +33,7 @@ Por `git+ssh`, con la misma clave que `git push`:
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.8.0 episteme --project fabrik
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.9.0 episteme --project fabrik
 ```
 
 Sin clave SSH, vale la URL de Windows (`git+https://…`). Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
@@ -58,7 +58,7 @@ winget install --id=astral-sh.uv -e
 Se instala por HTTPS, y la primera vez Git Credential Manager abre el navegador para iniciar sesión en GitHub:
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.8.0 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.9.0 episteme --project <proyecto>
 ```
 
 En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por defecto es `%USERPROFILE%\.episteme`; `--vault` acepta una ruta absoluta de Windows (`C:\Users\ana\notas`). El bloque de hooks es el mismo. Dentro de WSL, sigue la instalación de Linux.
