@@ -1240,6 +1240,37 @@ STALE_DAYS = 90
 REVIEW_SIMILAR = 0.4  # wider than remember's 0.5: review only reports
 
 
+def expired_memories(rows: list[Any], iso: str) -> list[Any]:
+    """Active memories past valid_until (before ``iso``), checkpoints excluded."""
+    return [
+        r
+        for r in rows
+        if r["status"] == "active"
+        and r["valid_until"]
+        and r["valid_until"] < iso
+        and not (r["type"] == "session" and r["path"].rsplit("/", 1)[-1].startswith("checkpoint-"))
+    ]
+
+
+def archive_expired(engine: Engine) -> list[str]:
+    """Archive every active memory past valid_until (all projects). Returns the paths."""
+    iso = today().isoformat()
+    rows = expired_memories(engine.index.memories("status = 'active'"), iso)
+    archived = []
+    for path in sorted(r["path"] for r in rows):
+        try:
+            nf = NoteFile(engine, path)
+            # The index may be stale: only archive what the file itself still says is expired.
+            if nf.fm.get("status") != "active" or str(nf.fm.get("valid_until") or "") >= iso:
+                continue
+            nf.set_fields({"status": "archived"})
+            nf.save()
+        except (EpistemeError, OSError):
+            continue
+        archived.append(path)
+    return archived
+
+
 def review(
     engine: Engine, path: str | None, project: str | None, limit: int, zone: str | None = None
 ) -> dict[str, Any]:
@@ -1300,10 +1331,7 @@ def review(
             "type": r["type"],
             "valid_until": r["valid_until"],
         }
-        for r in active
-        if r["valid_until"]
-        and r["valid_until"] < iso
-        and not (r["type"] == "session" and r["path"].rsplit("/", 1)[-1].startswith("checkpoint-"))
+        for r in expired_memories(active, iso)
     ]
     expired.sort(key=lambda e: (e["valid_until"], e["path"]))
 
