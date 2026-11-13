@@ -45,6 +45,10 @@ def expired_memories(rows: list[Any], iso: str) -> list[Any]:
     ]
 
 
+def _still_expired(nf: NoteFile, iso: str) -> bool:
+    return nf.fm.get("status") == "active" and str(nf.fm.get("valid_until") or "") < iso
+
+
 def archive_expired(engine: Engine) -> list[str]:
     """Archive every active memory past valid_until (all projects). Returns the paths."""
     iso = today().isoformat()
@@ -54,7 +58,7 @@ def archive_expired(engine: Engine) -> list[str]:
         try:
             nf = NoteFile(engine, path)
             # The index may be stale: only archive what the file itself still says is expired.
-            if nf.fm.get("status") != "active" or str(nf.fm.get("valid_until") or "") >= iso:
+            if not _still_expired(nf, iso):
                 continue
             nf.set_fields({"status": "archived"})
             nf.save()
@@ -73,10 +77,16 @@ class _Scope:
     zone: str | None
     project: str | None
 
-    def in_scope(self, rel: str) -> bool:
-        if self.prefix is not None and rel != self.prefix and not rel.startswith(self.prefix + "/"):
-            return False
+    def _under_prefix(self, rel: str) -> bool:
+        if self.prefix is None:
+            return True
+        return rel == self.prefix or rel.startswith(self.prefix + "/")
+
+    def _in_zone(self, rel: str) -> bool:
         return self.zone is None or self.zones.get(rel, (None, None))[0] == self.zone
+
+    def in_scope(self, rel: str) -> bool:
+        return self._under_prefix(rel) and self._in_zone(rel)
 
     def is_read_only(self, rel: str) -> bool:
         # Notes outside every zone are read-only too (see vault.mode_for).
@@ -90,33 +100,50 @@ class _Scope:
         return r["path"].startswith((f"{r['zone']}/{self.project}/", f"{r['zone']}/_shared/"))
 
 
-def _make_scope(engine: Engine, path: str | None, project: str | None, zone: str | None) -> _Scope:
+def _checked_zone(engine: Engine, zone: str | None) -> str | None:
     zone = zone.strip().strip("/") if zone else None
     if zone and zone not in {z.path for z in engine.vault.config.zones}:
         known = ", ".join(sorted(z.path for z in engine.vault.config.zones))
         raise invalid(f'unknown zone "{zone}". Use one of: {known}.')
-    zones = {
+    return zone
+
+
+def _note_zones(engine: Engine) -> dict[str, tuple[str | None, str | None]]:
+    return {
         r["path"]: (r["zone"], r["mode"])
         for r in engine.index.conn.execute("select path, zone, mode from notes")
     }
-    prefix = None
-    if path:
-        engine.check_path(path.strip().rstrip("/") or "/")
-        prefix = path.strip().strip("/")
+
+
+def _path_prefix(engine: Engine, path: str | None) -> str | None:
+    if not path:
+        return None
+    engine.check_path(path.strip().rstrip("/") or "/")
+    return path.strip().strip("/")
+
+
+def _make_scope(engine: Engine, path: str | None, project: str | None, zone: str | None) -> _Scope:
+    zone = _checked_zone(engine, zone)
+    zones = _note_zones(engine)
+    prefix = _path_prefix(engine, path)
     project = "*" if project == "*" else (project or engine.project)
     return _Scope(zones, prefix, zone, project)
+
+
+def _is_stale(r: Any, days: int) -> bool:
+    return bool(
+        r["created"]
+        and days > STALE_DAYS
+        and not r["helpful"]
+        and r["type"] not in STALE_EXEMPT_TYPES
+    )
 
 
 def _find_stale(active: list[Any], now: date) -> list[dict[str, Any]]:
     stale = []
     for r in active:
         days = days_since(r["created"], now)
-        if (
-            r["created"]
-            and days > STALE_DAYS
-            and not r["helpful"]
-            and r["type"] not in STALE_EXEMPT_TYPES
-        ):
+        if _is_stale(r, days):
             stale.append({"path": r["path"], "title": r["title"], "days": days})
     return stale
 
@@ -188,14 +215,14 @@ def _find_contradictions(
     return contradictions
 
 
+def _is_cut_title(r: Any) -> bool:
+    title = (r["title"] or "").strip()
+    first = (body_without_title(r["body"] or "").split("\n", 1)[0]).strip()
+    return bool(title) and first.startswith(title) and len(first) > len(title)
+
+
 def _find_cut_titles(mems: list[Any]) -> list[str]:
-    cut_titles = []
-    for r in mems:
-        title = (r["title"] or "").strip()
-        first = (body_without_title(r["body"] or "").split("\n", 1)[0]).strip()
-        if title and first.startswith(title) and len(first) > len(title):
-            cut_titles.append(r["path"])
-    return cut_titles
+    return [r["path"] for r in mems if _is_cut_title(r)]
 
 
 def _find_orphans(engine: Engine, mems: list[Any]) -> list[str]:
@@ -219,6 +246,17 @@ def _find_broken_links(engine: Engine, scope: _Scope) -> list[dict[str, Any]]:
     ]
 
 
+def _frontmatter_error(r: Any, props: dict[str, dict[str, Any]]) -> str | None:
+    """The schema error of a memory whose frontmatter parses, else None."""
+    if r["mode"] != MEMORY or r["path"] not in props:
+        return None
+    try:
+        validate(props[r["path"]])
+    except EpistemeError as exc:
+        return exc.message
+    return None
+
+
 def _find_invalid_frontmatter(
     engine: Engine, scope: _Scope, props: dict[str, dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -228,11 +266,10 @@ def _find_invalid_frontmatter(
             continue
         if not r["fm_valid"]:
             invalid_fm.append({"path": r["path"], "error": r["fm_error"]})
-        elif r["mode"] == MEMORY and r["path"] in props:
-            try:
-                validate(props[r["path"]])
-            except EpistemeError as exc:
-                invalid_fm.append({"path": r["path"], "error": exc.message})
+            continue
+        error = _frontmatter_error(r, props)
+        if error is not None:
+            invalid_fm.append({"path": r["path"], "error": error})
     return invalid_fm
 
 
@@ -246,23 +283,19 @@ def _path_of(item: Any) -> str:
     return item.get("path") or (item["paths"][0] if "paths" in item else item["a"])
 
 
-def review(
-    engine: Engine, path: str | None, project: str | None, limit: int, zone: str | None = None
-) -> dict[str, Any]:
-    """Report memory problems without changing the vault; read-only zones come apart."""
-    if limit < 1:
-        raise invalid(f"limit must be positive, got {limit}.")
-    scope = _make_scope(engine, path, project, zone)
+def _in_scope_memories(engine: Engine, scope: _Scope) -> list[Any]:
+    return [r for r in engine.index.memories() if scope.in_scope(r["path"]) and scope.in_project(r)]
+
+
+def _collect_findings(engine: Engine, scope: _Scope, mems: list[Any]) -> dict[str, list[Any]]:
     now = today()
-    mems = [r for r in engine.index.memories() if scope.in_scope(r["path"]) and scope.in_project(r)]
     props = {r["path"]: engine.index.props(r["path"]) for r in mems}
     active = [r for r in mems if r["status"] == "active"]
     toks = {
         r["path"]: dedup_tokens(r["title"] or "", body_without_title(r["body"] or ""))
         for r in active
     }
-
-    found: dict[str, list[Any]] = {
+    return {
         "stale": _find_stale(active, now),
         "expired": _find_expired(active, now.isoformat()),
         "contradictions": _find_contradictions(engine, active, props, toks),
@@ -274,16 +307,34 @@ def review(
         "flagged": _find_flagged(mems),
     }
 
+
+def _partition(
+    found: dict[str, list[Any]], scope: _Scope, read_only: bool
+) -> dict[str, list[Any]]:
+    return {
+        k: [i for i in v if scope.is_read_only(_path_of(i)) == read_only] for k, v in found.items()
+    }
+
+
+def _report(parts: dict[str, list[Any]], limit: int) -> dict[str, Any]:
+    totals = {k: len(v) for k, v in parts.items()}
+    return {"totals": totals, **{k: v[:limit] for k, v in parts.items()}}
+
+
+def review(
+    engine: Engine, path: str | None, project: str | None, limit: int, zone: str | None = None
+) -> dict[str, Any]:
+    """Report memory problems without changing the vault; read-only zones come apart."""
+    if limit < 1:
+        raise invalid(f"limit must be positive, got {limit}.")
+    scope = _make_scope(engine, path, project, zone)
+    mems = _in_scope_memories(engine, scope)
+    found = _collect_findings(engine, scope, mems)
+
     # Read-only zones are reported apart, with the same categories: they are not the
     # project's to fix, but nothing found there is dropped.
-    own = {k: [i for i in v if not scope.is_read_only(_path_of(i))] for k, v in found.items()}
-    apart = {k: [i for i in v if scope.is_read_only(_path_of(i))] for k, v in found.items()}
-    out: dict[str, Any] = {"totals": {k: len(v) for k, v in own.items()}}
-    out.update({k: v[:limit] for k, v in own.items()})
-    out["read_only"] = {
-        "totals": {k: len(v) for k, v in apart.items()},
-        **{k: v[:limit] for k, v in apart.items()},
-    }
+    out = _report(_partition(found, scope, False), limit)
+    out["read_only"] = _report(_partition(found, scope, True), limit)
     return out
 
 
@@ -301,31 +352,36 @@ def _target(row: Any) -> str:
     return target
 
 
-def _similar_groups(rows: list[Any], token_sets: dict[str, set[str]]) -> list[dict[str, Any]]:
-    """Connected components of memories whose dedup tokens reach REVIEW_SIMILAR."""
-    toks = [token_sets[r["path"]] for r in rows]
-    parent = list(range(len(rows)))
+def _find_root(parent: list[int], i: int) -> int:
+    while parent[i] != i:
+        parent[i] = parent[parent[i]]
+        i = parent[i]
+    return i
 
-    def find(i: int) -> int:
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
 
-    best: dict[int, float] = {}
+def _similar_pairs(toks: list[set[str]]) -> list[tuple[int, int, float]]:
     pairs = []
-    for i in range(len(rows)):
-        for j in range(i + 1, len(rows)):
+    for i in range(len(toks)):
+        for j in range(i + 1, len(toks)):
             sim = similarity(toks[i], toks[j])
             if sim >= REVIEW_SIMILAR:
                 pairs.append((i, j, sim))
-                parent[find(i)] = find(j)
+    return pairs
+
+
+def _similar_groups(rows: list[Any], token_sets: dict[str, set[str]]) -> list[dict[str, Any]]:
+    """Connected components of memories whose dedup tokens reach REVIEW_SIMILAR."""
+    pairs = _similar_pairs([token_sets[r["path"]] for r in rows])
+    parent = list(range(len(rows)))
+    for i, j, _ in pairs:
+        parent[_find_root(parent, i)] = _find_root(parent, j)
+    best: dict[int, float] = {}
     for i, _, sim in pairs:
-        root = find(i)
+        root = _find_root(parent, i)
         best[root] = max(best.get(root, 0.0), sim)
     members: dict[int, list[str]] = {}
     for i in {k for p in pairs for k in p[:2]}:
-        members.setdefault(find(i), []).append(rows[i]["path"])
+        members.setdefault(_find_root(parent, i), []).append(rows[i]["path"])
     groups: list[dict[str, Any]] = [
         {"paths": sorted(paths), "similarity": round(best[root], SIMILARITY_DIGITS)}
         for root, paths in members.items()
