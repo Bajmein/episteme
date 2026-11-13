@@ -3,22 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sqlite3
 import sys
 from pathlib import Path
 
 from episteme.errors import StartupError
-
-
-def _check_fts5() -> None:
-    try:
-        sqlite3.connect(":memory:").execute("create virtual table t using fts5(x)")
-    except sqlite3.OperationalError as exc:
-        raise StartupError(
-            "this Python's SQLite has no FTS5 support. Use a Python build with FTS5."
-        ) from exc
-
+from episteme.vault import CONFIG_FILE
 
 DEFAULT_TOML = """\
 # Vault global de episteme, creado al arrancar sin --vault ni EPISTEME_VAULT.
@@ -43,6 +35,16 @@ state_glob = ".fabrik/**/estado.md"   # relativo a project_dir
 """
 
 
+def _check_fts5() -> None:
+    try:
+        with contextlib.closing(sqlite3.connect(":memory:")) as conn:
+            conn.execute("create virtual table t using fts5(x)")
+    except sqlite3.OperationalError as exc:
+        raise StartupError(
+            "this Python's SQLite has no FTS5 support. Use a Python build with FTS5."
+        ) from exc
+
+
 def default_vault() -> Path:
     return Path.home() / ".episteme"
 
@@ -57,16 +59,16 @@ def resolve_vault(arg: str | None) -> Path:
         path = default_vault()
         if not path.exists():
             path.mkdir(parents=True)
-            (path / "episteme.toml").write_text(DEFAULT_TOML, encoding="utf-8")
+            (path / CONFIG_FILE).write_text(DEFAULT_TOML, encoding="utf-8")
         raw = str(path)
     path = Path(raw)
     if not path.is_absolute():
         raise StartupError(f'vault path "{raw}" is not absolute. Pass an absolute path.')
     if not path.is_dir():
         raise StartupError(f'vault path "{raw}" does not exist or is not a directory.')
-    if not (path / "episteme.toml").is_file():
+    if not (path / CONFIG_FILE).is_file():
         raise StartupError(
-            f'"{raw}" has no episteme.toml. '
+            f'"{raw}" has no {CONFIG_FILE}. '
             "Create it at the vault root to mark the folder as a vault."
         )
     return path
