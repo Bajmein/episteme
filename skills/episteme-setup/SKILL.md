@@ -55,6 +55,7 @@ Fusiona en ese archivo el contenido de [settings.json](settings.json) de esta sk
 - `allow` de los 7 tools de solo lectura (`remember`, `revise` y `checkpoint` siguen pidiendo permiso);
 - `deny` de `Read/Edit(~/.episteme/**)` (`Edit` ya cubre Write; una regla `Write(...)` nunca coincide), `Bash(obsidian *)` y `Bash(omega *)`: el acceso al vault se cierra con permisos, no con el prompt. Si el vault no es el de por defecto, cambia la ruta en las dos reglas;
 - los 6 hooks `mcp_tool`: bienvenida, recordatorios y sugerencias por mensaje en `UserPromptSubmit` (con `${prompt}`), `constraints` antes de `Edit|Write|mcp__serena__.*` y `surface` después de `Read|Edit|Write|mcp__serena__.*` (con Serena el tool no trae `file_path`: pasa `relative_path`), `checkpoint` save en `PreCompact`, y en `SessionStart` (`compact|clear`) `checkpoint` restore y la bienvenida otra vez. Todos devuelven `hookSpecificOutput.additionalContext`.
+- `"autoMemoryEnabled": false`: la memoria automática de Claude Code (`MEMORY.md`) compite con episteme y el agente acaba guardando en dos sitios. Pregunta a la persona antes de escribirlo. Si el proyecto ya tiene un `MEMORY.md` con contenido, ofrece pasarlo a episteme con `remember` antes de desactivarla. Un `autoMemoryEnabled: true` explícito se respeta: no lo cambies.
 
 Si el proyecto se empaqueta como plugin, `"server": "episteme"` pasa a `"plugin:<plugin>:episteme"`.
 
@@ -66,9 +67,9 @@ Claude Code puede negarse a que el agente escriba su propia configuración (en m
 
 Añade (o cambia la regla que hubiera sobre Obsidian/mcpvault por) esta línea:
 
-> Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` no están disponibles en la sesión, dilo antes de seguir.
+> Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` salen como diferidos, cárgalos con ToolSearch (`select:mcp__episteme__context,mcp__episteme__search,mcp__episteme__read,mcp__episteme__remember,mcp__episteme__revise`) antes de usarlos; si no aparecen ni diferidos, dilo antes de seguir.
 
-El aviso existe porque sin servidor los hooks no corren y nada lo delata.
+El aviso existe porque sin servidor los hooks no corren y nada lo delata. La frase de los diferidos existe porque la versión anterior se leía como «no están disponibles» cuando los tools solo estaban diferidos (Claude Code los carga bajo demanda). Si el proyecto se empaqueta como plugin, el prefijo es `mcp__plugin_<plugin>_episteme__` y hay que ajustar los nombres del `select:`.
 
 ## 4. `episteme.toml` del vault
 
@@ -84,6 +85,17 @@ Es un único `state_glob` para todo el vault: si dos proyectos usan patrones dis
 ## 5. Comprobar
 
 Reinicia Claude Code en el proyecto. En `/mcp`, `episteme` sale conectado; el primer mensaje recibe la bienvenida de `context(mode="welcome")`. Prueba un `remember` de una decisión del proyecto y búscala con `search`.
+
+### Comprobar que la configuración está al día
+
+Es de solo lectura. Compara `.claude/settings.local.json`, `.claude/settings.json` y el `settings.json` de usuario (`~/.claude/settings.json`, o el de la cuenta en uso) con el [settings.json](settings.json) de esta skill, y lista:
+- hooks que faltan;
+- hooks repetidos entre archivos (se ejecutarían dos veces);
+- hooks con `matcher` o `input` distintos de los de la skill;
+- reglas `allow` o `deny` que faltan;
+- `autoMemoryEnabled`: ausente, o `true` explícito (se respeta, solo se informa).
+
+Muestra el diff a la persona y fusiona solo si lo aprueba. Si el clasificador bloquea la edición, entrega el JSON fusionado (regla del paso 2).
 
 ## 6. Migrar desde OMEGA (solo si el proyecto lo usa)
 
@@ -141,7 +153,7 @@ Al empezar la convivencia, crea un recordatorio con `remember(type="reminder", p
 
 # Actualizar episteme
 
-En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1 (con el scope y el lanzador con que se registró: `--scope project` si está en `.mcp.json`). La primera ejecución descarga; después tira de la caché de uv. Para actualizar esta skill, `git pull` en el clone del que se instaló (ver «La skill episteme-setup» en el `README.md`).
+En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1 (con el scope y el lanzador con que se registró: `--scope project` si está en `.mcp.json`). La primera ejecución descarga; después tira de la caché de uv. Después, haz la comprobación de configuración del paso 5 en cada proyecto: los hooks o permisos nuevos de la skill no llegan solos. Para actualizar esta skill, `git pull` en el clone del que se instaló (ver «La skill episteme-setup» en el `README.md`).
 
 # Publicar una versión de episteme (mantenedor)
 
