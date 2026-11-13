@@ -11,9 +11,16 @@ from pathlib import Path
 from typing import Any
 
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
-from episteme.index import Index, jsonable, query_terms, to_json
+from episteme.index import Index, jsonable, normalize_tag, query_terms, to_json
 from episteme.links import reachable
-from episteme.markdown import ParsedNote, clip, clip_at_newline, find_section, parse
+from episteme.markdown import (
+    ParsedNote,
+    clip,
+    clip_at_newline,
+    find_section,
+    parse,
+    section_end,
+)
 from episteme.vault import Vault, is_ignored
 
 READ_CAP = 20_000
@@ -22,6 +29,17 @@ BATCH_CAP = 50_000
 SECTION_CAP = 60_000
 PARTIAL_BELOW = 3
 PARTIAL_MAX = 5
+SEARCH_LIMIT_MAX = 100
+HEADING_NAMES_CAP = 4000
+NOTICE_ROOM = 200
+SIMILAR_TAGS_MAX = 5
+SIMILAR_TAGS_CUTOFF = 0.6
+LINKS_DEPTH_MAX = 3
+NO_MATCH_HINT = (
+    "Nothing matches. search is literal: try the plural, the abbreviation or the "
+    'proper name, all in one query with match="any", or drop a filter. '
+    "If you find the answer elsewhere, save it with remember."
+)
 
 
 class Engine:
@@ -119,50 +137,64 @@ class Engine:
         tags: list[str] | None,
         project: str | None,
         status: str | None,
+        zones: list[str],
     ) -> list[str]:
-        from episteme.index import normalize_tag
+        hints = [
+            *self._unknown_value_hints(type, project, status),
+            *self._unknown_tag_hints(tags),
+            *self._unknown_path_hints(path, zones),
+        ]
+        if not hints and query is not None:
+            hints.append(NO_MATCH_HINT)
+        return hints
 
+    def _unknown_value_hints(
+        self, type: str | None, project: str | None, status: str | None
+    ) -> list[str]:
         hints: list[str] = []
-        idx = self.index
         for label, value in (("type", type), ("project", project)):
             if value:
-                known = idx.known(label)
+                known = self.index.known(label)
                 if value not in known:
                     hints.append(
                         f'no note has {label} "{value}". '
                         f"{label.capitalize()}s in the vault: {', '.join(known)}."
                     )
         if status and status != "any":
-            known = idx.known("status")
+            known = self.index.known("status")
             if status not in known:
                 hints.append(
                     f'no note has status "{status}". Statuses in the vault: {", ".join(known)}. '
                     '"any" includes superseded and archived.'
                 )
-        if tags:
-            known_tags = idx.known_tags()
-            for tag in tags:
-                norm = normalize_tag(tag)
-                if norm in known_tags:
-                    continue
-                similar = difflib.get_close_matches(norm, known_tags, n=5, cutoff=0.6)
-                text = f'no note has tag "{tag}".'
-                if similar:
-                    text += f" Similar tags: {', '.join(similar)}."
-                hints.append(text)
-        if path:
-            prefix = path.strip().strip("/")
-            hits, _ = idx.search(None, path=prefix, status="any", limit=1, snippets=False)
-            if not hits:
-                zones = ", ".join(sorted(z.path for z in self.vault.config.zones))
-                hints.append(f'no note under "{path}". Zones: {zones}.')
-        if not hints and query is not None:
-            hints.append(
-                "Nothing matches. search is literal: try the plural, the abbreviation or the "
-                'proper name, all in one query with match="any", or drop a filter. '
-                "If you find the answer elsewhere, save it with remember."
-            )
         return hints
+
+    def _unknown_tag_hints(self, tags: list[str] | None) -> list[str]:
+        if not tags:
+            return []
+        hints: list[str] = []
+        known_tags = self.index.known_tags()
+        for tag in tags:
+            norm = normalize_tag(tag)
+            if norm in known_tags:
+                continue
+            similar = difflib.get_close_matches(
+                norm, known_tags, n=SIMILAR_TAGS_MAX, cutoff=SIMILAR_TAGS_CUTOFF
+            )
+            text = f'no note has tag "{tag}".'
+            if similar:
+                text += f" Similar tags: {', '.join(similar)}."
+            hints.append(text)
+        return hints
+
+    def _unknown_path_hints(self, path: str | None, zones: list[str]) -> list[str]:
+        if not path:
+            return []
+        prefix = path.strip().strip("/")
+        hits, _ = self.index.search(None, path=prefix, status="any", limit=1, snippets=False)
+        if hits:
+            return []
+        return [f'no note under "{path}". Zones: {", ".join(zones)}.']
 
     # -- search ------------------------------------------------------------
 
@@ -179,27 +211,12 @@ class Engine:
         facets: bool = False,
         match: str = "all",
     ) -> dict[str, Any]:
-        if match not in ("all", "any"):
-            raise invalid(f'match must be "all" or "any", got "{match}".')
-        if not (1 <= limit <= 100):
-            raise invalid(f"limit must be 1-100, got {limit}.")
-        if query is not None and not query.strip():
-            query = None
+        query = _check_query(query, match, limit, bool(tags or type or project or zone or facets))
         any_mode = match == "any" and query is not None
-        if query is None:
-            if not (tags or type or project or zone or facets):
-                raise invalid(
-                    "query has no words. "
-                    "Pass the words to look for, or tags, type, project or zone."
-                )
-        elif not re.search(r"[^\W_]", query):
-            raise invalid("query has no words. Pass the words to look for.")
         if path:
             self.check_path(path.strip().rstrip("/") or "/")
-        zone = zone.strip().strip("/") if zone else None
-        if zone and zone not in {z.path for z in self.vault.config.zones}:
-            known = ", ".join(sorted(z.path for z in self.vault.config.zones))
-            raise invalid(f'unknown zone "{zone}". Use one of: {known}.')
+        zones = sorted(z.path for z in self.vault.config.zones)
+        zone = _check_zone(zone, zones)
         projects: str | list[str] | None = project
         if project and project != "_shared":
             projects = [project, "_shared"]
@@ -228,28 +245,28 @@ class Engine:
         if fallback:
             out["match"] = "or"
             out["note"] = "No note has all the words; showing notes with any of them (OR)."
-        elif (
-            not any_mode
-            and query is not None
-            and 1 <= total < PARTIAL_BELOW
-            and total == len(hits)
-            and len(query_terms(query)) > 1
-        ):
-            seen = {h.path for h in hits}
-            more, _ = index.search(
-                query, any_term=True, limit=PARTIAL_MAX + len(seen), **kwargs
-            )
-            extra = [h for h in more if h.path not in seen][:PARTIAL_MAX]
-            if extra:
-                out["partial"] = self._rows(extra, query)
-                out["note"] = "Few notes have all the words; partial lists notes with some of them."
+        elif not any_mode and query is not None:
+            self._add_partial(out, query, hits, total, kwargs)
         if total == 0:
-            hints = self._hints(query, path, type, tags, project, status)
+            hints = self._hints(query, path, type, tags, project, status, zones)
             if hints:
                 out["hints"] = hints
         if facets:
             out["facets"] = index.facets(query, any_term=fallback or any_mode, **kwargs)
         return out
+
+    def _add_partial(
+        self, out: dict[str, Any], query: str, hits: list[Any], total: int, kwargs: dict[str, Any]
+    ) -> None:
+        """Few AND matches: also list notes that have some of the words."""
+        if not (1 <= total < PARTIAL_BELOW and total == len(hits) and len(query_terms(query)) > 1):
+            return
+        seen = {h.path for h in hits}
+        more, _ = self.index.search(query, any_term=True, limit=PARTIAL_MAX + len(seen), **kwargs)
+        extra = [h for h in more if h.path not in seen][:PARTIAL_MAX]
+        if extra:
+            out["partial"] = self._rows(extra, query)
+            out["note"] = "Few notes have all the words; partial lists notes with some of them."
 
     # -- read --------------------------------------------------------------
 
@@ -260,7 +277,7 @@ class Engine:
         lines: str | None = None,
         outline: bool | None = None,
         content: bool = True,
-    ) -> dict:
+    ) -> dict[str, Any]:
         if heading is not None and lines is not None:
             raise invalid("pass heading or lines, not both.")
         if not content and (heading is not None or lines is not None or outline is False):
@@ -269,38 +286,9 @@ class Engine:
             )
         rel = self.resolve_note(note)
         parsed = self.load(rel)
-        total = len(parsed.lines)
         partial = heading is not None or lines is not None
-        if not content:
-            start = end = 0
-            cap = READ_CAP
-        elif heading is not None:
-            rng = find_section(parsed, heading)
-            if rng is None:
-                names = clip(", ".join(f'"{h.text}"' for h in parsed.headings), 4000)
-                raise EpistemeError(
-                    NOT_FOUND,
-                    f'no heading "{heading}" in {rel}. Headings are: {names or "none"}.',
-                )
-            start, end, cap = rng[0], rng[1], SECTION_CAP
-        elif lines is not None:
-            start, end = _parse_range(lines, total)
-            cap = SECTION_CAP
-        else:
-            start, end, cap = parsed.fm_end, total, READ_CAP
-        text = "\n".join(parsed.lines[start:end])
-        truncated = len(text) > cap
-        shown_end = end
-        if truncated:
-            notice_room = 200
-            kept = clip_at_newline(text, cap - notice_room)
-            shown = kept.count("\n") + 1
-            missing = (end - start) - shown
-            shown_end = start + shown
-            text = (
-                f"{kept}\n[truncated: {missing} more lines (file lines {start + shown + 1}-{end}). "
-                "Use heading or lines to read the rest.]"
-            )
+        start, end, cap = _read_window(parsed, rel, heading, lines, content)
+        text, truncated, shown_end = _truncate("\n".join(parsed.lines[start:end]), start, end, cap)
         out: dict[str, Any] = {
             "path": rel,
             "frontmatter": jsonable(parsed.frontmatter),
@@ -310,7 +298,7 @@ class Engine:
             out["outline"] = _outline(parsed)
         out["content"] = text
         out["truncated"] = truncated
-        out["total_lines"] = total
+        out["total_lines"] = len(parsed.lines)
         if partial:
             out["range"] = f"{start + 1}-{shown_end}"
         return out
@@ -339,10 +327,7 @@ class Engine:
         pending: list[str] = []
         seen: set[str] = set()
         used = 0
-        for raw in notes:
-            if pending:
-                pending.append(raw)
-                continue
+        for pos, raw in enumerate(notes):
             try:
                 item = self.read(raw, None, None, wanted, content)
             except EpistemeError as exc:
@@ -354,8 +339,8 @@ class Engine:
             # outline=true the outline is what weighs.
             size = len(to_json(item))
             if seen and used + size > BATCH_CAP:
-                pending.append(raw)
-                continue
+                pending = notes[pos:]
+                break
             seen.add(item["path"])
             used += size
             out_notes.append(item)
@@ -370,8 +355,8 @@ class Engine:
     def links(self, note: str, direction: str = "both", depth: int = 1) -> dict[str, Any]:
         if direction not in ("out", "in", "both"):
             raise invalid(f'direction must be "out", "in" or "both", got "{direction}".')
-        if not (1 <= depth <= 3):
-            raise invalid(f"depth must be 1-3, got {depth}.")
+        if not (1 <= depth <= LINKS_DEPTH_MAX):
+            raise invalid(f"depth must be 1-{LINKS_DEPTH_MAX}, got {depth}.")
         rel = self.resolve_note(note)
         out: dict[str, Any] = {"path": rel, "outgoing": [], "backlinks": []}
         if direction in ("out", "both"):
@@ -408,6 +393,66 @@ class Engine:
         return out
 
 
+def _check_query(query: str | None, match: str, limit: int, has_filter: bool) -> str | None:
+    """Validate the search arguments; return the query, or None when it is blank."""
+    if match not in ("all", "any"):
+        raise invalid(f'match must be "all" or "any", got "{match}".')
+    if not (1 <= limit <= SEARCH_LIMIT_MAX):
+        raise invalid(f"limit must be 1-{SEARCH_LIMIT_MAX}, got {limit}.")
+    if query is not None and not query.strip():
+        query = None
+    if query is None:
+        if not has_filter:
+            raise invalid(
+                "query has no words. Pass the words to look for, or tags, type, project or zone."
+            )
+    elif not re.search(r"[^\W_]", query):
+        raise invalid("query has no words. Pass the words to look for.")
+    return query
+
+
+def _check_zone(zone: str | None, zones: list[str]) -> str | None:
+    zone = zone.strip().strip("/") if zone else None
+    if zone and zone not in zones:
+        raise invalid(f'unknown zone "{zone}". Use one of: {", ".join(zones)}.')
+    return zone
+
+
+def _read_window(
+    parsed: ParsedNote, rel: str, heading: str | None, lines: str | None, content: bool
+) -> tuple[int, int, int]:
+    """The 0-based [start, end) lines to show and the character cap that applies."""
+    if not content:
+        return 0, 0, READ_CAP
+    if lines is not None:
+        start, end = _parse_range(lines, len(parsed.lines))
+        return start, end, SECTION_CAP
+    if heading is None:
+        return parsed.fm_end, len(parsed.lines), READ_CAP
+    rng = find_section(parsed, heading)
+    if rng is None:
+        names = clip(", ".join(f'"{h.text}"' for h in parsed.headings), HEADING_NAMES_CAP)
+        raise EpistemeError(
+            NOT_FOUND,
+            f'no heading "{heading}" in {rel}. Headings are: {names or "none"}.',
+        )
+    return rng[0], rng[1], SECTION_CAP
+
+
+def _truncate(text: str, start: int, end: int, cap: int) -> tuple[str, bool, int]:
+    """Cut ``text`` to ``cap`` characters with a notice; return it, the flag and the last line."""
+    if len(text) <= cap:
+        return text, False, end
+    kept = clip_at_newline(text, cap - NOTICE_ROOM)
+    shown = kept.count("\n") + 1
+    missing = (end - start) - shown
+    notice = (
+        f"{kept}\n[truncated: {missing} more lines (file lines {start + shown + 1}-{end}). "
+        "Use heading or lines to read the rest.]"
+    )
+    return notice, True, start + shown
+
+
 def _parse_range(spec: str, total: int) -> tuple[int, int]:
     m = re.fullmatch(r"\s*(\d+)\s*(?:-\s*(\d+)\s*)?", spec or "")
     if not m:
@@ -421,14 +466,9 @@ def _parse_range(spec: str, total: int) -> tuple[int, int]:
     return first - 1, min(last, total)
 
 
-def _outline(parsed) -> list[dict]:
+def _outline(parsed: ParsedNote) -> list[dict[str, Any]]:
     """Headings with `end`, the last 1-based line of each section (same rule as find_section)."""
-    out = []
-    for idx, h in enumerate(parsed.headings):
-        end = len(parsed.lines)
-        for nxt in parsed.headings[idx + 1 :]:
-            if nxt.level <= h.level:
-                end = nxt.line - 1
-                break
-        out.append({"level": h.level, "text": h.text, "line": h.line, "end": end})
-    return out
+    return [
+        {"level": h.level, "text": h.text, "line": h.line, "end": section_end(parsed, idx)}
+        for idx, h in enumerate(parsed.headings)
+    ]
