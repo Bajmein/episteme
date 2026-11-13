@@ -62,17 +62,26 @@ def _hook_file(
     return (chosen, project_relative(chosen, project_dir)) if chosen else None
 
 
+def _clean_entry(entry: str) -> str:
+    return entry.strip().replace("\\", "/").removeprefix("./")
+
+
+def _is_other_path_same_name(e: str, rel: str, name: str) -> bool:
+    """True when entry ``e`` is a distinct plain path with base name ``name``."""
+    if not e or any(c in e for c in "*?[") or e == rel or PurePosixPath(e).name != name:
+        return False
+    return not rel.endswith("/" + e) and not e.endswith("/" + rel)
+
+
 def _name_is_unambiguous(rel: str, name: str, files: dict[str, list[str]]) -> bool:
     """True when no other known path in the project shares the base name ``name``."""
     if name == rel:
         return False
-    for entries in files.values():
-        for e in entries:
-            e = e.strip().replace("\\", "/").removeprefix("./")
-            if e and not any(c in e for c in "*?[") and e != rel and PurePosixPath(e).name == name:
-                if not rel.endswith("/" + e) and not e.endswith("/" + rel):
-                    return False
-    return True
+    return not any(
+        _is_other_path_same_name(_clean_entry(e), rel, name)
+        for entries in files.values()
+        for e in entries
+    )
 
 
 def _by_priority(rows: list[Any]) -> list[Any]:

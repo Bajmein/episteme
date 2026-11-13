@@ -178,16 +178,26 @@ def _as_list(value: Any) -> list[str]:
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
-def _recall_terms(prompt: str) -> list[str]:
-    """Distinct content words of the user's message (a slash command's name is dropped)."""
+def _strip_command(prompt: str) -> str:
+    """The prompt without a leading slash command's name."""
     prompt = prompt.strip()
     if prompt.startswith("/"):
         prompt = prompt.partition(" ")[2].strip()
+    return prompt
+
+
+def _is_noise(term: str) -> bool:
+    return term in STOPWORDS_ES or term in STOPWORDS_EN or term.isdigit()
+
+
+def _recall_terms(prompt: str) -> list[str]:
+    """Distinct content words of the user's message (a slash command's name is dropped)."""
+    prompt = _strip_command(prompt)
     if not prompt or prompt == "${prompt}":
         return []
     terms: list[str] = []
     for t in tokens(prompt, min_len=RECALL_MIN_LEN):
-        if t in STOPWORDS_ES or t in STOPWORDS_EN or t.isdigit() or t in terms:
+        if _is_noise(t) or t in terms:
             continue
         terms.append(t)
     return terms[:RECALL_TERMS]
@@ -231,6 +241,20 @@ def _score(
     return None
 
 
+def _rank_hits(engine: Engine, hits: list[Any], counted: list[str], seen: set[str]) -> list[Any]:
+    """The rows of the hits worth recalling, best first, leaving out the paths in ``seen``."""
+    iso = today().isoformat()
+    ranked = []
+    for pos, hit in enumerate(hits):
+        if hit.path in seen:
+            continue
+        scored = _score(engine, hit.path, pos, counted, iso)
+        if scored is not None:
+            ranked.append(scored)
+    ranked.sort(key=lambda x: x[:3])
+    return [x[3] for x in ranked[:RECALL_MAX]]
+
+
 def recall(
     engine: Engine, prompt: str, project: str, st: SessionState, skip: set[str]
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -251,16 +275,7 @@ def recall(
         limit=RECALL_SEARCH_LIMIT,
         snippets=False,
     )
-    iso = today().isoformat()
-    ranked = []
-    for pos, hit in enumerate(hits):
-        if hit.path in skip or hit.path in st.delivered:
-            continue
-        scored = _score(engine, hit.path, pos, counted, iso)
-        if scored is not None:
-            ranked.append(scored)
-    ranked.sort(key=lambda x: x[:3])
-    chosen = [x[3] for x in ranked[:RECALL_MAX]]
+    chosen = _rank_hits(engine, hits, counted, skip | st.delivered)
     if not chosen:
         return "", []
     st.delivered.update(r["path"] for r in chosen)
@@ -272,13 +287,17 @@ def recall(
     )
 
 
-def nudge(st: SessionState) -> str:
-    """A reminder to save memories, when the session has written none."""
-    if (
+def _nudge_due(st: SessionState) -> bool:
+    return (
         st.prompts >= NUDGE_AFTER
         and st.prompts - st.nudged_at >= NUDGE_EVERY
         and st.baseline == WRITES
-    ):
+    )
+
+
+def nudge(st: SessionState) -> str:
+    """A reminder to save memories, when the session has written none."""
+    if _nudge_due(st):
         st.nudged_at = st.prompts
         return (
             "episteme · en esta sesión aún no se ha guardado ninguna memoria. Si se cerró "
