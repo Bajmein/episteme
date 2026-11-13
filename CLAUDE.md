@@ -16,7 +16,7 @@ Guía para Claude Code en este repo.
 - Dependencias con `uv` (`uv sync`, `uv add`). Nada de `pip install` suelto.
 - Python: el paquete pide `>=3.14` (`requires-python`, ruff `py314`); aquí y en el CI se usa 3.15, fijado en `.python-version`.
 - Dependabot (`.github/dependabot.yml`): PR semanal agrupado del ecosistema `uv` (`chore(deps)`) y mensual de GitHub Actions (`chore(ci)`).
-- Antes de cada commit: `uv run ruff check` y `uv run pytest` en verde.
+- Antes de cada commit: `uv run ruff check` y `uv run pytest` en verde. El job `lint` del CI corre además `uv run ty check`, `uv run bandit -c pyproject.toml -r src scripts -q`, `uv run vulture` y `uv run deptry .` (configurados en `pyproject.toml`); pásalos si tocaste tipos, dependencias o borraste código.
 - El paquete se construye con `uv_build` (acotado a la serie menor de uv en `[build-system]`); al subir de serie se cambia la cota a mano.
 - SDK de MCP 2.x: la clase es `MCPServer` (antes `FastMCP`). `instructions=` se pasa siempre por keyword (por posición acaba en `title`). Dependencia fijada: `mcp>=2.3,<3`. Si algo no coincide con lo esperado, manda el código del SDK en `.venv`.
 - `tests/fixtures/vault/` es el vault de prueba (`docs/` es una copia real; `memory/` y `episteme.toml` son sintéticos). **No se modifica**: los tests lo copian a `tmp_path` antes de escribir. `tests/fixtures/project/` hace de `project_dir` para `checkpoint` y `tests/fixtures/omega-export/` sirve para `migrate_omega.py`.
