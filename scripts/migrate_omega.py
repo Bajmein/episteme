@@ -464,12 +464,19 @@ def _content_skip(note: OmegaMemory) -> Skip | None:
     return next((skip for matches, skip in CONTENT_SKIPS if matches(note)), None)
 
 
+def _is_unassigned_skipped(note: OmegaMemory, unassigned: str) -> bool:
+    """A note without project that ``--unassigned skip`` leaves out."""
+    return unassigned == "skip" and not note.project
+
+
 def _note_skip(note: OmegaMemory, unassigned: str) -> Skip | None:
     """Why a note with a valid type is not migrated, from its content or lack of project."""
     skip = _content_skip(note)
-    if skip is None and not note.project and unassigned == "skip":
+    if skip is not None:
+        return skip
+    if _is_unassigned_skipped(note, unassigned):
         return Skip("sin proyecto", "sin-proyecto")
-    return skip
+    return None
 
 
 def _classify_one(note: OmegaMemory, routing: _Routing) -> Candidate | Skip:
