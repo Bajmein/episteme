@@ -1,4 +1,4 @@
-"""MCP server: tools, annotations and instructions."""
+"""MCP server: instructions, error formatting and build_server; the tools are in episteme.tools."""
 
 from __future__ import annotations
 

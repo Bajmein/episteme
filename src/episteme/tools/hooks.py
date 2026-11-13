@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, NamedTuple
 
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
@@ -187,6 +187,39 @@ def _maintenance_note(engine: Engine, store: maintenance.Store, project: str) ->
     return note
 
 
+class _Turn(NamedTuple):
+    """Where a context call falls in its session."""
+
+    state: prompting.SessionState
+    welcomed: bool
+    resend: bool
+    note: str
+
+
+def _turn(
+    engine: Engine,
+    store: maintenance.Store,
+    session: str | None,
+    project: str,
+    hook_event: str | None,
+) -> _Turn:
+    """Advance the session counters and say whether this call carries the welcome."""
+    if not session:
+        return _Turn(prompting.SessionState(), welcomed=True, resend=False, note="")
+    resend = hook_event == "SessionStart"
+    fresh = engine.index.mark_welcomed(session)
+    st = prompting.reset(session) if resend else prompting.state(session)
+    if st.baseline is None:
+        st.baseline = prompting.WRITES
+    if not resend:
+        st.prompts += 1
+    welcomed = fresh or resend
+    if welcomed:
+        st.reminded_at = st.prompts
+    note = _maintenance_note(engine, store, project) if fresh else ""
+    return _Turn(st, welcomed, resend, note)
+
+
 def _welcome(
     engine: Engine,
     store: maintenance.Store,
@@ -196,30 +229,14 @@ def _welcome(
     hook_event: str | None,
     source: str | None,
 ) -> str:
-    """Build the session welcome: norms, reminders, recalled memories and the trail."""
+    """Build the session welcome: norms, reminders, recalled memories and the trail.
+
+    Call it inside engine.session().
+    """
     project = engine.need_project(project)
+    st, welcomed, resend, note = _turn(engine, store, session, project, hook_event)
     blocks: list[str] = []
     entries: list[dict[str, Any]] = []
-    already_sent = False
-    welcomed = True
-    resend = False
-    if session:
-        resend = hook_event == "SessionStart"
-        fresh = engine.index.mark_welcomed(session)
-        st = prompting.reset(session) if resend else prompting.state(session)
-        if st.baseline is None:
-            st.baseline = prompting.WRITES
-        if not resend:
-            st.prompts += 1
-        welcomed = fresh or resend
-        if welcomed:
-            st.reminded_at = st.prompts
-        else:
-            already_sent = True
-        note = _maintenance_note(engine, store, project) if fresh else ""
-    else:
-        st = prompting.SessionState()
-        note = ""
     if welcomed:
         text, found = memory.welcome(engine, project)
         blocks.append(text)
@@ -239,10 +256,10 @@ def _welcome(
         )
         blocks.append(text)
         entries += found
-    if session and not welcomed:
+    if not welcomed:
         blocks.append(prompting.nudge(st))
     notice = ""
-    if session and resend:
+    if resend:
         listed = len(entries)
         text, found = prompting.trail_block(engine, {e["path"] for e in entries})
         blocks.append(text)
@@ -252,7 +269,7 @@ def _welcome(
     text = "\n\n".join(b for b in blocks if b)
     if hook_event:
         return hookmode.render(hook_event, text, notice)
-    return dump({"text": text, "entries": entries, "already_sent": already_sent})
+    return dump({"text": text, "entries": entries, "already_sent": not welcomed})
 
 
 def _task(
@@ -262,7 +279,7 @@ def _task(
     budget_tokens: int,
     hook_event: str | None,
 ) -> str:
-    """Build the context pack for a task."""
+    """Build the context pack for a task. Call it inside engine.session()."""
     if not task or not task.strip():
         raise invalid('mode "task" needs task.')
     text, entries = memory.task_context(engine, task, project, budget_tokens)
