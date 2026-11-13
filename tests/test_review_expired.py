@@ -47,3 +47,13 @@ async def test_expired_group(vault: Path) -> None:
         ]
         assert out["totals"]["expired"] == 1
         assert "expired" in out["read_only"]["totals"]
+
+
+async def test_expired_boundary_and_plain_session(vault: Path) -> None:
+    write(vault, "memory/fabrik/lessons/2026-10-20-hoy.md", "lesson", "Hoy", "2026-10-22")
+    sess = write(
+        vault, "memory/fabrik/sessions/2026-10-20-nota.md", "session", "Nota", "2026-10-21"
+    )
+    async with mcp_client(vault, today="2026-10-22") as c:
+        out = await c.ok("review", project="*", zone="memory")
+        assert [e["path"] for e in out["expired"]] == [sess]

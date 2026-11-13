@@ -1200,7 +1200,7 @@ def review(
         ):
             stale.append({"path": r["path"], "title": r["title"], "days": days})
 
-    # Past valid_until, still active. Checkpoints are left out: checkpoint archives them.
+    # Past valid_until, still active. Checkpoints are left out: checkpoint manages them.
     iso = now.isoformat()
     expired = [
         {
