@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from episteme import memory
 from episteme.index import STOPWORDS_ES
 from episteme.markdown import tokens
 from episteme.memory import STOPWORDS_EN
@@ -69,6 +70,31 @@ def overdue_block(engine: Engine, project: str) -> tuple[str, list[dict[str, Any
     lines += [f"- [{r['due']}] {r['title']} ({r['path']})" for r in rows]
     entries = [{"path": r["path"], "score": None, "kind": "reminder"} for r in rows]
     return "\n".join(lines), entries
+
+
+_NOTICE_PARTS = (
+    ("expired", "vencidas"),
+    ("stale", "viejas"),
+    ("similar", "grupos parecidos"),
+    ("contradictions", "contradicciones posibles"),
+    ("flagged", "marcadas"),
+)
+
+
+def review_notice(engine: Engine, project: str) -> str:
+    """One line with what review has pending for the project, or "" when nothing."""
+    zone = engine.vault.memory_zone
+    if zone is None:
+        return ""
+    totals = memory.review(engine, None, project, 1, zone.path)["totals"]
+    parts = [f"{label} {totals[key]}" for key, label in _NOTICE_PARTS if totals.get(key, 0) > 0]
+    if not parts:
+        return ""
+    return (
+        f"episteme · mantención pendiente en {project}: {' · '.join(parts)}. "
+        f'Corre review(project="{project}", zone="memory") y propón qué archivar o unificar; '
+        "no cambies nada sin aprobación."
+    )
 
 
 def _as_list(value: Any) -> list[str]:
