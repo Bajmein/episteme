@@ -13,7 +13,7 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field, ValidationError
 
 from episteme import checkpoint as checkpoints
-from episteme import hookmode, memory, prompting
+from episteme import hookmode, maintenance, memory, prompting
 from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError, invalid
@@ -118,6 +118,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     engine = Engine(vault, project)
     server = EpistemeServer("episteme", instructions=INSTRUCTIONS)
     server.activity = Activity(engine.vault.root)
+    store = maintenance.Store(engine.vault.root)
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def search(
@@ -469,7 +470,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         with engine.session():
             return dump(memory.review(engine, path, project, limit, zone))
 
-    @server.tool(annotations=READ_ONLY, structured_output=False)
+    @server.tool(structured_output=False)
     def context(
         mode: Annotated[
             str, Field(description='"welcome" (session start) or "task" (needs task).')
@@ -508,6 +509,9 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         to 5 related notes to open with read, within budget_tokens.
         Returns JSON {"text", "entries": [{"path", "score", "kind"}]}; score is 0-1, or null for
         norms, reminders, recalled and linked memories (welcome adds "already_sent").
+        The first welcome of a session may run the maintenance configured in episteme.toml
+        (notice of pending review items, archiving of expired memories, vault backup), so
+        this tool is not read-only.
         """
         hookmode.check(hook_event)
         with engine.session():
@@ -532,9 +536,21 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                         already_sent = True
                 else:
                     st = prompting.SessionState()
+                note = ""
+                if session and fresh:
+                    try:
+                        note = maintenance.run(engine, store, project)
+                    except Exception:
+                        note = ""
+                    try:
+                        maintenance.start_backup(engine.vault, store)
+                    except Exception:
+                        pass
                 if welcomed:
                     text, found = memory.welcome(engine, project)
                     blocks.append(text)
+                    if note:
+                        blocks.append(note)
                     entries += found
                     st.delivered.update(e["path"] for e in found)
                 elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:

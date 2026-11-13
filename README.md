@@ -114,7 +114,7 @@ sqlite3 <vault>/.index/activity.db "select at, tool, hook_event, ok, ms from cal
 sqlite3 <vault>/.index/activity.db "select tool, count(*) from calls where at >= date('now') group by tool"
 ```
 
-El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Añade `.index/` al `.gitignore` del vault.
+El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Junto a él, `.index/maintenance.db` guarda cuándo corrió cada tarea de mantención y qué cambió (no se reconstruye). Añade `.index/` al `.gitignore` del vault.
 
 ## `episteme.toml`
 
@@ -132,8 +132,18 @@ mode = "read-write"    # revise puede editar; no hay tools para crear ni borrar
 
 [checkpoint]
 state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir; opcional
+
+[maintenance]            # opcional; estos son los valores por defecto
+every_days = 1           # periodo mínimo entre ejecuciones de cada tarea
+notify = true            # avisa de los pendientes de review
+archive_expired = false  # archiva las memorias con valid_until pasado
+
+[backup]                 # opcional; sin dir no hay backup
+dir = '/ruta/absoluta/fuera/del/vault'   # entre comillas simples, también en Windows
+keep = 14                # copias que se conservan
 ```
 
+- `[maintenance]` y `[backup]` rechazan claves desconocidas. `every_days` y `keep` son enteros >= 1; `notify` y `archive_expired`, booleanos; `[backup]` exige un `dir` absoluto fuera del vault.
 - `mode` es `read-only`, `read-write` o `memory`. Un valor distinto o una zona repetida impiden arrancar.
 - Lo que no está en ninguna zona es de solo lectura. Si dos zonas se anidan, manda la más específica.
 - Se ignoran `.obsidian/`, `.index/`, `.git/`, toda carpeta que empiece por `.` y los archivos que no son `.md`.
@@ -151,7 +161,7 @@ Todos devuelven texto: JSON en modo agente y, con `hook_event`, exactamente lo q
 | `remember(type, title, body, project?, priority?, tags, keywords, files, related, supersedes?, source?, due?, valid_until?, status="active", force=false, slug?)` | no | Crea una memoria con el esquema validado y detección de duplicados (≥ 0,8 del mismo proyecto y tipo no crea salvo `force`; las parecidas de otros tipos y de `_shared` solo avisan, con `type` y `project`). `keywords` (sinónimos, siglas) se buscan con el peso del título. Devuelve además `new_tags` (tags que ninguna otra nota tiene, con grafías cercanas) y `link_candidates` (hasta 5 memorias que comparten un archivo o 2 tags), solo si hay. El nombre sale del título (ver «Memorias»); `slug` lo fija |
 | `revise(note, action, …)` | no | `edit`, `append`, `set` en zonas `read-write` y `memory` (en una memoria, un `set` que cambia `type` o `project` la mueve a la carpeta que le toca, con el mismo nombre, y devuelve `moved_from`; se niega si alguna nota la enlaza por ruta o si el nombre ya existe allí); `supersede`, `feedback`, `archive` y `dismiss` (archiva un recordatorio) solo en memorias |
 | `review(path?, project?, limit=50, zone?)` | sí | `project="*"` revisa todos los proyectos. Memorias viejas, grupos de memorias parecidas (`similar`: activas de cualquier tipo o proyecto, salvo `session` y `reminder`, con similitud ≥ 0,4), títulos cortados y repetidos en el cuerpo (`cut_titles`), contradicciones posibles con su `similarity` (dos decisiones o constraints que comparten un archivo de `files` o 2 tags, salvo que una enlace a la otra con `supersedes`, `contradicts` o `related`), huérfanas, enlaces rotos, frontmatter inválido y marcadas. `totals` da el total por categoría (las listas se cortan en `limit`); `zone` limita a una zona del `episteme.toml`. Los problemas de las zonas `read-only` (enlaces rotos y frontmatter inválido) van aparte, en `read_only` |
-| `context(mode="welcome"\|"task", session?, project?, task?, prompt?, budget_tokens=2000, hook_event?)` | sí | `welcome`: bienvenida al primer mensaje de cada `session` (como mucho 3 memorias de `_shared`, más solo si sobra sitio) y otra vez en `SessionStart` (`compact\|clear`); en los mensajes siguientes, los recordatorios vencidos cada 10 mensajes, hasta 5 memorias cuyo título, tags o `keywords` tienen una palabra poco frecuente de `prompt`, y un aviso si en 8 mensajes no se ha guardado ninguna memoria. `task`: memorias que casan con la tarea (con 3 palabras o más, deben tener 2; las constraints con `files` entran siempre), «Memorias enlazadas» por `related` y notas relacionadas. Cada entrada lleva `score` (0-1, o `null` en normas, recordatorios, sugeridas y enlazadas) y `kind` |
+| `context(mode="welcome"\|"task", session?, project?, task?, prompt?, budget_tokens=2000, hook_event?)` | no | `welcome`: bienvenida al primer mensaje de cada `session` (como mucho 3 memorias de `_shared`, más solo si sobra sitio) y otra vez en `SessionStart` (`compact\|clear`); en los mensajes siguientes, los recordatorios vencidos cada 10 mensajes, hasta 5 memorias cuyo título, tags o `keywords` tienen una palabra poco frecuente de `prompt`, y un aviso si en 8 mensajes no se ha guardado ninguna memoria. `task`: memorias que casan con la tarea (con 3 palabras o más, deben tener 2; las constraints con `files` entran siempre), «Memorias enlazadas» por `related` y notas relacionadas. Cada entrada lleva `score` (0-1, o `null` en normas, recordatorios, sugeridas y enlazadas) y `kind` |
 | `surface(file?, relative_path?, project_dir?, project?, limit=5, session?, hook_event?)` | sí | Memorias sobre un archivo (por `files` o porque lo mencionan), sin constraints, `session` ni `reminder`; el nombre base solo cuenta si es inequívoco; ignora las vencidas por `valid_until`. `relative_path` sustituye a `file` en las ediciones con Serena; sin ninguno, salida vacía. En modo hook, con `session`, no repite una memoria que `surface` ya mostró en la sesión (si no queda ninguna, salida vacía; si quedan, la cabecera añade `(+M ya mostradas)`); en modo agente nunca se suprime |
 | `constraints(file?, relative_path?, project_dir?, project?, hook_event?)` | sí | Constraints activas (no vencidas) que aplican a un archivo. Avisa, no bloquea |
 | `checkpoint(action="save"\|"restore", project_dir?, project?, task_title?, hook_event?)` | no | `save` guarda el `estado.md` activo (sin la Bitácora) como memoria de sesión. `restore` lee primero el `estado.md` activo vivo (el de la rama `<tipo>/<ID>-<change>`, si no el más reciente) con una línea de flujo (`etapa` y avance de `tasks.md`); sin estado activo cae al último checkpoint vigente. `task_title` retoma esa tarea. Archiva los checkpoints de tareas sin estado activo |
@@ -188,7 +198,13 @@ flagged: false
 
 ### Mantención
 
-episteme no fusiona ni borra nada por su cuenta; `review` solo da los candidatos. El ciclo, siempre con la aprobación de la persona y grupo por grupo:
+episteme no fusiona ni borra nada por su cuenta. Con las tablas `[maintenance]` y `[backup]` de `episteme.toml`, la primera bienvenida de cada sesión (con `session`) corre, como mucho una vez por periodo (`every_days`) y coordinada entre procesos con `.index/maintenance.db`:
+
+- **Aviso** (`notify`, activo por defecto): una línea con los pendientes de `review` del proyecto, una vez por periodo y proyecto.
+- **Archivado de vencidas** (`archive_expired`, apagado por defecto): archiva las memorias activas con `valid_until` pasado y lo dice en la bienvenida; se revierte con `revise`. Lo archivado queda en la tabla `log` de `maintenance.db`.
+- **Backup** (solo con `[backup] dir`): un `episteme-*.tar.gz` rotado (`keep`) con las zonas escribibles y `episteme.toml`; no se crea si nada cambió. Para restaurar: `tar -xzf <archivo> -C <vault>`.
+
+Sigue siendo manual, con `review` y `revise`, unificar, revisar parecidas y contradicciones. El ciclo, siempre con la aprobación de la persona y grupo por grupo:
 
 1. `review(project="*", zone="memory")`.
 2. Por cada grupo de `similar`: leer las memorias, guardar la unificada con `remember` y marcar cada antigua con `revise(action="supersede", by=…)`.
@@ -248,7 +264,7 @@ Bloque para el `settings.json` del proyecto:
 
 Si el servidor va empaquetado en un plugin, `server` pasa a ser el nombre con scope (`plugin:fabrik:episteme`).
 
-Permisos recomendados: `allow` para los tools de solo lectura (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`) y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El [`settings.json`](skills/episteme-setup/settings.json) de la skill `episteme-setup` trae los hooks y los permisos juntos, listos para fusionar. Tras actualizar la skill, pídele la comprobación de configuración: lista lo que falta o está repetido en los tres `settings` sin tocar nada hasta que apruebes el diff.
+Permisos recomendados: `allow` para los tools de consulta (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`; `context` no es de solo lectura solo porque su primera bienvenida puede correr la mantención) y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El [`settings.json`](skills/episteme-setup/settings.json) de la skill `episteme-setup` trae los hooks y los permisos juntos, listos para fusionar. Tras actualizar la skill, pídele la comprobación de configuración: lista lo que falta o está repetido en los tres `settings` sin tocar nada hasta que apruebes el diff.
 
 ### Comprobar que los hooks llegan al modelo
 

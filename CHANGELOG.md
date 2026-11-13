@@ -12,6 +12,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Añadido
 
+- Mantención automática configurable (`[maintenance]` y `[backup]` en `episteme.toml`): en la primera bienvenida de cada sesión, `context` avisa de los pendientes de `review`, archiva las memorias vencidas (opcional) y deja un `.tar.gz` rotado del vault (opcional), una vez por periodo y coordinado entre procesos con `.index/maintenance.db`. `context` deja de ser de solo lectura.
 - Dependabot: PR semanal del ecosistema `uv` y mensual de GitHub Actions.
 - Este `CHANGELOG.md`.
 

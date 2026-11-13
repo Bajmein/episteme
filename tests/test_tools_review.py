@@ -21,7 +21,7 @@ async def test_tool_list_is_complete(vault: Path) -> None:
         assert set(tools) == TOOLS
         read_only = {n for n, t in tools.items() if t.annotations and t.annotations.read_only_hint}
         assert read_only == {
-            "search", "read", "links", "review", "context", "surface", "constraints"
+            "search", "read", "links", "review", "surface", "constraints"
         }  # fmt: skip
         assert all(t.description for t in tools.values())
         info = c.session.initialize_result
