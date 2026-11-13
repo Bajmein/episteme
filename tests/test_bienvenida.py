@@ -70,6 +70,12 @@ def test_notice_counts_overdue_reminders(engine: Engine) -> None:
 
 
 async def test_welcome_notice_over_mcp(vault: Path) -> None:
+    toml = vault / "episteme.toml"  # no maintenance notice after the welcome's last line
+    toml.write_text(
+        toml.read_text(encoding="utf-8") + "\n[maintenance]\nnotify = false\n",
+        encoding="utf-8",
+        newline="",
+    )
     async with mcp_client(vault, today="2026-10-22") as c:
         for i in range(30):
             await c.ok(

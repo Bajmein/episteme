@@ -12,9 +12,14 @@ import datetime as dt
 import sqlite3
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from episteme.index import Index
 from episteme.vault import INDEX_DIR, today
+
+if TYPE_CHECKING:
+    from episteme.engine import Engine
+    from episteme.vault import Vault
 
 SCHEMA_VERSION = 1
 LOG_RETENTION_DAYS = 365
@@ -139,3 +144,66 @@ class Store:
                     conn.close()
                 except sqlite3.Error:
                     pass
+
+
+MAX_LISTED = 5
+
+
+def _archived_line(paths: list[str]) -> str:
+    shown = ", ".join(paths[:MAX_LISTED])
+    more = f" +{len(paths) - MAX_LISTED} más" if len(paths) > MAX_LISTED else ""
+    return (
+        f"episteme · mantención: {len(paths)} memorias vencidas archivadas "
+        f"(valid_until pasado): {shown}{more}. Se revierte con revise."
+    )
+
+
+def run(engine: Engine, store: Store, project: str) -> str:
+    """Run the due maintenance tasks and return the lines to show (``""`` if none)."""
+    from episteme import memory, prompting
+
+    cfg = engine.vault.config.maintenance
+    lines: list[str] = []
+    if cfg.archive_expired:
+        previous = store.claim("archive_expired", cfg.every_days)
+        if previous is not None:
+            try:
+                paths = memory.archive_expired(engine)
+            except Exception:
+                store.restore("archive_expired", previous)
+            else:
+                if paths:
+                    store.log("archive_expired", paths)
+                    lines.append(_archived_line(paths))
+    previous_notify = store.claim(f"notify:{project}", cfg.every_days) if cfg.notify else None
+    if previous_notify is not None:
+        try:
+            lines.append(prompting.review_notice(engine, project))
+        except Exception:
+            store.restore(f"notify:{project}", previous_notify)
+    return "\n".join(line for line in lines if line)
+
+
+def start_backup(vault: Vault, store: Store) -> threading.Thread | None:
+    """Start the due backup in a daemon thread; ``None`` if not configured or not due."""
+    from episteme import backup
+
+    dest = vault.config.backup.dir
+    if dest is None:
+        return None
+    previous = store.claim("backup", vault.config.maintenance.every_days)
+    if previous is None:
+        return None
+    keep = vault.config.backup.keep
+
+    def work() -> None:
+        try:
+            made = backup.run(vault, dest, keep)
+            if made is not None:
+                store.log("backup", [], made.name)
+        except Exception:
+            store.restore("backup", previous)
+
+    thread = threading.Thread(target=work, name="episteme-backup", daemon=True)
+    thread.start()
+    return thread
