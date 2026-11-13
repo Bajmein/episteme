@@ -73,12 +73,7 @@ class Index:
                 if conn.execute("pragma quick_check").fetchone()[0] != "ok":
                     conn.close()
                     break
-                have = {r[0] for r in conn.execute("select name from sqlite_master")}
-                version = None
-                if "meta" in have:
-                    row = conn.execute("select value from meta where key='schema'").fetchone()
-                    version = row[0] if row else None
-                if version != SCHEMA_VERSION:
+                if _schema_version(conn) != SCHEMA_VERSION:
                     self._create(conn)
                 return conn
             except sqlite3.DatabaseError as exc:
@@ -87,27 +82,25 @@ class Index:
                 if not _is_lock(exc):
                     break
                 # Another process holds the lock (e.g. it is creating the schema): wait.
-                time.sleep(delay)
-                delay = min(delay * 2, 0.5)
+                delay = _backoff(delay)
         else:
             raise sqlite3.OperationalError("database is locked")
         # Corrupt: the index is a cache, so throw it away and rebuild.
+        self._wipe_files()
+        conn = self._connect()
+        self._create(conn)
+        return conn
+
+    def _wipe_files(self) -> None:
         for suffix in ("", "-wal", "-shm"):
             try:
                 os.unlink(f"{self.db_path}{suffix}")
             except FileNotFoundError:
                 pass
-        conn = self._connect()
-        self._create(conn)
-        return conn
 
     def _create(self, conn: sqlite3.Connection) -> None:
         def create() -> None:
-            have = {r[0] for r in conn.execute("select name from sqlite_master")}
-            row = None
-            if "meta" in have:
-                row = conn.execute("select value from meta where key='schema'").fetchone()
-            if row and row[0] == SCHEMA_VERSION:
+            if _schema_version(conn) == SCHEMA_VERSION:
                 return  # another process got here first
             for table in TABLES:
                 conn.execute(f"drop table if exists {table}")
@@ -126,8 +119,7 @@ class Index:
                 conn.execute("begin immediate")
             except sqlite3.OperationalError as exc:
                 if _is_lock(exc):
-                    time.sleep(delay)
-                    delay = min(delay * 2, 0.5)
+                    delay = _backoff(delay)
                     continue
                 raise
             try:
@@ -153,23 +145,28 @@ class Index:
     def refresh(self) -> bool:
         """Reindex what changed on disk since the last call. True if anything changed."""
         disk = {rel: (st.st_mtime_ns, st.st_size) for rel, st in self.vault.scan_notes(self._dirs)}
-        stored = {
-            r["path"]: (r["mtime_ns"], r["size"])
-            for r in self.conn.execute("select path, mtime_ns, size from notes")
-        }
-        changed = [rel for rel, sig in disk.items() if stored.get(rel) != sig]
-        removed = [rel for rel in stored if rel not in disk]
+        changed, removed = _diff(disk, self._stored_signatures())
         if not changed and not removed:
             return False
-        parsed = []
-        for rel in changed:
-            item = self._load(rel)
-            if item is not None:
-                parsed.append(item)
+        parsed = self._load_all(changed)
 
         self._in_transaction(self.conn, lambda: self._apply(removed, parsed))
         self.generation += 1
         return True
+
+    def _stored_signatures(self) -> dict[str, tuple[int, int]]:
+        return {
+            r["path"]: (r["mtime_ns"], r["size"])
+            for r in self.conn.execute("select path, mtime_ns, size from notes")
+        }
+
+    def _load_all(self, rels: list[str]) -> list[tuple[str, tuple[int, int], ParsedNote]]:
+        parsed = []
+        for rel in rels:
+            item = self._load(rel)
+            if item is not None:
+                parsed.append(item)
+        return parsed
 
     def reindex(self, rel: str) -> None:
         """Reindex one note right after a tool wrote it."""
@@ -191,6 +188,13 @@ class Index:
         for rel, sig, note in items:
             self._delete(rel)
             insert_note(self.conn, self.vault, rel, sig, note)
+        paths, aliases = self._alias_changes(before, new)
+        relink(self.conn, set(before), paths, aliases)
+
+    def _alias_changes(
+        self, before: dict[str, set[str] | None], new: set[str]
+    ) -> tuple[set[str], set[str]]:
+        """Paths that appeared or vanished and aliases gained or lost since ``before``."""
         paths: set[str] = set()
         aliases: set[str] = set()
         for rel, old in before.items():
@@ -198,7 +202,7 @@ class Index:
             if (old is None) != (now is None):
                 paths.add(rel)
             aliases |= (old or set()) ^ (now or set())
-        relink(self.conn, set(before), paths, aliases)
+        return paths, aliases
 
     def _aliases_of(self, rel: str) -> set[str] | None:
         """Normalized aliases of an indexed note, or None if ``rel`` is not indexed."""
@@ -396,16 +400,7 @@ class Index:
             built.params,
         ).fetchone()[0]
         rows = self._select_rows(built, ranked=query is not None, limit=limit, snippets=snippets)
-        hits = []
-        for r in rows:
-            line, snippet = locate(r["search_text"], built.terms) if snippets else (1, "")
-            hits.append(
-                Hit(
-                    r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0,
-                    r["zone"], r["type"], r["status"], r["project"], r["created"], r["priority"],
-                )
-            )  # fmt: skip
-        return hits, total
+        return [_hit(r, built.terms, snippets) for r in rows], total
 
     def _select_rows(
         self, built: Built, *, ranked: bool, limit: int, snippets: bool
@@ -424,6 +419,39 @@ class Index:
             f"where {built.clause} {order} limit ?",
             [*built.params, limit],
         ).fetchall()
+
+
+def _hit(r: sqlite3.Row, terms: list[list[str]], snippets: bool) -> Hit:
+    """One search row as a ``Hit``, locating the match when ``snippets`` is on."""
+    line, snippet = locate(r["search_text"], terms) if snippets else (1, "")
+    return Hit(
+        r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0,
+        r["zone"], r["type"], r["status"], r["project"], r["created"], r["priority"],
+    )  # fmt: skip
+
+
+def _diff(
+    disk: dict[str, tuple[int, int]], stored: dict[str, tuple[int, int]]
+) -> tuple[list[str], list[str]]:
+    """Notes whose signature differs on disk, and stored notes no longer on disk."""
+    changed = [rel for rel, sig in disk.items() if stored.get(rel) != sig]
+    removed = [rel for rel in stored if rel not in disk]
+    return changed, removed
+
+
+def _schema_version(conn: sqlite3.Connection) -> str | None:
+    """The schema version stored in ``meta``, or None if there is none."""
+    have = {r[0] for r in conn.execute("select name from sqlite_master")}
+    if "meta" not in have:
+        return None
+    row = conn.execute("select value from meta where key='schema'").fetchone()
+    return row[0] if row else None
+
+
+def _backoff(delay: float) -> float:
+    """Sleep ``delay`` seconds and return the next, doubled up to 0.5."""
+    time.sleep(delay)
+    return min(delay * 2, 0.5)
 
 
 def _is_lock(exc: sqlite3.DatabaseError) -> bool:
