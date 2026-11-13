@@ -100,40 +100,72 @@ def _is_date(value: Any) -> bool:
     )
 
 
-def validate(fm: dict[str, Any]) -> None:
-    """Check a memory's frontmatter; raise ``invalid_schema`` naming the field."""
+def _is_plain_int(value: Any, minimum: int | None = None) -> bool:
+    """True for a real int (not a bool), at least ``minimum`` when given."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    return minimum is None or value >= minimum
+
+
+def _is_str_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(v, str) for v in value)
+
+
+def _is_unsafe_project(project: str) -> bool:
+    return "/" in project or "\\" in project or project in (".", "..")
+
+
+def _check_type(fm: dict[str, Any]) -> None:
     type_ = fm.get("type")
     if type_ not in TYPES:
         raise schema_error(f"type must be one of {', '.join(TYPES)}, got {type_!r}.")
+
+
+def _check_project(fm: dict[str, Any]) -> None:
     project = fm.get("project")
     if not isinstance(project, str) or not project.strip():
         raise schema_error("project is required.")
-    if "/" in project or "\\" in project or project in (".", ".."):
+    if _is_unsafe_project(project):
         raise schema_error(f'project must be a plain name without "/" or "..", got {project!r}.')
-    priority = fm.get("priority")
-    if (
-        isinstance(priority, bool)
-        or not isinstance(priority, int)
-        or not PRIORITY_MIN <= priority <= PRIORITY_MAX
-    ):
+
+
+def _check_priority(fm: dict[str, Any]) -> None:
+    priority: Any = fm.get("priority")
+    if not _is_plain_int(priority, PRIORITY_MIN) or priority > PRIORITY_MAX:
         raise schema_error(f"priority must be 1-5, got {priority!r}.")
+
+
+def _check_status(fm: dict[str, Any]) -> None:
     if fm.get("status") not in STATUSES:
         raise schema_error(
             f"status must be one of {', '.join(STATUSES)}, got {fm.get('status')!r}."
         )
+
+
+def _check_created(fm: dict[str, Any]) -> None:
     if not _is_date(fm.get("created")):
         raise schema_error(f"created must be a date YYYY-MM-DD, got {fm.get('created')!r}.")
+
+
+def _check_optional_dates(fm: dict[str, Any]) -> None:
     for key in ("due", "valid_until"):
         if fm.get(key) is not None and not _is_date(fm[key]):
             raise schema_error(f"{key} must be a date YYYY-MM-DD, got {fm[key]!r}.")
-    if type_ == "reminder" and fm.get("due") is None:
+
+
+def _check_reminder_due(fm: dict[str, Any]) -> None:
+    if fm.get("type") == "reminder" and fm.get("due") is None:
         raise schema_error("reminder needs due (YYYY-MM-DD).")
+
+
+def _check_string_lists(fm: dict[str, Any]) -> None:
     for key in ("files", "tags", "keywords"):
         value = fm.get(key)
-        if value is not None and (
-            not isinstance(value, list) or not all(isinstance(v, str) for v in value)
-        ):
+        if value is not None and not _is_str_list(value):
             raise schema_error(f"{key} must be a list of strings.")
+
+
+def _check_keywords(fm: dict[str, Any]) -> None:
     keywords = fm.get("keywords") or []
     if any(not k.strip() or len(k) > KEYWORD_CHARS for k in keywords):
         raise schema_error(
@@ -141,32 +173,62 @@ def validate(fm: dict[str, Any]) -> None:
         )
     if len(keywords) > KEYWORDS_MAX:
         raise schema_error(f"keywords has {len(keywords)} items; the limit is {KEYWORDS_MAX}.")
+
+
+def _check_tags(fm: dict[str, Any]) -> None:
     for tag in fm.get("tags") or []:
         if not tag or any(c in tag for c in ": #\t"):
             raise schema_error(
                 f'tag "{tag}" has ":", "#" or spaces. Nest tags with "/", e.g. dominio/auth.'
             )
+
+
+def _check_helpful(fm: dict[str, Any]) -> None:
     helpful = fm.get("helpful")
-    if helpful is not None and (
-        isinstance(helpful, bool) or not isinstance(helpful, int) or helpful < 0
-    ):
+    if helpful is not None and not _is_plain_int(helpful, 0):
         raise schema_error(f"helpful must be an integer >= 0, got {helpful!r}.")
+
+
+def _check_flagged(fm: dict[str, Any]) -> None:
     if fm.get("flagged") is not None and not isinstance(fm["flagged"], bool):
         raise schema_error("flagged must be true or false.")
+
+
+# Run in this order: the first failing check raises.
+_CHECKS = (
+    _check_type,
+    _check_project,
+    _check_priority,
+    _check_status,
+    _check_created,
+    _check_optional_dates,
+    _check_reminder_due,
+    _check_string_lists,
+    _check_keywords,
+    _check_tags,
+    _check_helpful,
+    _check_flagged,
+)
+
+
+def validate(fm: dict[str, Any]) -> None:
+    """Check a memory's frontmatter; raise ``invalid_schema`` naming the field."""
+    for check in _CHECKS:
+        check(fm)
+
+
+def _is_omitted(key: str, value: Any) -> bool:
+    if key in OMIT_WHEN_EMPTY and value in (None, "", []):
+        return True
+    return key == "flagged" and value is False
 
 
 def ordered(fm: dict[str, Any]) -> dict[str, Any]:
     """Schema key order; empty optional keys dropped; unknown keys kept at the end."""
     out: dict[str, Any] = {}
     for key in KEY_ORDER:
-        if key not in fm:
-            continue
-        value = fm[key]
-        if key in OMIT_WHEN_EMPTY and value in (None, "", []):
-            continue
-        if key == "flagged" and value is False:
-            continue
-        out[key] = value
+        if key in fm and not _is_omitted(key, fm[key]):
+            out[key] = fm[key]
     for key, value in fm.items():
         if key not in out and key not in KEY_ORDER:
             out[key] = value
