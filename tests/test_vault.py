@@ -9,7 +9,16 @@ import pytest
 from test_startup import _start
 
 from episteme.errors import EpistemeError, StartupError
-from episteme.vault import MEMORY, READ_ONLY, READ_WRITE, Vault, is_ignored, load_config
+from episteme.vault import (
+    MEMORY,
+    READ_ONLY,
+    READ_WRITE,
+    Backup,
+    Maintenance,
+    Vault,
+    is_ignored,
+    load_config,
+)
 
 
 def test_load_fixture_config(vault: Path) -> None:
@@ -39,6 +48,58 @@ def test_bad_config_refuses_to_start(tmp_path: Path, toml: str) -> None:
     assert proc.returncode != 0
     assert proc.stderr
     assert not (tmp_path / ".index").exists()
+
+
+def test_maintenance_backup_defaults(vault: Path) -> None:
+    cfg = load_config(vault)
+    assert cfg.maintenance == Maintenance(every_days=1, notify=True, archive_expired=False)
+    assert cfg.backup == Backup(dir=None, keep=14)
+
+
+def test_maintenance_backup_valid(tmp_path: Path) -> None:
+    vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
+    target = tmp_path / "backups"
+    (vault_dir / "episteme.toml").write_text(
+        "[maintenance]\nevery_days = 7\nnotify = false\narchive_expired = true\n"
+        f"[backup]\ndir = '{target}'\nkeep = 3\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(vault_dir)
+    assert cfg.maintenance == Maintenance(every_days=7, notify=False, archive_expired=True)
+    assert cfg.backup == Backup(dir=target, keep=3)
+
+
+@pytest.mark.parametrize(
+    "toml",
+    [
+        "[maintenance]\nevery_dayz = 1\n",
+        "[backup]\ndir = '{abs}'\nretain = 2\n",
+        "maintenance = 3\n",
+        "[maintenance]\nevery_days = 0\n",
+        "[maintenance]\nevery_days = true\n",
+        '[maintenance]\nnotify = "yes"\n',
+        "[maintenance]\narchive_expired = 1\n",
+        "[backup]\nkeep = 3\n",
+        "[backup]\ndir = '{abs}'\nkeep = true\n",
+        "[backup]\ndir = '{abs}'\nkeep = 0\n",
+        "[backup]\ndir = ''\n",
+        "[backup]\ndir = 'relative/backups'\n",
+        "[backup]\ndir = '{vault}'\n",
+        "[backup]\ndir = '{vault}/sub/backups'\n",
+    ],
+)
+def test_bad_maintenance_backup_refuses_to_start(tmp_path: Path, toml: str) -> None:
+    vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
+    toml = toml.replace("{abs}", str(tmp_path / "out")).replace("{vault}", str(vault_dir))
+    (vault_dir / "episteme.toml").write_text(toml, encoding="utf-8")
+    with pytest.raises(StartupError):
+        load_config(vault_dir)
+    proc = _start("--vault", str(vault_dir))
+    assert proc.returncode != 0
+    assert proc.stderr
+    assert not (vault_dir / ".index").exists()
 
 
 def test_zone_lookup_prefers_most_specific(tmp_path: Path) -> None:

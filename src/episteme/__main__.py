@@ -29,6 +29,17 @@ mode = "memory"
 
 [checkpoint]
 state_glob = ".fabrik/**/estado.md"   # relativo a project_dir
+
+# Mantención al abrir la primera sesión del periodo (descomenta para cambiar).
+# [maintenance]
+# every_days = 1           # periodo en días (entero >= 1)
+# notify = true            # avisa de pendientes de review (solo lectura)
+# archive_expired = false  # archiva las memorias vencidas
+
+# Respaldo .tar.gz del vault; sin esta tabla no hay respaldo (dir es obligatorio).
+# [backup]
+# dir = "~/backups/episteme"   # ruta absoluta, fuera del vault
+# keep = 14                    # respaldos que se conservan (entero >= 1)
 """
 
 
