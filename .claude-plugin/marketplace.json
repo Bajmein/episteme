@@ -1,0 +1,12 @@
+{
+  "name": "episteme",
+  "owner": { "name": "Bajmein" },
+  "description": "Marketplace de episteme: el plugin con sus skills.",
+  "plugins": [
+    {
+      "name": "episteme",
+      "source": "./plugin",
+      "description": "Skills de episteme: conectar un proyecto, pausar y retomar una tarea, mantención de memorias y recordatorios."
+    }
+  ]
+}

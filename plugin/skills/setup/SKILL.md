@@ -1,5 +1,5 @@
 ---
-name: episteme-setup
+name: setup
 description: Conectar un proyecto al servidor MCP episteme (Linux, macOS o Windows), migrar sus memorias de OMEGA y retirar OMEGA y mcpvault; también cómo actualizar episteme y publicar una versión nueva.
 disable-model-invocation: true
 ---
@@ -51,7 +51,7 @@ Elige el archivo con la persona:
 - `.claude/settings.local.json` (no se versiona) si el resto del equipo no usa episteme. Es lo normal, porque el servidor está en scope local: con los hooks en el `settings.json` versionado, a quien no tenga el servidor le fallarían.
 - `.claude/settings.json` si todos los que trabajan en el repo tienen episteme registrado.
 
-Fusiona en ese archivo el contenido de [settings.json](settings.json) de esta skill, sin pisar lo que ya haya:
+Fusiona en ese archivo el contenido de `${CLAUDE_SKILL_DIR}/settings.json`, el `settings.json` de esta skill, sin pisar lo que ya haya:
 - `allow` de los 7 tools de solo lectura (`remember`, `revise` y `checkpoint` siguen pidiendo permiso);
 - `deny` de `Read/Edit(~/.episteme/**)` (`Edit` ya cubre Write; una regla `Write(...)` nunca coincide), `Bash(obsidian *)` y `Bash(omega *)`: el acceso al vault se cierra con permisos, no con el prompt. Si el vault no es el de por defecto, cambia la ruta en las dos reglas;
 - los 6 hooks `mcp_tool`: bienvenida, recordatorios y sugerencias por mensaje en `UserPromptSubmit` (con `${prompt}`), `constraints` antes de `Edit|Write|mcp__serena__.*` y `surface` después de `Read|Edit|Write|mcp__serena__.*` (con Serena el tool no trae `file_path`: pasa `relative_path`), `checkpoint` save en `PreCompact`, y en `SessionStart` (`compact|clear`) `checkpoint` restore y la bienvenida otra vez (con `${source}`), más las memorias que la sesión escribió o leyó antes. Todos devuelven `hookSpecificOutput.additionalContext`; los de `SessionStart` añaden un `systemMessage` en verde que le dice a la persona qué se recuperó.
@@ -88,7 +88,7 @@ Reinicia Claude Code en el proyecto. En `/mcp`, `episteme` sale conectado; el pr
 
 ### Comprobar que la configuración está al día
 
-Es de solo lectura. Compara `.claude/settings.local.json`, `.claude/settings.json` y el `settings.json` de usuario (`~/.claude/settings.json`, o el de la cuenta en uso) con el [settings.json](settings.json) de esta skill, y lista:
+Es de solo lectura. Compara `.claude/settings.local.json`, `.claude/settings.json` y el `settings.json` de usuario (`~/.claude/settings.json`, o el de la cuenta en uso) con `${CLAUDE_SKILL_DIR}/settings.json`, el `settings.json` de esta skill, y lista:
 - hooks que faltan;
 - hooks repetidos entre archivos (se ejecutarían dos veces);
 - hooks con `matcher` o `input` distintos de los de la skill;
@@ -153,10 +153,11 @@ Al empezar la convivencia, crea un recordatorio con `remember(type="reminder", p
 
 # Actualizar episteme
 
-En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1 (con el scope y el lanzador con que se registró: `--scope project` si está en `.mcp.json`). La primera ejecución descarga; después tira de la caché de uv. Después, haz la comprobación de configuración del paso 5 en cada proyecto: los hooks o permisos nuevos de la skill no llegan solos. Para actualizar esta skill, `git pull` en el clone del que se instaló (ver «La skill episteme-setup» en `docs/instalacion.md`).
+En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `claude mcp remove --scope local episteme` y el `add` del paso 1 (con el scope y el lanzador con que se registró: `--scope project` si está en `.mcp.json`). La primera ejecución descarga; después tira de la caché de uv. Después, haz la comprobación de configuración del paso 5 en cada proyecto: los hooks o permisos nuevos de la skill no llegan solos. Para actualizar las skills: `claude plugin update episteme@episteme` y reinicia Claude Code (o `/reload-plugins`). Llegan versiones nuevas cuando sube la versión del plugin, que es la del release.
 
 # Publicar una versión de episteme (mantenedor)
 
 1. CI en verde en `main` (`gh run list --branch main --limit 1`), en Ubuntu y en Windows.
-2. En local (el cloud no puede subir tags), desde el clone: `git tag vX.Y.Z && git push --tags`.
-3. Actualiza los proyectos conectados como en «Actualizar episteme».
+2. Sube `version` en `plugin/.claude-plugin/plugin.json` al mismo número que `pyproject.toml`.
+3. En local (el cloud no puede subir tags), desde el clone: `git tag vX.Y.Z && git push --tags`.
+4. Actualiza los proyectos conectados como en «Actualizar episteme».

@@ -6,9 +6,12 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Añadido
 
-- Después de compactar o de `/clear`, la bienvenida trae además las memorias que el agente escribió o leyó antes en esa sesión («De esta sesión», hasta 8), y la persona ve en el terminal una línea en verde que dice qué se recuperó y qué tarea se retomó. El hook `SessionStart` de `context` pasa a recibir `"source": "${source}"`: quien ya tenga los hooks instalados puede añadirlo con la skill `episteme-setup` (sin él, el aviso no distingue entre compactar y `/clear`).
+- El plugin `episteme` de Claude Code, con el propio repo como marketplace (`claude plugin marketplace add Bajmein/episteme` y `claude plugin install episteme@episteme`). Trae las skills y no el servidor, que se sigue registrando por proyecto. Además de `/episteme:setup`, suma tres skills: `/episteme:pausa` (guarda el estado de la tarea antes de `/clear` o de cerrar y lo retoma después, para los proyectos sin `estado.md`), `/episteme:mantencion` (guía la revisión de memorias que informa `review`, con aprobación grupo por grupo) y `/episteme:reminder` (un recordatorio de prioridad 5 del proyecto). Las skills se actualizan con `claude plugin update episteme@episteme` cuando sale una versión nueva.
+- Después de compactar o de `/clear`, la bienvenida trae además las memorias que el agente escribió o leyó antes en esa sesión («De esta sesión», hasta 8), y la persona ve en el terminal una línea en verde que dice qué se recuperó y qué tarea se retomó. El hook `SessionStart` de `context` pasa a recibir `"source": "${source}"`: quien ya tenga los hooks instalados puede añadirlo con `/episteme:setup` (sin él, el aviso no distingue entre compactar y `/clear`).
 
 ### Cambiado
+
+- La skill `episteme-setup` pasa a ser `/episteme:setup` y se instala con el plugin, no enlazando una carpeta del clone. Quien la tenía enlazada borra el enlace (`~/.claude/skills/episteme-setup`) e instala el plugin; si no, quedan las dos.
 
 - El `README.md` pasa a ser una presentación en lenguaje simple, con dos diagramas (arquitectura y hooks de una sesión, en `static/diagrams/`). El detalle que tenía se mueve sin cambios a `docs/`: instalación, configuración, tools y memorias, hooks, mantención, migración de OMEGA y desarrollo.
 

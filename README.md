@@ -74,21 +74,28 @@ Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.
 
 ### Opción A · Con la skill (recomendada)
 
-Se instala una vez por máquina:
+Las skills vienen en un plugin de Claude Code. Se instala una vez por máquina, con dos comandos (igual en Linux, macOS y Windows):
 
 ```bash
-git clone git@github.com:Bajmein/episteme ~/src/episteme
-mkdir -p ~/.claude/skills
-ln -s ~/src/episteme/skills/episteme-setup ~/.claude/skills/episteme-setup
+claude plugin marketplace add Bajmein/episteme
+claude plugin install episteme@episteme
 ```
 
-En Windows se enlaza con una unión de directorios: ver la [guía de instalación](docs/instalacion.md#la-skill-episteme-setup).
+Más detalles (repo privado, actualizar, quitar) en la [guía de instalación](docs/instalacion.md#el-plugin).
 
 Después, en cada proyecto que quieras conectar:
 
 1. Reinicia Claude Code y ábrelo en la raíz del proyecto.
-2. Escribe `/episteme-setup`.
+2. Escribe `/episteme:setup`.
 3. Aprueba los cambios que te muestra. La skill registra el servidor, configura los hooks y los permisos, y añade la regla al `CLAUDE.md`.
+
+El plugin trae además estas skills:
+
+| Skill | Para qué |
+| :-- | :-- |
+| `/episteme:pausa` | Guardar en qué estabas antes de `/clear` o de cerrar, y retomarlo después con `/episteme:pausa retomar` |
+| `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido |
+| `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
 
 ### Opción B · A mano
 
@@ -171,7 +178,7 @@ El detalle técnico vive en [`docs/`](docs/):
 
 | Documento | Contenido |
 | :-- | :-- |
-| [Instalación](docs/instalacion.md) | Pasos a mano en Linux, macOS y Windows, y la skill `episteme-setup` |
+| [Instalación](docs/instalacion.md) | Pasos a mano en Linux, macOS y Windows, y el plugin con las skills |
 | [Configuración](docs/configuracion.md) | Argumentos del servidor, variables, `episteme.toml`, zonas y registro de actividad |
 | [Tools y memorias](docs/tools.md) | Las 10 herramientas con sus parámetros, el esquema de las memorias y los errores |
 | [Hooks](docs/hooks.md) | El bloque para `settings.json`, los permisos recomendados y cómo comprobar que funcionan |

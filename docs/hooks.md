@@ -69,7 +69,7 @@ Límites: el rastro «De esta sesión» vive en el proceso del servidor, así qu
 
 Si el servidor va empaquetado en un plugin, `server` pasa a ser el nombre con scope (`plugin:fabrik:episteme`).
 
-Permisos recomendados: `allow` para los tools de consulta (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`; `context` no es de solo lectura solo porque su primera bienvenida puede correr la mantención) y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El [`settings.json`](../skills/episteme-setup/settings.json) de la skill `episteme-setup` trae los hooks y los permisos juntos, listos para fusionar. Tras actualizar la skill, pídele la comprobación de configuración: lista lo que falta o está repetido en los tres `settings` sin tocar nada hasta que apruebes el diff.
+Permisos recomendados: `allow` para los tools de consulta (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface` y `constraints`; `context` no es de solo lectura solo porque su primera bienvenida puede correr la mantención) y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El [`settings.json`](../plugin/skills/setup/settings.json) de la skill `setup` del plugin trae los hooks y los permisos juntos, listos para fusionar. Tras actualizar la skill, pídele la comprobación de configuración: lista lo que falta o está repetido en los tres `settings` sin tocar nada hasta que apruebes el diff.
 
 ## Comprobar que los hooks llegan al modelo
 
@@ -78,7 +78,7 @@ Con una copia del vault de prueba, una llamada real a Claude Code confirma que e
 ```zsh
 W=$(mktemp -d) && cp -r tests/fixtures/vault "$W/vault" && mkdir "$W/work"
 print -r -- "{\"mcpServers\":{\"episteme\":{\"command\":\"uv\",\"args\":[\"run\",\"--directory\",\"$PWD\",\"episteme\",\"--vault\",\"$W/vault\",\"--project\",\"fabrik\"],\"env\":{\"EPISTEME_TODAY\":\"2026-10-22\"}}}}" > "$W/mcp.json"
-uv run python -c 'import json,sys; d=json.load(open("skills/episteme-setup/settings.json", encoding="utf-8")); json.dump({"hooks": d["hooks"]}, open(sys.argv[1], "w", encoding="utf-8"))' "$W/settings.json"
+uv run python -c 'import json,sys; d=json.load(open("plugin/skills/setup/settings.json", encoding="utf-8")); json.dump({"hooks": d["hooks"]}, open(sys.argv[1], "w", encoding="utf-8"))' "$W/settings.json"
 (cd "$W/work" && claude -p "Según el contexto que te dio episteme al empezar, ¿cuál es el título del recordatorio vencido? Responde solo con el título, o NINGUNO si no lo ves." --model haiku --settings "$W/settings.json" --mcp-config "$W/mcp.json" --strict-mcp-config --output-format json < /dev/null)
 ```
 
