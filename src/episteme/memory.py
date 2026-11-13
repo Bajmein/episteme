@@ -688,7 +688,19 @@ def entry_line(row: Any) -> str:
     return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']}){tail}"
 
 
-WELCOME_RESERVE = 160  # welcome: chars of the 4000 held back for the "no caben aquí" line
+WELCOME_RESERVE = 160  # welcome: minimum chars of the 4000 held back for the "no caben aquí" line
+
+
+def welcome_notice(project: str, norms: int, reminders: int) -> str:
+    parts = []
+    if norms:
+        parts.append(f"+{norms} normas")
+    if reminders:
+        parts.append(f"+{reminders} recordatorios")
+    return (
+        f"({' y '.join(parts)} no caben aquí: "
+        f'search(project="{project}", zone="memory", type="reminder") o review)'
+    )
 SHARED_MAX = 3  # welcome: most `_shared` memories listed ahead of the project's own
 
 
@@ -701,9 +713,10 @@ def welcome(
     its age), "Vencen pronto" (reminders due within ``upcoming_days``) and "Memorias" (the
     10 best by score, without the norms already listed). At most ``SHARED_MAX`` of those are
     ``_shared`` ones (when the project is not ``_shared``); the extra ``_shared`` memories only
-    fill the slots left once the others are listed. ``WELCOME_RESERVE`` characters are held back:
-    if an overdue reminder or a priority-5 norm did not fit, a last line says how many were left
-    out; otherwise the reserve goes back to the memories.
+    fill the slots left once the others are listed. A reserve of ``max(WELCOME_RESERVE, longest
+    notice for the project)`` characters is held back: if an overdue reminder or a priority-5
+    norm did not fit, a last line says how many were left out; otherwise the reserve goes back
+    to the memories.
     """
     project = engine.need_project(project)
     now = today()
@@ -733,7 +746,8 @@ def welcome(
     header = f"episteme · memoria de {project}"
     lines = [header]
     entries: list[dict[str, Any]] = []
-    budget = 4000 - len(header) - 1 - WELCOME_RESERVE
+    reserve = max(WELCOME_RESERVE, len(welcome_notice(project, 99999, 99999)) + 1)
+    budget = 4000 - len(header) - 1 - reserve
     ranked = 0
     missed = {"norms": 0, "reminders": 0}
 
@@ -769,7 +783,7 @@ def welcome(
         first = False
         entries.append({"path": r["path"], "score": None, "kind": "norm"})
     if not any(missed.values()):
-        budget += WELCOME_RESERVE  # nothing to warn about: the reserve goes back to the rest
+        budget += reserve  # nothing to warn about: the reserve goes back to the rest
     reminder_lines(upcoming, f"Vencen pronto ({upcoming_days} días):")
     first = True
     shared_used = 0
@@ -794,15 +808,7 @@ def welcome(
     if not entries and not any(missed.values()):
         return "", []
     if any(missed.values()):
-        parts = []
-        if missed["norms"]:
-            parts.append(f"+{missed['norms']} normas")
-        if missed["reminders"]:
-            parts.append(f"+{missed['reminders']} recordatorios")
-        lines.append(
-            f"({' y '.join(parts)} no caben aquí: "
-            f'search(project="{project}", zone="memory", type="reminder") o review)'
-        )
+        lines.append(welcome_notice(project, missed["norms"], missed["reminders"]))
     return "\n".join(lines), entries
 
 

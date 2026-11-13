@@ -81,3 +81,24 @@ async def test_welcome_notice_over_mcp(vault: Path) -> None:
         assert len(res["text"]) <= 4000
         assert lines[-1].startswith("(+")
         assert " normas no caben aquí: search(project=" in lines[-1]
+
+
+def test_notice_fits_with_a_long_project_name(vault: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EPISTEME_TODAY", "2026-10-19")
+    project = "proyecto-con-un-nombre-muy-largo-" * 4
+    eng = Engine(vault, project)
+    eng.index.refresh()
+    for i in range(40):
+        memory.remember(
+            eng, "decision", f"Norma larga número {i} {'w' * i}",
+            f"Regla {i} {'larga ' * 30}.", priority=5, force=True,
+        )  # fmt: skip
+    for i in range(6):
+        memory.remember(
+            eng, "reminder", f"Recordatorio vencido {i} {'v' * 80}", "Hacer algo.",
+            due="2026-10-01", force=True,
+        )  # fmt: skip
+    text, _ = memory.welcome(eng, project)
+    assert len(text) <= 4000
+    assert text.splitlines()[-1].startswith("(+")
+    assert f'search(project="{project}"' in text.splitlines()[-1]
