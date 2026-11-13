@@ -11,81 +11,101 @@ from episteme import memory
 from episteme.engine import Engine
 from episteme.tools.args import READ_ONLY, NoteArg, dump
 
+_TypeArg = Annotated[
+    str,
+    Field(
+        description="decision | lesson | error | constraint | preference | session | "
+        "reminder | insight"
+    ),
+]
+_TitleArg = Annotated[
+    str, Field(description="Short title (5-8 words); the file name is derived from it.")
+]
+_BodyArg = Annotated[
+    str,
+    Field(
+        description="The memory. Name the files, tools or commands involved: "
+        "that is what is searched later."
+    ),
+]
+_ProjectArg = Annotated[
+    str | None,
+    Field(description='Project; defaults to --project. "_shared" for all projects.'),
+]
+_PriorityArg = Annotated[
+    int | None,
+    Field(
+        description="1-5. 5 = rule every session must know; 4 = technical decision "
+        "(default for decision/constraint); 3 = record (default); 1-2 = minor."
+    ),
+]
+_TagsArg = Annotated[
+    list[str],
+    Field(
+        description='Nested with "/", e.g. dominio/auth; no ":". Use persona/<surname> '
+        "for people and tema/<topic> for a subject that spans projects."
+    ),
+]
+_KeywordsArg = Annotated[
+    list[str],
+    Field(
+        description="Other words people use for this: synonyms, abbreviations, full "
+        'names (mkt, marketing, "Ana Pérez"). Searched with the weight of the '
+        "title."
+    ),
+]
+_FilesArg = Annotated[
+    list[str],
+    Field(description="Project-relative files this memory is about (globs allowed)."),
+]
+_RelatedArg = Annotated[list[str], Field(description="Related notes (paths or names).")]
+_SupersedesArg = Annotated[
+    str | None, Field(description="Memory this one replaces; it becomes superseded.")
+]
+_SourceArg = Annotated[str | None, Field(description="Commit sha or PR.")]
+_DueArg = Annotated[str | None, Field(description="YYYY-MM-DD; required for reminders.")]
+_ValidUntilArg = Annotated[
+    str | None, Field(description="YYYY-MM-DD after which the memory no longer holds.")
+]
+_StatusArg = Annotated[str, Field(description="active | speculative | superseded | archived.")]
+_ForceArg = Annotated[bool, Field(description="Create it even if a near-duplicate exists.")]
+_SlugArg = Annotated[
+    str | None,
+    Field(
+        description="File-name slug: 1-40 lowercase letters, digits and hyphens, without "
+        "the date. Derived from the title when omitted."
+    ),
+]
+
 
 def register(server: MCPServer, engine: Engine) -> None:
     """Register the memory tools on ``server``."""
+    _register_remember(server, engine)
+    _register_revise(server, engine)
+    _register_review(server, engine)
+
+
+def _register_remember(server: MCPServer, engine: Engine) -> None:
+    """Register the remember tool on ``server``."""
 
     @server.tool(structured_output=False)
     def remember(
-        type: Annotated[
-            str,
-            Field(
-                description="decision | lesson | error | constraint | preference | session | "
-                "reminder | insight"
-            ),
-        ],
-        title: Annotated[
-            str, Field(description="Short title (5-8 words); the file name is derived from it.")
-        ],
-        body: Annotated[
-            str,
-            Field(
-                description="The memory. Name the files, tools or commands involved: "
-                "that is what is searched later."
-            ),
-        ],
-        project: Annotated[
-            str | None,
-            Field(description='Project; defaults to --project. "_shared" for all projects.'),
-        ] = None,
-        priority: Annotated[
-            int | None,
-            Field(
-                description="1-5. 5 = rule every session must know; 4 = technical decision "
-                "(default for decision/constraint); 3 = record (default); 1-2 = minor."
-            ),
-        ] = None,
-        tags: Annotated[
-            list[str],
-            Field(
-                description='Nested with "/", e.g. dominio/auth; no ":". Use persona/<surname> '
-                "for people and tema/<topic> for a subject that spans projects."
-            ),
-        ] = [],  # noqa: B006
-        keywords: Annotated[
-            list[str],
-            Field(
-                description="Other words people use for this: synonyms, abbreviations, full "
-                'names (mkt, marketing, "Ana Pérez"). Searched with the weight of the '
-                "title."
-            ),
-        ] = [],  # noqa: B006
-        files: Annotated[
-            list[str],
-            Field(description="Project-relative files this memory is about (globs allowed)."),
-        ] = [],  # noqa: B006
-        related: Annotated[list[str], Field(description="Related notes (paths or names).")] = [],  # noqa: B006
-        supersedes: Annotated[
-            str | None, Field(description="Memory this one replaces; it becomes superseded.")
-        ] = None,
-        source: Annotated[str | None, Field(description="Commit sha or PR.")] = None,
-        due: Annotated[str | None, Field(description="YYYY-MM-DD; required for reminders.")] = None,
-        valid_until: Annotated[
-            str | None, Field(description="YYYY-MM-DD after which the memory no longer holds.")
-        ] = None,
-        status: Annotated[
-            str, Field(description="active | speculative | superseded | archived.")
-        ] = "active",
-        force: Annotated[
-            bool, Field(description="Create it even if a near-duplicate exists.")
-        ] = False,
-        slug: Annotated[
-            str | None,
-            Field(
-                description="File-name slug: 1-40 lowercase letters, digits and hyphens, without "
-                "the date. Derived from the title when omitted."
-            ),
-        ] = None,
+        type: _TypeArg,
+        title: _TitleArg,
+        body: _BodyArg,
+        project: _ProjectArg = None,
+        priority: _PriorityArg = None,
+        tags: _TagsArg = [],  # noqa: B006
+        keywords: _KeywordsArg = [],  # noqa: B006
+        files: _FilesArg = [],  # noqa: B006
+        related: _RelatedArg = [],  # noqa: B006
+        supersedes: _SupersedesArg = None,
+        source: _SourceArg = None,
+        due: _DueArg = None,
+        valid_until: _ValidUntilArg = None,
+        status: _StatusArg = "active",
+        force: _ForceArg = False,
+        slug: _SlugArg = None,
     ) -> str:
         """Store a memory as memory/<project>/<type folder>/YYYY-MM-DD-<slug>.md.
 
@@ -129,6 +149,10 @@ def register(server: MCPServer, engine: Engine) -> None:
                 )
             )
 
+
+def _register_revise(server: MCPServer, engine: Engine) -> None:
+    """Register the revise tool on ``server``."""
+
     @server.tool(structured_output=False)
     def revise(
         note: NoteArg,
@@ -169,6 +193,10 @@ def register(server: MCPServer, engine: Engine) -> None:
             return dump(
                 memory.revise(engine, note, action, old, new, text, heading, fields, by, value)
             )
+
+
+def _register_review(server: MCPServer, engine: Engine) -> None:
+    """Register the review tool on ``server``."""
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
     def review(
