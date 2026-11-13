@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import invalid
+from episteme.index import is_past
 from episteme.markdown import (
     ParsedNote,
     body_without_title,
@@ -198,7 +199,7 @@ def _saved(engine: Engine, project: str) -> list[Any]:
         "project = ? and type = 'session' and status = 'active' and path like ?",
         (project, "%/checkpoint-%"),
     )
-    return [r for r in rows if not (r["valid_until"] and r["valid_until"] < iso)]
+    return [r for r in rows if not is_past(r["valid_until"], iso)]
 
 
 def _row_title(engine: Engine, row: Any) -> str:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from episteme.index import is_past
 from episteme.memory.schema import UPCOMING_DAYS
 from episteme.memory.scoring import _neg_date, entry_line, welcome_score
 from episteme.vault import today
@@ -125,7 +126,7 @@ def _is_candidate(r: Any, iso: str) -> bool:
     """Whether ``r`` can be listed under "Normas" or "Memorias"."""
     if r["type"] in ("session", "reminder"):
         return False
-    return not (r["valid_until"] and r["valid_until"] < iso)
+    return not is_past(r["valid_until"], iso)
 
 
 def _bucket(rows: list[Any], now: dt.date, upcoming_days: int) -> _Buckets:

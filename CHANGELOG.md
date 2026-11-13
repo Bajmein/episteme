@@ -8,6 +8,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - Refactor interno para bajar la complejidad del código (PR #63 a #75), guiado por el análisis de CodeScene: funciones más cortas y con menos anidación en el motor de búsqueda y lectura, el vault, el parser de Markdown, el índice, las memorias y los hooks. No cambia nada de lo que se usa: las herramientas, sus parámetros, sus respuestas y sus mensajes de error son los mismos.
 
+### Corregido
+
+- El archivado automático de memorias vencidas (`archive_expired = true`) ya no archiva una memoria a la que se le quitó `valid_until` a mano después de indexarla. Antes, si el índice aún no se había puesto al día, la daba por vencida. Ahora todas las comprobaciones de vencimiento leen `valid_until` como fecha, y una fecha ausente o ilegible nunca vence.
+
 ## [0.10.0] - 2026-11-13
 
 ### Añadido

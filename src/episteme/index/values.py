@@ -21,6 +21,15 @@ def as_date(value: Any) -> str | None:
     return None
 
 
+def is_past(value: Any, iso: str) -> bool:
+    """Whether a frontmatter date falls before ``iso`` (``YYYY-MM-DD``).
+
+    A missing or unreadable date never does, so it never makes a note expire.
+    """
+    date = as_date(value)
+    return date is not None and date < iso
+
+
 def as_int(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 

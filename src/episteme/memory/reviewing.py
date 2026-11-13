@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import EpistemeError, invalid
+from episteme.index import is_past
 from episteme.markdown import (
     body_without_title,
 )
@@ -37,8 +38,7 @@ def expired_memories(rows: list[Any], iso: str) -> list[Any]:
         r
         for r in rows
         if r["status"] == "active"
-        and r["valid_until"]
-        and r["valid_until"] < iso
+        and is_past(r["valid_until"], iso)
         and not (
             r["type"] == "session" and r["path"].rsplit("/", 1)[-1].startswith(CHECKPOINT_PREFIX)
         )
@@ -46,7 +46,7 @@ def expired_memories(rows: list[Any], iso: str) -> list[Any]:
 
 
 def _still_expired(nf: NoteFile, iso: str) -> bool:
-    return nf.fm.get("status") == "active" and str(nf.fm.get("valid_until") or "") < iso
+    return nf.fm.get("status") == "active" and is_past(nf.fm.get("valid_until"), iso)
 
 
 def archive_expired(engine: Engine) -> list[str]:

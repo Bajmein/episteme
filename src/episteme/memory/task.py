@@ -6,6 +6,7 @@ import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import invalid
+from episteme.index import is_past
 from episteme.markdown import (
     body_without_title,
     clip,
@@ -165,7 +166,7 @@ def _is_linkable(r: Any, project: str, iso: str) -> bool:
         return False
     if r["project"] not in (project, "_shared"):
         return False
-    return not (r["valid_until"] and r["valid_until"] < iso)
+    return not is_past(r["valid_until"], iso)
 
 
 def _linked_memories(engine: Engine, chosen: list[str], project: str) -> list[Any]:

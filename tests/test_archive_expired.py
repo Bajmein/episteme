@@ -94,3 +94,20 @@ def test_stale_index_is_rechecked_against_file(vault: Path, engine: Engine) -> N
     )
     assert memory.archive_expired(engine) == []
     assert _status(vault, rel) == "active"
+
+
+@pytest.mark.parametrize("new", ["", "valid_until: 2026-1-5\n"])
+def test_stale_index_without_a_readable_date_is_not_archived(
+    vault: Path, engine: Engine, new: str
+) -> None:
+    rel = write(vault, "memory/fabrik/lessons/2026-10-20-sin.md", "lesson", "S", "2026-10-01")
+    engine.index.refresh()
+    text = (vault / rel).read_text(encoding="utf-8")
+    (vault / rel).write_text(
+        text.replace("valid_until: 2026-10-01\n", new), encoding="utf-8", newline=""
+    )
+
+    archived = memory.archive_expired(engine)
+
+    assert archived == []
+    assert _status(vault, rel) == "active"
