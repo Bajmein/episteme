@@ -14,12 +14,15 @@ Guía para Claude Code en este repo.
 ## Cómo se trabaja
 
 - Dependencias con `uv` (`uv sync`, `uv add`). Nada de `pip install` suelto.
+- Python: el paquete pide `>=3.14` (`requires-python`, ruff `py314`); aquí y en el CI se usa 3.15, fijado en `.python-version`.
+- Dependabot (`.github/dependabot.yml`): PR semanal agrupado del ecosistema `uv` (`chore(deps)`) y mensual de GitHub Actions (`chore(ci)`).
 - Antes de cada commit: `uv run ruff check` y `uv run pytest` en verde.
 - SDK de MCP 2.x: la clase es `MCPServer` (antes `FastMCP`). `instructions=` se pasa siempre por keyword (por posición acaba en `title`). Dependencia fijada: `mcp>=2.3,<3`. Si algo no coincide con lo esperado, manda el código del SDK en `.venv`.
 - `tests/fixtures/vault/` es el vault de prueba (`docs/` es una copia real; `memory/` y `episteme.toml` son sintéticos). **No se modifica**: los tests lo copian a `tmp_path` antes de escribir. `tests/fixtures/project/` hace de `project_dir` para `checkpoint` y `tests/fixtures/omega-export/` sirve para `migrate_omega.py`.
 - Los tests de integración arrancan el servidor por stdio (`stdio_client` y `ClientSession` del SDK) y llaman a los tools como lo haría Claude Code.
 - El CI corre en `ubuntu-latest` y `windows-latest`, y en local no hay Windows. En `src/`, rutas con `os.path` o `pathlib`, nunca comparando contra `"/"` fijo (así nació el bug de `project_relative` en 0.4.0); las lecturas con `encoding="utf-8"` y las escrituras con `newline=""`. Un test que solo tiene sentido en POSIX lleva `skipif(sys.platform == "win32", reason=…)`; uno que reproduce Windows en Linux hace `monkeypatch.setattr(os, "path", ntpath)`. Los subprocesos de los tests heredan `os.environ` (sin `SYSTEMROOT` Python no arranca en Windows).
-- Las versiones se publican con un tag en local (`git tag vX && git push --tags`) con CI en verde; los proyectos fijan el tag en su config.
+- Las versiones se publican con un tag en local (`git tag vX && git push --tags`) con CI en verde; los proyectos fijan el tag en su config. En el release también se cambia el badge de versión del `README.md`, que es estático.
+- La cabecera del `README.md` es un bloque centrado con el banner (`static/banner-episteme.jpg`) y los badges en estilo plano; el de CI es el nativo de GitHub porque shields.io no lee workflows de un repo privado.
 
 ## Convenciones
 

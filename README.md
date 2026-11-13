@@ -1,4 +1,21 @@
+<div align="center">
+
+![episteme: Agentic Memory & Knowledge Vault. Persistent Knowledge Engine for AI Workflows.](static/banner-episteme.jpg)
+
+[![CI](https://github.com/Bajmein/episteme/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Bajmein/episteme/actions/workflows/ci.yml)
+[![Versión](https://img.shields.io/badge/versi%C3%B3n-v0.8.0-8B5CF6)](https://github.com/Bajmein/episteme/tags)
+[![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![uv](https://img.shields.io/badge/uv-Astral-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
+[![MCP SDK](https://img.shields.io/badge/MCP_SDK-2.x-005571)](https://github.com/modelcontextprotocol/python-sdk)
+[![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html)
+[![Obsidian](https://img.shields.io/badge/Obsidian-vault_Markdown-7C3AED?logo=obsidian&logoColor=white)](https://obsidian.md/)
+[![Plataformas](https://img.shields.io/badge/Linux_%7C_macOS_%7C_Windows-soportados-2EA44F)](#instalación)
+
 # episteme
+
+**Documentación y memoria de proyectos para agentes, servida por MCP desde un vault Markdown**
+
+</div>
 
 Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentación y memoria de proyectos. El agente, y los hooks a través de `mcp_tool`, interactúan con él solo mediante tools: no hay CLI.
 
@@ -6,7 +23,7 @@ Servidor MCP que sirve un vault Markdown compatible con Obsidian como documentac
 
 ## Instalación
 
-Se distribuye con `uvx` desde un tag de GitHub. El repo es privado: hay que ser colaborador de `Bajmein/episteme`. Requiere [uv](https://docs.astral.sh/uv/) y git; uv consigue Python 3.11 o superior si falta (el servidor comprueba al arrancar que SQLite tiene FTS5).
+Se distribuye con `uvx` desde un tag de GitHub. El repo es privado: hay que ser colaborador de `Bajmein/episteme`. Requiere [uv](https://docs.astral.sh/uv/) y git; uv consigue Python 3.14 o superior si falta (el servidor comprueba al arrancar que SQLite tiene FTS5).
 
 Lo más corto es instalar la skill `episteme-setup` (ver más abajo) y correr `/episteme-setup` en cada proyecto: registra el servidor, fusiona permisos y hooks en `.claude/settings.json` y añade la regla al `CLAUDE.md`. A mano, son estos pasos.
 
@@ -277,6 +294,12 @@ uv run python -m episteme --vault "$PWD/tests/fixtures/vault" --project fabrik
 ```
 
 Los tests copian `tests/fixtures/vault/` a un directorio temporal antes de escribir y arrancan el servidor por stdio con el cliente del SDK de MCP.
+
+El paquete pide Python 3.14 o superior (`requires-python`); el repo se desarrolla y se prueba en 3.15, fijado en `.python-version`, que es la versión que `uv` usa aquí y en el CI (Linux y Windows).
+
+Dependabot (`.github/dependabot.yml`) abre un PR agrupado por semana con las dependencias de Python (`pyproject.toml` y `uv.lock`) y otro al mes con las GitHub Actions.
+
+El banner es `static/banner-episteme.jpg` (1600 px de ancho, JPEG progresivo). El badge de versión de la cabecera es estático: se cambia en cada release, junto con el tag de los ejemplos de instalación.
 
 ### Medir variantes de búsqueda
 
