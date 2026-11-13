@@ -13,7 +13,7 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field, ValidationError
 
 from episteme import checkpoint as checkpoints
-from episteme import hookmode, memory
+from episteme import hookmode, memory, prompting
 from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError, invalid
@@ -71,6 +71,14 @@ def _validation_message(exc: ValidationError) -> str:
     )
 
 
+def _created(text: str) -> bool:
+    """Whether a ``remember`` result wrote a note (a blocked duplicate has created: false)."""
+    try:
+        return json.loads(text).get("created") is True
+    except (ValueError, AttributeError):
+        return False
+
+
 class EpistemeServer(MCPServer):
     """MCPServer whose tool errors read ``<code>: <what failed>. <what to do>``."""
 
@@ -93,6 +101,9 @@ class EpistemeServer(MCPServer):
             self._log(name, arguments, text, start, False)
             return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)
         text = "".join(getattr(b, "text", "") for b in getattr(result, "content", None) or [])
+        if name in ("remember", "revise") and "hook_event" not in arguments:
+            if name == "revise" or _created(text):
+                prompting.WRITES += 1
         self._log(name, arguments, text, start, True)
         return result
 
@@ -146,7 +157,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
             str | None,
             Field(
                 description="active, speculative, superseded or archived. Default: everything "
-                "except superseded and archived memories; \"any\" includes them "
+                'except superseded and archived memories; "any" includes them '
                 "(rows then carry status and superseded_by)."
             ),
         ] = None,
@@ -188,9 +199,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         """
         with engine.session():
             return dump(
-                engine.search(
-                    query, path, type, tags, project, status, limit, zone, facets, match
-                )
+                engine.search(query, path, type, tags, project, status, limit, zone, facets, match)
             )
 
     @server.tool(annotations=READ_ONLY, structured_output=False)
@@ -491,8 +500,6 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         hookmode.check(hook_event)
         with engine.session():
             if mode == "welcome":
-                from episteme import prompting
-
                 project = engine.need_project(project)
                 blocks: list[str] = []
                 entries: list[dict[str, Any]] = []
@@ -502,10 +509,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                     resend = hook_event == "SessionStart"
                     fresh = engine.index.mark_welcomed(session)
                     st = prompting.reset(session) if resend else prompting.state(session)
-                    if resend:
-                        memory.surface_forget(session)
                     if st.baseline is None:
-                        st.baseline = prompting.stamp(engine, project)
+                        st.baseline = prompting.WRITES
                     if not resend:
                         st.prompts += 1
                     welcomed = fresh or resend
@@ -519,10 +524,12 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                     text, found = memory.welcome(engine, project)
                     blocks.append(text)
                     entries += found
+                    st.delivered.update(e["path"] for e in found)
                 elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:
                     text, found = prompting.overdue_block(engine, project)
                     blocks.append(text)
                     entries += found
+                    st.delivered.update(e["path"] for e in found)
                     st.reminded_at = st.prompts
                 if prompt:
                     text, found = prompting.recall(
@@ -531,7 +538,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
                     blocks.append(text)
                     entries += found
                 if session and not welcomed:
-                    blocks.append(prompting.nudge(engine, project, st))
+                    blocks.append(prompting.nudge(st))
                 text = "\n\n".join(b for b in blocks if b)
                 if hook_event:
                     return hookmode.render(hook_event, text)
@@ -556,8 +563,8 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         session: Annotated[
             str | None,
             Field(
-                description="Hooks pass ${session_id}: the same memories about a file are not"
-                " repeated within 30 minutes."
+                description="Hooks pass ${session_id}: a memory already shown by surface in"
+                " this session is not repeated."
             ),
         ] = None,
     ) -> str:
@@ -566,12 +573,17 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
         Returns JSON {"file", "memories": [{"path", "title", "type", "priority", "match"}]}.
         """
         hookmode.check(hook_event)
+        st = prompting.state(session) if session else None
+        skip = st.surfaced if st is not None and hook_event else None
         with engine.session():
-            text, data = memory.surface(engine, file, project_dir, project, limit, relative_path)
-        if hook_event and session and text:
+            text, data = memory.surface(
+                engine, file, project_dir, project, limit, relative_path, skip
+            )
+        if st is not None:
             paths = [m["path"] for m in data["memories"]]
-            if memory.surface_repeated(session, data["file"], paths):
-                text = ""
+            st.delivered.update(paths)
+            if hook_event:
+                st.surfaced.update(paths)
         return hookmode.render(hook_event, text) if hook_event else dump(data)
 
     @server.tool(annotations=READ_ONLY, structured_output=False)

@@ -105,20 +105,20 @@ def test_recall_no_repeat_skip_command_and_literal(engine: Engine) -> None:
     assert prompting.recall(engine, "${prompt}", "fabrik", SessionState(), set()) == ("", [])
 
 
-def test_nudge(engine: Engine) -> None:
-    st = SessionState(baseline=prompting.stamp(engine, "fabrik"))
+def test_nudge() -> None:
+    st = SessionState(baseline=prompting.WRITES)
     st.prompts = 7
-    assert prompting.nudge(engine, "fabrik", st) == ""
+    assert prompting.nudge(st) == ""
     st.prompts = 8
-    assert "aún no se ha guardado ninguna memoria" in prompting.nudge(engine, "fabrik", st)
+    assert "aún no se ha guardado ninguna memoria" in prompting.nudge(st)
     st.prompts = 9
-    assert prompting.nudge(engine, "fabrik", st) == ""
+    assert prompting.nudge(st) == ""
 
 
-def test_nudge_not_shown_after_remember(engine: Engine) -> None:
-    st = SessionState(baseline=prompting.stamp(engine, "fabrik"), prompts=8)
-    _remember(engine, "Zorbflux dicta el formato")
-    assert prompting.nudge(engine, "fabrik", st) == ""
+def test_nudge_not_shown_after_remember() -> None:
+    st = SessionState(baseline=prompting.WRITES, prompts=8)
+    prompting.WRITES += 1
+    assert prompting.nudge(st) == ""
 
 
 async def test_integration_cadence(vault: Path) -> None:
@@ -142,10 +142,10 @@ async def test_integration_cadence(vault: Path) -> None:
 
 async def test_integration_recall(vault: Path) -> None:
     async with mcp_client(vault, today="2026-10-22") as c:
+        await c.ok("context", mode="welcome", session="rec")
         made = await c.ok(
             "remember", type="decision", title="Zorbflux dicta el formato", body="Sin más."
         )
-        await c.ok("context", mode="welcome", session="rec")
         r = await c.ok("context", mode="welcome", session="rec", prompt="sobre zorbflux")
         assert made["path"] in r["text"]
         assert [e["kind"] for e in r["entries"]] == ["recall"]

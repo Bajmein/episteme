@@ -319,9 +319,7 @@ def _link_candidates(
     if project == SHARED:
         rows = engine.index.memories("status = 'active'")
     else:
-        rows = engine.index.memories(
-            "status = 'active' and project in (?, ?)", (project, SHARED)
-        )
+        rows = engine.index.memories("status = 'active' and project in (?, ?)", (project, SHARED))
     files = _files_of(engine)
     found = []
     for row in rows:
@@ -861,34 +859,6 @@ def _by_priority(rows: list[Any]) -> list[Any]:
     return sorted(rows, key=lambda r: (-(r["priority"] or 0), _neg_date(r["created"]), r["path"]))
 
 
-SURFACE_REPEAT_SECONDS = 1800
-_SURFACED: dict[tuple[str, str], tuple[float, tuple[str, ...]]] = {}
-
-
-def surface_repeated(session: str, rel: str, paths: list[str], now: float | None = None) -> bool:
-    """True if the same set of paths was already surfaced for (session, rel) within the window."""
-    if now is None:
-        import time
-
-        now = time.monotonic()
-    key = (session, rel)
-    shown = tuple(sorted(paths))
-    prev = _SURFACED.get(key)
-    if prev is not None and prev[1] == shown and now - prev[0] < SURFACE_REPEAT_SECONDS:
-        return True
-    _SURFACED[key] = (now, shown)
-    if len(_SURFACED) > 500:
-        for k in [k for k, (t, _) in _SURFACED.items() if now - t >= SURFACE_REPEAT_SECONDS]:
-            del _SURFACED[k]
-    return False
-
-
-def surface_forget(session: str) -> None:
-    """Drop what was surfaced to a session: after compact or clear its context lost it."""
-    for key in [k for k in _SURFACED if k[0] == session]:
-        del _SURFACED[key]
-
-
 def surface(
     engine: Engine,
     file: str,
@@ -896,7 +866,9 @@ def surface(
     project: str | None,
     limit: int,
     relative_path: str | None = None,
+    skip: set[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
+    """Memories about a file. ``skip``: paths already shown; left out of the text, not the data."""
     if not (1 <= limit <= 50):
         raise invalid(f"limit must be 1-50, got {limit}.")
     project = engine.need_project(project)
@@ -930,8 +902,11 @@ def surface(
     chosen = [(r, "files") for r in by_files] + [(r, "mention") for r in by_mention]
     chosen = chosen[:limit]
     text = ""
-    if chosen:
-        text = "\n".join([f"Memories about {rel}:"] + [entry_line(r) for r, _ in chosen])
+    fresh = [r for r, _ in chosen if r["path"] not in (skip or ())]
+    if fresh:
+        shown = len(chosen) - len(fresh)
+        head = f"Memories about {rel}" + (f" (+{shown} ya mostradas)" if shown else "") + ":"
+        text = "\n".join([head] + [entry_line(r) for r in fresh])
     data = {
         "file": rel,
         "memories": [
@@ -1236,9 +1211,7 @@ def review(
                     }
                 )
 
-    similar = _similar_groups(
-        [r for r in active if r["type"] not in ("session", "reminder")], toks
-    )
+    similar = _similar_groups([r for r in active if r["type"] not in ("session", "reminder")], toks)
 
     cut_titles = []
     for r in mems:
