@@ -111,7 +111,8 @@ async def test_revise_checks_only_incoming_text(vault: Path) -> None:
             assert err.startswith("invalid_argument:") and "looks like a secret" in err
     # A note that already holds a false positive stays editable.
     note = vault / path
-    note.write_text(note.read_text().replace("Texto inicial.", f"Texto {secret}"))
+    text = note.read_text(encoding="utf-8").replace("Texto inicial.", f"Texto {secret}")
+    note.write_text(text, encoding="utf-8", newline="")
     async with mcp_client(vault) as c:
         res = await c.ok("revise", note=path, action="append", text="Otra línea.")
         assert res["changed"] == ["body"]
@@ -132,14 +133,14 @@ def test_migrate_reports_secret_and_continues(vault: Path, tmp_path: Path) -> No
     export = tmp_path / "omega-memories"
     shutil.copytree(EXPORT, export)
     lessons = export / "lessons"
-    src = (lessons / "mem-1b2c3d4e5f60.md").read_text()
+    src = (lessons / "mem-1b2c3d4e5f60.md").read_text(encoding="utf-8")
     bad = src.replace("mem-1b2c3d4e5f60", "mem-ffffffffffff").replace(
         "el watchdog de OMEGA cierra el proceso stdio al pasar 1024 MB de RSS; subir "
         "OMEGA_RSS_LIMIT_MB a 2048 en .mcp.json.",
         "clave del despliegue " + "ghp_" + "a" * 36,
     )
     assert "ghp_" in bad
-    (lessons / "mem-ffffffffffff.md").write_text(bad)
+    (lessons / "mem-ffffffffffff.md").write_text(bad, encoding="utf-8", newline="")
     out = io.StringIO()
     done = _script().migrate(export, vault, "fabrik", out=out)
     text = out.getvalue()
