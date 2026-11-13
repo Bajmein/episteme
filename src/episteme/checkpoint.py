@@ -166,9 +166,10 @@ def save(engine: Engine, project_dir: str | None, project: str | None) -> dict[s
         "valid_until": now + dt.timedelta(days=VALID_DAYS),
         "helpful": 0,
         "task_title": title,
+        "worktree": _project_dir(project_dir).as_posix(),
     }
     for key, value in fm.items():
-        if key not in meta and key != "task_title":
+        if key not in meta:
             meta[key] = value
     validate(meta)
     rel = f"{zone.path}/{project}/sessions/checkpoint-{slugify(title)}.md"
@@ -188,10 +189,20 @@ def _saved(engine: Engine, project: str) -> list[Any]:
     return [r for r in rows if not (r["valid_until"] and r["valid_until"] < iso)]
 
 
+def _same_worktree(engine: Engine, row: Any, here: str) -> bool:
+    """True when the checkpoint was saved in ``here`` or predates the ``worktree`` key."""
+    saved = engine.index.props(row["path"]).get("worktree")
+    return not saved or os.path.normcase(str(saved)) == here
+
+
 def _saved_result(engine: Engine, row: Any) -> dict[str, Any]:
     props = engine.index.props(row["path"])
     title = props.get("task_title") or row["title"]
-    content = f"# Checkpoint · {title}\n\n{body_without_title(row['body'] or '')}".strip()
+    body = f"# Checkpoint · {title}\n\n{body_without_title(row['body'] or '')}".strip()
+    content = (
+        f"Saved checkpoint from {row['created']}, not the live state: check it against the "
+        f"working tree and do not redo listed steps without a current request.\n\n{body}"
+    )
     return {
         "found": True,
         "path": row["path"],
@@ -246,6 +257,9 @@ def restore(
             "source": "state",
         }
     rows = _saved(engine, project)
+    if project_dir:
+        here = os.path.normcase(_project_dir(project_dir).as_posix())
+        rows = [r for r in rows if _same_worktree(engine, r, here)]
     if task_title:
         wanted = task_title.strip()
         rows = [

@@ -14,7 +14,7 @@ Los hooks `type: "mcp_tool"` de Claude Code tratan lo que devuelve el tool como 
 
 Invariantes:
 - Si no hay nada que decir, la salida es una cadena vacía, nunca un JSON con texto vacío.
-- El texto tiene un tope de 10 000 caracteres y se corta en un salto de línea.
+- El texto tiene un tope de 10 000 caracteres, marca incluida: si lo pasa, se corta en un salto de línea y termina con `\n[episteme: output cut at 10,000 characters]`.
 - **Nunca** se devuelve `decision`, `permissionDecision` ni `continue: false`. `checkpoint` en `PreCompact` no bloquea jamás la compactación, y `constraints` avisa sin bloquear: si el servidor no está conectado, el hook falla sin bloquear y la sesión sigue.
 - `checkpoint` es la única lectura fuera del vault y se limita a `state_glob` resuelto contra `project_dir`.
 

@@ -38,7 +38,8 @@ def test_render_caps_at_newline() -> None:
     text = "\n".join("x" * 99 for _ in range(300))
     raw = hookmode.render("UserPromptSubmit", text)
     plain = json.loads(raw)["hookSpecificOutput"]["additionalContext"]
-    assert len(plain) <= 10_000 and plain.endswith("x")
+    assert len(plain) <= 10_000 and plain.endswith(hookmode.CUT_MARK)
+    assert plain.removesuffix(hookmode.CUT_MARK).endswith("x")
     ctx = json.loads(hookmode.render("PostToolUse", text))["hookSpecificOutput"]
     assert len(ctx["additionalContext"]) <= 10_000
 
