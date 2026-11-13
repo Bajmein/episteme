@@ -1,6 +1,7 @@
 ---
 paths:
   - src/episteme/server.py
+  - src/episteme/tools/**
   - src/episteme/engine.py
   - src/episteme/errors.py
   - src/episteme/prompting.py
