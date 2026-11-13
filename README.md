@@ -294,3 +294,15 @@ uv run scripts/bench_calls.py ab --vault ~/.episteme --project <proyecto> --prom
 
 - `replay` toma la ráfaga más larga de `search` y `read` del registro (llamadas del mismo proceso separadas por menos de `--gap` segundos; `--pid` la limita a un proceso) y la repite dos veces sobre la copia: tal como quedó registrada y por lotes (las búsquedas de una palabra con los mismos filtros, en un `search` con `match="any"`; las lecturas de nota entera, en `read(notes=[…])`). Imprime llamadas, caracteres y milisegundos de cada variante, las rutas únicas que devuelve `search` y cuántas de las notas leídas salen en el `search` por lote. Las consultas y las rutas solo se imprimen con `--show`.
 - `ab` lanza `claude -p` con el mismo prompt contra dos servidores, cada uno con su copia del vault: el de referencia (`--baseline-cmd`, por defecto el tag `v0.6.0`) y el de este checkout. Alterna `--runs` corridas por variante y cuenta lo que cada una deja en el registro de su copia: llamadas por tool, cuántas usan `match="any"` (`search_any`) y `notes` (`read_batch`), caracteres, turnos y coste. Las respuestas quedan en `--out` (por defecto `~/.cache/episteme-bench/<fecha>/`) para juzgar la calidad a mano.
+
+### Medir si las memorias entregadas se leen
+
+Para saber si lo que los hooks entregan (`context`, `surface`, `constraints`) llega a leerse, el script cruza el registro de actividad con las lecturas del agente. Es de solo lectura: abre `.index/activity.db` con `mode=ro` y lee la fecha `created` de las memorias desde las notas; no abre ni crea el índice.
+
+```bash
+uv run scripts/measure_uptake.py --vault ~/.episteme [--project <proyecto>] [--days 30] [--min-deliveries 3] [--old-days 90]
+```
+
+Imprime una tabla por memoria (entregas por hook, lecturas del agente, las que ocurren en la misma sesión después de una entrega y apariciones en `search`) y un resumen: (a) porcentaje de entregas seguidas de lectura, (b) memorias entregadas `--min-deliveries` veces o más y nunca leídas, (c) memorias de más de `--old-days` días con y sin lectura, (d) sesiones con lecturas y sin ninguna llamada a `remember` o `revise`, (e) búsquedas del agente sin resultados agrupadas por consulta, `match` y `zone`, por frecuencia (es el dato que decide el reintento con prefijo).
+
+Límites: una fila de `context` no distingue la bienvenida del recall, así que se cuentan juntas (`welcome` es solo el subconjunto con `mode=welcome`); las entregas sin sesión no se pueden emparejar con una lectura y cuentan como no seguidas.
