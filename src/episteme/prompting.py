@@ -174,7 +174,8 @@ def review_notice(engine: Engine, project: str) -> str:
     return (
         f"episteme · mantención pendiente en {project}: {' · '.join(parts)}. "
         f'Corre review(project="{project}", zone="memory") y propón qué archivar o unificar; '
-        "no cambies nada sin aprobación."
+        "no cambies nada sin aprobación. "
+        "Con poco tiempo: solo los 3 casos más claros, las vencidas primero."
     )
 
 
