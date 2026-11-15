@@ -121,14 +121,17 @@ def _edges(active: list[Memory], resolver: Resolver) -> list[Edge]:
     ]
 
 
+def _is_related_pair(src: str, dst: str | None, kind: str) -> bool:
+    return kind == RELATED and dst is not None and dst != src
+
+
 def _related_neighbours(active: list[Memory], edges: list[Edge]) -> dict[str, set[str]]:
     """Active memory -> the active memories joined to it by ``related``, either way."""
     nb: dict[str, set[str]] = {m.rel: set() for m in active}
     for src, dst, kind in edges:
-        if kind != RELATED or dst is None or dst == src or dst not in nb:
-            continue
-        nb[src].add(dst)
-        nb[dst].add(src)
+        if dst in nb and _is_related_pair(src, dst, kind):
+            nb[src].add(dst)
+            nb[dst].add(src)
     return nb
 
 
@@ -157,29 +160,44 @@ def _pair_stats(
     return list(pairs.values()), buckets
 
 
+def _select(
+    memories: list[Memory], zone: str | None, project: str | None
+) -> tuple[list[Memory], list[Memory]]:
+    """The active memories and the ones to measure (those of ``project`` when given)."""
+    active = [m for m in memories if m.active]
+    measured = [m for m in active if project is None or m.project == project]
+    if measured:
+        return active, measured
+    raise EpistemeError(
+        INVALID_ARGUMENT,
+        f"no active memories found (zone {zone or 'default'}, project {project or 'any'}). "
+        "Pass --zone with a memory folder or check --project.",
+    )
+
+
+def _link_counts(measured: list[Memory], edges: list[Edge]) -> tuple[Counter, Counter]:
+    """Links by kind and unresolved links by kind, for the measured memories."""
+    mine = {m.rel for m in measured}
+    mine_edges = [e for e in edges if e[0] in mine]
+    kinds = Counter(kind for _src, _dst, kind in mine_edges)
+    unresolved = Counter(kind for _src, dst, kind in mine_edges if dst is None)
+    return kinds, unresolved
+
+
 def measure(vault_root: Path, zone: str | None = None, project: str | None = None) -> dict:
     """Link counts, neighbour buckets and vocabulary overlap of the active memories."""
     vault = Vault(Path(vault_root))
     paths, memories = _load(vault, _zone_prefix(vault, zone))
-    active = [m for m in memories if m.active]
-    measured = [m for m in active if project is None or m.project == project]
-    if not measured:
-        raise EpistemeError(
-            INVALID_ARGUMENT,
-            f"no active memories found (zone {zone or 'default'}, project {project or 'any'}). "
-            "Pass --zone with a memory folder or check --project.",
-        )
+    active, measured = _select(memories, zone, project)
     resolver = Resolver(paths)
     edges = _edges(active, resolver)
-    by_rel = {m.rel: m for m in active}
     nb = _related_neighbours(active, edges)
-    mine = {m.rel for m in measured}
-    mine_edges = [e for e in edges if e[0] in mine]
-    pairs, buckets = _pair_stats(measured, by_rel, nb)
+    pairs, buckets = _pair_stats(measured, {m.rel: m for m in active}, nb)
+    kinds, unresolved = _link_counts(measured, edges)
     return {
         "active": len(measured),
-        "kinds": Counter(kind for _src, _dst, kind in mine_edges),
-        "unresolved": Counter(kind for _src, dst, kind in mine_edges if dst is None),
+        "kinds": kinds,
+        "unresolved": unresolved,
         "with_related": sum(1 for m in measured if nb[m.rel]),
         "orphans": _orphans(measured, _edges(memories, resolver)),
         "scoped": len(measured) - buckets[0],
