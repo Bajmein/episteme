@@ -124,7 +124,8 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
         Returns JSON {"created", "path", "similar": [{"path", "title", "similarity", "type",
         "project"}], "new_tags": [{"tag", "similar"}] (tags no other note has, with close
         spellings), "link_candidates": [{"path", "title", "reason"}] (up to 5 memories sharing
-        a file or 2 tags; consider related)}. The last two appear only when non-empty.
+        a file or 2 tags; consider related), "keywords_hint": str (when keywords is empty and the
+        type is not session or reminder)}. The last three appear only when non-empty.
         """
         with engine.session():
             return dump(

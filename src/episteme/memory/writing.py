@@ -278,6 +278,18 @@ def _duplicate_reply(similar: list[dict[str, Any]], blocking: dict[str, Any]) ->
     return {"created": False, "path": None, "similar": similar, "hint": hint}
 
 
+KEYWORDS_HINT = (
+    "No keywords. Add the other words people use for this (synonyms, abbreviations, "
+    'full names) with revise(action="set", fields={"keywords": [...]}): '
+    "search matches whole words."
+)
+
+
+def _needs_keywords_hint(fm: dict[str, Any]) -> bool:
+    """True for a memory saved without keywords, unless it is a session or a reminder."""
+    return not fm.get("keywords") and fm.get("type") not in ("session", "reminder")
+
+
 def _extras(engine: Engine, project: str, fm: dict[str, Any], skip: set[str]) -> dict[str, Any]:
     """Hints for the caller: tags no other note has and memories worth linking."""
     extras: dict[str, Any] = {}
@@ -287,6 +299,8 @@ def _extras(engine: Engine, project: str, fm: dict[str, Any], skip: set[str]) ->
     candidates = _link_candidates(engine, project, fm, skip)
     if candidates:
         extras["link_candidates"] = candidates
+    if _needs_keywords_hint(fm):
+        extras["keywords_hint"] = KEYWORDS_HINT
     return extras
 
 
