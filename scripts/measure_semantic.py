@@ -251,10 +251,10 @@ def _load_zone(vault_root: Path, zone: str | None) -> dict[str, tuple[str, set[s
 
 
 def _query_rows(
-    queries: list[str], vectors: list[list[float]], notes: dict, corpus: _Corpus, opts: Options
+    queries: list[tuple[str, list[float]]], notes: dict, corpus: _Corpus, opts: Options
 ) -> list[dict]:
     rows = []
-    for query, qvec in zip(queries, vectors, strict=True):
+    for query, qvec in queries:
         keyword = _keyword_hits(query, notes)
         near = _neighbours(qvec, corpus, opts)
         rows.append({
@@ -290,9 +290,10 @@ def measure(
     corpus_s = time.perf_counter() - start
     n_corpus = len(timed.latencies)
     qvectors = _embed_all(timed, unique) if unique else []
+    queried = list(zip(unique, qvectors, strict=True))
     return {
         "docs": len(notes),
-        "rows": _query_rows(unique, qvectors, notes, corpus, opts),
+        "rows": _query_rows(queried, notes, corpus, opts),
         "pairs": _missed_pairs(rels, corpus.vectors, [notes[r][2] for r in rels]),
         "corpus_s": corpus_s,
         "top_k": opts.top_k,
