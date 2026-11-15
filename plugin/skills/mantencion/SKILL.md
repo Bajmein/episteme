@@ -1,7 +1,7 @@
 ---
 name: mantencion
 description: Mantención de las memorias de episteme con review y revise. Úsala cuando la bienvenida diga «mantención pendiente», o cuando pidan limpiar, ordenar, unificar o revisar memorias, ver duplicadas, contradicciones o vencidas, o con /episteme:mantencion.
-argument-hint: "[proyecto | *]"
+argument-hint: "[proyecto | *] [corta]"
 ---
 
 # /episteme:mantencion: revisar y ordenar las memorias
@@ -57,3 +57,13 @@ Antes de proponer algo sobre una memoria, léela: `read(notes=[...])` con todas 
 - No toques las memorias `session` de checkpoints: las gestiona `checkpoint`.
 - Una norma de prioridad 5 no se archiva ni se reemplaza sin que la persona lo pida de forma explícita.
 - Al terminar, corre `review` otra vez y muestra los totales de antes y de después.
+
+## 6. Ronda corta
+
+Con el argumento `corta`, o si la persona dice que tiene poco tiempo, toma como mucho 3 casos, en este orden:
+
+1. Las memorias de `expired` (vencidas).
+2. El grupo de `similar` con mayor `similarity`.
+3. La contradicción de `contradictions` con mayor `similarity`.
+
+Propón cada caso, aplica solo lo aprobado y termina diciendo cuántos pendientes quedan (los `totals` de un `review` nuevo). Las reglas de la sección 5 siguen valiendo.

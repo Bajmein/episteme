@@ -52,7 +52,8 @@ def test_notice_matches_review_totals(engine: Engine) -> None:
     assert notice == (
         f"episteme · mantención pendiente en fabrik: {' · '.join(parts)}. "
         'Corre review(project="fabrik", zone="memory") y propón qué archivar o unificar; '
-        "no cambies nada sin aprobación."
+        "no cambies nada sin aprobación. "
+        "Con poco tiempo: solo los 3 casos más claros, las vencidas primero."
     )
     for k, label in order:
         assert (f"{label} " in notice) == (totals[k] > 0)
