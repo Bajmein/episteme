@@ -81,6 +81,21 @@ Sin `--terms`, mide los `--top` tokens alfabéticos de `--min-len` letras o más
 
 Criterio: adoptar el lematizador si une variantes que hoy se pierden (ganancia de `stem` sobre `exact`) sin el ruido del trigrama; si casi todo lo que añade el trigrama son coincidencias dentro de otras palabras, no compensa.
 
+## Medir si los embeddings aportan
+
+Para decidir si vale la pena un módulo de búsqueda semántica, el script compara la búsqueda por palabras con los vecinos de un modelo de embeddings servido por Ollama. Es de solo lectura: recorre las notas con `Vault.iter_notes`, abre `.index/activity.db` con `mode=ro` y no abre ni crea el índice del vault.
+
+```bash
+ollama pull bge-m3
+uv run scripts/measure_semantic.py --vault ~/.episteme [--zone memory] [--url http://localhost:11434] [--model bge-m3] [--queries-file q.txt] [--days 30] [--top-k 5] [--min-score 0.5] [--examples 15]
+```
+
+Requisitos: Ollama en marcha (`ollama serve`) y el modelo descargado. La URL solo puede ser `http` en `localhost`, `127.0.0.1` o `::1`; no hay dependencias nuevas. Las consultas salen de `--queries-file` (una por línea) y de las consultas de `search` y las tareas de `context` de los últimos `--days` días del registro de actividad.
+
+El informe trae: por consulta, las memorias que da la coincidencia por palabras (todas las palabras útiles están en la nota) frente a los `--top-k` vecinos sobre `--min-score`, con los nuevos; los pares de memorias muy parecidos en significado que la similitud por tokens no detecta; la latencia de la primera llamada y la mediana de las siguientes, y el tiempo de calcular todos los vectores; y un resumen con cuántas consultas ganan algo.
+
+Criterio: construir el módulo solo si hay aciertos nuevos claros en español (vecinos nuevos que de verdad responden a la consulta, no ruido).
+
 ## Medir llamadas por ráfaga
 
 Para ver cuántas llamadas hace un agente al consultar el vault y cuánto ahorran los lotes (`search(match="any")` y `read(notes=[…])`), el script lee el registro de actividad. Es de solo lectura: abre `.index/activity.db` con `mode=ro` y trabaja sobre una copia temporal de las notas; el índice del vault real no se abre ni se crea.
