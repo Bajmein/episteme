@@ -106,3 +106,17 @@ Imprime una tabla por memoria (entregas por hook, lecturas del agente, las que o
 Límites: una fila de `context` no distingue la bienvenida del recall, así que se cuentan juntas (`welcome` es solo el subconjunto con `mode=welcome`); las entregas sin sesión no se pueden emparejar con una lectura y cuentan como no seguidas.
 
 Los diagramas del README y de `docs/` están en `static/diagrams/`: cada uno es un HTML (la fuente, hecho con el plugin diagram-design en su variante oscura) y el PNG que se incrusta, exportado del HTML a 2x. Si cambia el HTML, se vuelve a exportar el PNG.
+
+## Medir el grafo de enlaces
+
+Para decidir si conviene que los hooks sugieran memorias vecinas por `related`, el script mide cuánto grafo hay de verdad entre las memorias. Es de solo lectura: recorre el vault con `Vault.iter_notes` y `parse`, y no abre ni crea el índice.
+
+```bash
+uv run scripts/measure_links.py --vault ~/.episteme [--zone memory] [--project <proyecto>] [--examples 15]
+```
+
+Sin índice, un destino se resuelve por ruta exacta (con o sin `.md`) o por nombre base único en el vault; lo demás cuenta como «sin resolver» (el informe lo dice). Solo se miden las memorias activas; con `--project` se miden las de ese proyecto (sus vecinas pueden ser también `_shared`).
+
+El informe trae: memorias activas; enlaces por tipo (`body`, `related`, `supersedes`, `contradicts`) con los no resueltos; memorias con al menos un `related` (saliente o entrante) y su porcentaje; huérfanas (sin enlaces en ningún sentido); la distribución de vecinas `related` activas del mismo proyecto o `_shared` por memoria (0, 1, 2, 3 o más); cuántos de esos pares comparten pocas palabras (Jaccard de tokens < 0,2, es decir, vocabulario distinto) y ejemplos de pares, de menor a mayor similitud.
+
+Criterio: vale la pena usar las vecinas si una parte apreciable de las memorias tiene `related` y esas vecinas usan otro vocabulario (es lo que un hook ganaría, porque la búsqueda literal ya encuentra las que comparten palabras). Si casi ninguna memoria tiene `related`, o las vecinas repiten el vocabulario, no compensa.
