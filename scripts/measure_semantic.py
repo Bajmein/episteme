@@ -21,6 +21,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -199,12 +200,27 @@ def _keyword_hits(query: str, notes: dict[str, tuple[str, set[str], set[str]]]) 
     return [rel for rel, (_t, toks, _d) in notes.items() if want <= toks]
 
 
-def _neighbours(
-    qvec: list[float], rels: list[str], vectors: list[list[float]], top_k: int, min_score: float
-) -> list[tuple[str, float]]:
-    scored = sorted(((rel, _dot(qvec, v)) for rel, v in zip(rels, vectors, strict=True)),
-                    key=lambda p: (-p[1], p[0]))
-    return [(rel, s) for rel, s in scored[:top_k] if s >= min_score]
+@dataclass(frozen=True)
+class Options:
+    """Settings of one measurement."""
+
+    zone: str | None = None
+    top_k: int = DEFAULT_TOP_K
+    min_score: float = DEFAULT_MIN_SCORE
+
+
+@dataclass(frozen=True)
+class _Corpus:
+    """Memory paths with their vectors, in the same order."""
+
+    rels: list[str]
+    vectors: list[list[float]]
+
+
+def _neighbours(qvec: list[float], corpus: _Corpus, opts: Options) -> list[tuple[str, float]]:
+    pairs = zip(corpus.rels, corpus.vectors, strict=True)
+    scored = sorted(((rel, _dot(qvec, v)) for rel, v in pairs), key=lambda p: (-p[1], p[0]))
+    return [(rel, s) for rel, s in scored[: opts.top_k] if s >= opts.min_score]
 
 
 def _missed_pairs(
@@ -222,15 +238,7 @@ def _missed_pairs(
     return sorted(pairs, key=lambda p: -p[2])
 
 
-def measure(
-    vault_root: Path,
-    embed: Embed,
-    zone: str | None = None,
-    queries: list[str] | None = None,
-    top_k: int = DEFAULT_TOP_K,
-    min_score: float = DEFAULT_MIN_SCORE,
-) -> dict:
-    """Keyword hits vs semantic neighbours per query, missed pairs and latencies."""
+def _load_zone(vault_root: Path, zone: str | None) -> dict[str, tuple[str, set[str], set[str]]]:
     vault = Vault(Path(vault_root))
     prefix = _zone_prefix(vault, zone)
     notes = _load_notes(vault, prefix)
@@ -239,35 +247,57 @@ def measure(
             INVALID_ARGUMENT,
             f"no notes found under zone {prefix!r}. Pass --zone with a folder of the vault.",
         )
-    unique = list(dict.fromkeys(q for q in (queries or []) if q.strip()))
-    timed = _Timed(embed)
-    rels = list(notes)
-    start = time.perf_counter()
-    vectors = _embed_all(timed, [notes[r][0] for r in rels])
-    corpus_s = time.perf_counter() - start
-    n_corpus = len(timed.latencies)
-    qvectors = _embed_all(timed, unique) if unique else []
+    return notes
+
+
+def _query_rows(
+    queries: list[str], vectors: list[list[float]], notes: dict, corpus: _Corpus, opts: Options
+) -> list[dict]:
     rows = []
-    for query, qvec in zip(unique, qvectors, strict=True):
+    for query, qvec in zip(queries, vectors, strict=True):
         keyword = _keyword_hits(query, notes)
-        near = _neighbours(qvec, rels, vectors, top_k, min_score)
+        near = _neighbours(qvec, corpus, opts)
         rows.append({
             "query": query,
             "keyword": keyword,
             "semantic": near,
             "new": [(r, s) for r, s in near if r not in keyword],
         })
-    lat = timed.latencies
+    return rows
+
+
+def _latencies(lat: list[float], n_corpus: int) -> dict:
     return {
-        "docs": len(notes),
-        "rows": rows,
-        "pairs": _missed_pairs(rels, vectors, [notes[r][2] for r in rels]),
         "first_s": lat[0] if lat else 0.0,
         "median_s": statistics.median(lat[1:]) if len(lat) > 1 else 0.0,
         "query_s": statistics.median(lat[n_corpus:]) if len(lat) > n_corpus else 0.0,
+    }
+
+
+def measure(
+    vault_root: Path,
+    embed: Embed,
+    queries: list[str] | None = None,
+    opts: Options = Options(),
+) -> dict:
+    """Keyword hits vs semantic neighbours per query, missed pairs and latencies."""
+    notes = _load_zone(vault_root, opts.zone)
+    unique = list(dict.fromkeys(q for q in (queries or []) if q.strip()))
+    timed = _Timed(embed)
+    rels = list(notes)
+    start = time.perf_counter()
+    corpus = _Corpus(rels, _embed_all(timed, [notes[r][0] for r in rels]))
+    corpus_s = time.perf_counter() - start
+    n_corpus = len(timed.latencies)
+    qvectors = _embed_all(timed, unique) if unique else []
+    return {
+        "docs": len(notes),
+        "rows": _query_rows(unique, qvectors, notes, corpus, opts),
+        "pairs": _missed_pairs(rels, corpus.vectors, [notes[r][2] for r in rels]),
         "corpus_s": corpus_s,
-        "top_k": top_k,
-        "min_score": min_score,
+        "top_k": opts.top_k,
+        "min_score": opts.min_score,
+        **_latencies(timed.latencies, n_corpus),
     }
 
 
@@ -323,6 +353,11 @@ def render(result: dict, examples: int) -> str:
     return "\n".join(out) + "\n"
 
 
+def _bad_numbers(args: argparse.Namespace) -> bool:
+    """True when ``--top-k`` is below 1 or ``--days`` or ``--examples`` is negative."""
+    return args.top_k < 1 or args.days < 0 or args.examples < 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, type=Path)
@@ -335,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
     ap.add_argument("--examples", type=int, default=DEFAULT_EXAMPLES)
     args = ap.parse_args(argv)
-    if args.top_k < 1 or args.days < 0 or args.examples < 0:
+    if _bad_numbers(args):
         print(
             f"{INVALID_ARGUMENT}: --top-k must be 1 or more and --days and --examples 0 or "
             "more. Fix the flag.",
@@ -349,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.queries_file:
             queries += args.queries_file.read_text(encoding="utf-8").splitlines()
         queries += load_activity_queries(args.vault, args.days)
-        result = measure(args.vault, embed, args.zone, queries, args.top_k, args.min_score)
+        result = measure(args.vault, embed, queries, Options(args.zone, args.top_k, args.min_score))
     except EpistemeError as e:
         print(e, file=sys.stderr)
         return 1

@@ -50,7 +50,7 @@ def test_semantic_neighbours_add_what_keywords_miss(tmp_path: Path) -> None:
     m = _script()
     root = _vault(tmp_path)
 
-    result = m.measure(root, _fake_embed, queries=["mascota"], top_k=5, min_score=0.5)
+    result = m.measure(root, _fake_embed, queries=["mascota"])
 
     row = result["rows"][0]
     assert row["keyword"] == []
