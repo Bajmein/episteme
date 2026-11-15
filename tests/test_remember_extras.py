@@ -100,3 +100,24 @@ async def test_new_tags_and_link_candidates(vault: Path) -> None:
         assert "new_tags" not in c3
         plain = await c.ok("remember", type="insight", title="Cuarta", body="Cuatro sin nada.")
         assert "new_tags" not in plain and "link_candidates" not in plain
+
+
+async def test_keywords_hint(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        bare = await c.ok("remember", type="insight", title="Sin claves", body="Uno solo.")
+        assert bare["keywords_hint"].startswith("No keywords.")
+        dry = await c.ok(
+            "remember", type="insight", title="Seco", body="Otro distinto.", dry_run=True
+        )
+        assert "keywords_hint" in dry
+        full = await c.ok(
+            "remember", type="insight", title="Con claves", body="Dos diferente.",
+            keywords=["sinonimo"],
+        )  # fmt: skip
+        assert "keywords_hint" not in full
+        rem = await c.ok(
+            "remember", type="reminder", title="Aviso", body="Recordar esto.", due="2026-12-01"
+        )
+        assert "keywords_hint" not in rem
+        ses = await c.ok("remember", type="session", title="Jornada", body="Resumen del dia.")
+        assert "keywords_hint" not in ses
