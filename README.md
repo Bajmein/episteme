@@ -24,12 +24,15 @@
   <a href="#instalación">Instalación</a> ·
   <a href="#uso-diario">Uso diario</a> ·
   <a href="#las-10-herramientas">Herramientas</a> ·
+  <a href="#límites">Límites</a> ·
   <a href="#documentación">Documentación</a>
 </p>
 
 ---
 
 ## Qué es
+
+Claude Code es como un colega brillante que cada mañana llega sin recordar nada de ayer.
 
 Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que Claude consulta y completa mientras trabaja.
 
@@ -139,7 +142,21 @@ No hay comandos que aprender: se usa conversando con Claude.
   <img src="static/diagrams/hooks-sesion.png" alt="Secuencia de una sesión: al enviar un mensaje, antes y después de usar un archivo, al compactar y al reanudar, Claude Code llama a una herramienta de episteme y recibe contexto" width="880">
 </p>
 
-Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. La configuración está en [Hooks](docs/hooks.md).
+Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. Funcionan como un semáforo, no como un muro: Claude puede leer la norma y aun así equivocarse. La configuración está en [Hooks](docs/hooks.md).
+
+#### Quién hace qué y cuándo
+
+| Cuándo | Quién | Qué pasa |
+| :-- | :-- | :-- |
+| Al escribir un mensaje | hook | La primera vez entrega la bienvenida; después sugiere memorias que vienen al caso |
+| Antes de editar un archivo | hook | Muestra las normas de ese archivo. No pausa ni bloquea la edición |
+| Después de leer o editar un archivo | hook | Muestra lo que ya se sabe de él |
+| Al compactar y al reanudar | hook | Guarda el estado del trabajo y lo recupera |
+| En la primera bienvenida, como mucho una vez por periodo | episteme | Avisa de lo pendiente de revisar; si lo activas, archiva lo vencido y hace un backup |
+| Cuando lo necesita | Claude | Busca, lee, guarda («recuerda que…») y corrige memorias |
+| Cuando tú lo pides | tú | `/episteme:mantencion` para revisar y ordenar |
+
+Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes. episteme no revisa el vault en segundo plano: la revisión corre cuando alguien la pide.
 
 ## Las 10 herramientas
 
@@ -172,6 +189,13 @@ Los parámetros y el comportamiento exacto de cada una están en [Tools y memori
 | `session` | El estado del trabajo, guardado al compactar |
 
 Cada memoria lleva una prioridad del 1 al 5: las de prioridad 5 son las normas que Claude ve al empezar cada sesión.
+
+## Límites
+
+- **Busca por palabras, no por significado.** «marketing» no encuentra una nota que solo dice «mkt». Por eso cada memoria lleva `keywords` con sinónimos y siglas, que Claude añade al guardar.
+- **Avisa, no obliga.** Las normas llegan a Claude a tiempo, pero nada le impide ignorarlas.
+- **No se ordena solo.** Unificar memorias repetidas y resolver contradicciones lo apruebas tú, con `/episteme:mantencion`. Conviene activar `archive_expired = true` (ver [Mantención](docs/mantencion.md)).
+- **El filtro de contraseñas conoce los formatos habituales.** Una clave con un formato raro puede pasar: no dictes secretos.
 
 ## Documentación
 
