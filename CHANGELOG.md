@@ -4,6 +4,16 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- `remember` avisa con `keywords_hint` cuando una memoria se guarda sin `keywords`.
+- `scripts/measure_semantic.py`: compara la búsqueda por palabras con los vecinos semánticos de un modelo de Ollama.
+- `scripts/measure_links.py`: mide cuántas memorias están enlazadas por `related` y qué aportarían sus vecinas.
+
+### Cambiado
+
+- El aviso de mantención y `/episteme:mantencion corta` ofrecen una ronda corta con los 3 casos más claros.
+
 ## [0.10.1] - 2026-11-13
 
 ### Cambiado
