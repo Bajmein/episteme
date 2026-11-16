@@ -68,14 +68,23 @@ def _mention_matches(
     return _by_priority([r for r in rows if r["path"] in hit_paths and r["path"] not in seen])
 
 
-def _surface_text(rel: str, chosen: list[tuple[Any, str]], skip: set[str] | None) -> str:
-    """The hook text for the chosen memories, leaving out the paths in ``skip``."""
-    fresh = [r for r, _ in chosen if r["path"] not in (skip or ())]
-    if not fresh:
+def _surface_text(rel: str, picked: list[tuple[Any, str]], omitted: int) -> str:
+    """The hook text for ``picked``; ``omitted`` counts the memories already shown."""
+    if not picked:
         return ""
-    shown = len(chosen) - len(fresh)
-    head = f"Memories about {rel}" + (f" (+{shown} ya mostradas)" if shown else "") + ":"
-    return "\n".join([head] + [entry_line(r) for r in fresh])
+    head = f"Memories about {rel}" + (f" (+{omitted} ya mostradas)" if omitted else "") + ":"
+    return "\n".join([head] + [entry_line(r) for r, _ in picked])
+
+
+def _pick(
+    ranked: list[tuple[Any, str]], skip: set[str] | None, limit: int
+) -> tuple[list[tuple[Any, str]], int]:
+    """Up to ``limit`` of ``ranked`` not in ``skip``, and how many ``skip`` left out.
+
+    Skipping before cutting: if the first ``limit`` were already shown, the next ones come.
+    """
+    fresh = [(r, m) for r, m in ranked if r["path"] not in (skip or ())]
+    return fresh[:limit], len(ranked) - len(fresh)
 
 
 def _surface_data(rel: str, chosen: list[tuple[Any, str]]) -> dict[str, Any]:
@@ -104,7 +113,7 @@ def surface(
     relative_path: str | None = None,
     skip: set[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Memories about a file. ``skip``: paths already shown; left out of the text, not the data."""
+    """Memories about a file. ``skip``: paths already shown, left out before cutting at limit."""
     if not (1 <= limit <= 50):
         raise invalid(f"limit must be 1-50, got {limit}.")
     project = engine.need_project(project)
@@ -117,8 +126,12 @@ def surface(
     )
     by_files = _by_files(rows, files, file, rel)
     by_mention = _mention_matches(engine, rel, project, rows, files, by_files)
-    chosen = ([(r, "files") for r in by_files] + [(r, "mention") for r in by_mention])[:limit]
-    return _surface_text(rel, chosen, skip), _surface_data(rel, chosen)
+    ranked = [(r, "files") for r in by_files] + [(r, "mention") for r in by_mention]
+    picked, omitted = _pick(ranked, skip, limit)
+    # With skip (a hook with a session) the data is what the text shows, so that the
+    # session records those as shown; without it, the first ``limit``.
+    data = _surface_data(rel, picked if skip is not None else ranked[:limit])
+    return _surface_text(rel, picked, omitted), data
 
 
 def constraints(

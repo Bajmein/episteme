@@ -190,7 +190,10 @@ def _register_revise(server: MCPServer, engine: Engine) -> None:
         (new, text, string values in fields) that looks like a credential is refused. set on a
         memory that changes type or project moves the file to memory/<project>/<type folder>/
         (same name, so [[name]] links keep working) and returns the new path with "moved_from".
-        Returns JSON {"path", "action", "changed"}.
+        feedback value="outdated" sets flagged: true; only set with fields={"flagged": null}
+        clears it.
+        Returns JSON {"path", "action", "changed"}, plus "by" (supersede: the replacing
+        memory) and "moved_from" (set that moved the file).
         """
         with engine.session():
             return dump(
@@ -237,6 +240,10 @@ def _register_review(server: MCPServer, engine: Engine) -> None:
         them here; in practice broken links and invalid frontmatter, since memories live in
         memory zones) are not mixed in: they go under "read_only", with the same categories
         and their own "totals".
+        "stale" lists active memories older than 90 days (from created) never marked helpful,
+        except preferences and constraints. "flagged" lists memories marked outdated with
+        revise(action="feedback", value="outdated"); once fixed, clear the mark with
+        revise(action="set", fields={"flagged": null}) or they keep showing up.
         """
         with engine.session():
             return dump(memory.review(engine, path, project, limit, zone))
