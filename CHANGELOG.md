@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Cambiado
+
+- El vault de prueba (`tests/fixtures/vault/docs/claude-code/` y `docs/llms.txt`) ya no copia documentación de terceros: son 45 notas propias, breves y sintéticas, con la misma ruta y los mismos nombres. Solo afecta a los tests.
+
 ## [0.12.0] - 2026-11-16
 
 ### Añadido

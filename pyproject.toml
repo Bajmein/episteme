@@ -34,7 +34,7 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
-# Each test copies the fixture vault (~2 GB per run): keep only what failed, from one run.
+# Each test copies the fixture vault (~0.3 MB each): keep only what failed, from one run.
 tmp_path_retention_policy = "failed"
 tmp_path_retention_count = 1
 
