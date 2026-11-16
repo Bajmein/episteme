@@ -6,29 +6,31 @@ disable-model-invocation: true
 
 # Conectar un proyecto a episteme
 
-episteme (repo privado `Bajmein/episteme`) sirve un vault Markdown, por defecto el global `~/.episteme` (`%USERPROFILE%\.episteme` en Windows), como documentación y memoria. Toda interacción pasa por sus 10 tools MCP; no hay CLI. El uso de cada tool está en `docs/tools.md` del repo.
+episteme (`Bajmein/episteme`) sirve un vault Markdown, por defecto el global `~/.episteme` (`%USERPROFILE%\.episteme` en Windows), como documentación y memoria. Toda interacción pasa por sus 10 tools MCP; no hay CLI. El uso de cada tool está en `docs/tools.md` del repo.
 
 Pide a la persona el nombre del proyecto (`<p>`, p. ej. `fabrik`). Trabaja desde la raíz del proyecto.
 
 Antes de empezar, comprueba:
 - `uv --version` y `git --version` responden. Si falta uv: `curl -LsSf https://astral.sh/uv/install.sh | sh` en Linux o macOS, `winget install --id=astral-sh.uv -e` en Windows.
-- Cómo llega la persona a GitHub: por SSH si `ssh -T git@github.com` saluda con su usuario; si no, por HTTPS. En Windows, HTTPS (Git for Windows trae Git Credential Manager, que abre el navegador para iniciar sesión la primera vez). El repo es privado: hace falta ser colaborador de `Bajmein/episteme`.
-- El último tag: `git ls-remote --tags --sort=-v:refname --refs <url> | head -1` (en PowerShell, `Select-Object -First 1` en vez de `head -1`), con `<url>` igual a `git@github.com:Bajmein/episteme` o `https://github.com/Bajmein/episteme`.
+- El repo es público: se instala por HTTPS y no hace falta iniciar sesión en GitHub ni ser colaborador. `episteme` en PyPI es otro proyecto: instala siempre con `--from git+https://…`.
+- El último tag: `git ls-remote --tags --sort=-v:refname --refs https://github.com/Bajmein/episteme | head -1` (en PowerShell, `Select-Object -First 1` en vez de `head -1`).
 
 ## 1. Registrar el servidor (scope local)
 
-Por SSH (Linux o macOS):
+Por HTTPS (Linux o macOS):
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@<tag> episteme --project <p>
+  uvx --from git+https://github.com/Bajmein/episteme@<tag> episteme --project <p>
 ```
 
-Por HTTPS (Windows, o sin clave SSH), en una sola línea, porque el `\` de bash no parte líneas en PowerShell:
+En Windows (PowerShell), en una sola línea, porque el `\` de bash no parte líneas en PowerShell:
 
 ```powershell
 claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@<tag> episteme --project <p>
 ```
+
+Solo si la persona ya usa SSH con GitHub (`ssh -T git@github.com` saluda con su usuario) y lo prefiere, vale `git+ssh://git@github.com/Bajmein/episteme@<tag>` en lugar de la URL HTTPS.
 
 - Sin `--vault` usa el vault global y lo crea si falta. Para otro vault, `--vault '<ruta absoluta>'` (en Windows vale `C:\Users\ana\notas`).
 - Comillas **simples** en `'${HOME}…'` (o en otra variable de entorno tuya, como `'${EPISTEME_REPO}…'`): Claude Code la expande al arrancar y la config no lleva la ruta de la máquina. Con comillas dobles, la shell la expande al registrar y queda la ruta absoluta.
@@ -52,8 +54,8 @@ Elige el archivo con la persona:
 - `.claude/settings.json` si todos los que trabajan en el repo tienen episteme registrado.
 
 Fusiona en ese archivo el contenido de `${CLAUDE_SKILL_DIR}/settings.json`, el `settings.json` de esta skill, sin pisar lo que ya haya:
-- `allow` de los 7 tools de solo lectura (`remember`, `revise` y `checkpoint` siguen pidiendo permiso);
-- `deny` de `Read/Edit(~/.episteme/**)` (`Edit` ya cubre Write; una regla `Write(...)` nunca coincide), `Bash(obsidian *)` y `Bash(omega *)`: el acceso al vault se cierra con permisos, no con el prompt. Si el vault no es el de por defecto, cambia la ruta en las dos reglas;
+- `allow` de los 7 tools de consulta (`remember`, `revise` y `checkpoint` siguen pidiendo permiso). `context` no es de solo lectura: su primera bienvenida puede archivar memorias vencidas y lanzar el backup si la mantención está activada en el `episteme.toml` del vault. Se queda en `allow` porque los hooks lo necesitan sin preguntar;
+- `deny` de `Read/Edit(~/.episteme/**)` (`Edit` ya cubre Write; una regla `Write(...)` nunca coincide), `Bash(obsidian *)` y `Bash(omega *)`: el acceso al vault se cierra con permisos, no con el prompt. El `deny` de `Read`/`Edit` es una barrera contra el uso accidental, no un aislamiento: no cubre Bash. Si el vault no es el de por defecto, cambia la ruta en las dos reglas;
 - los 6 hooks `mcp_tool`: bienvenida, recordatorios y sugerencias por mensaje en `UserPromptSubmit` (con `${prompt}`), `constraints` antes de `Edit|Write|mcp__serena__.*` y `surface` después de `Read|Edit|Write|mcp__serena__.*` (con Serena el tool no trae `file_path`: pasa `relative_path`), `checkpoint` save en `PreCompact`, y en `SessionStart` (`compact|clear`) `checkpoint` restore y la bienvenida otra vez (con `${source}`), más las memorias que la sesión escribió o leyó antes. Todos devuelven `hookSpecificOutput.additionalContext`; los de `SessionStart` añaden un `systemMessage` en verde que le dice a la persona qué se recuperó.
 - `"autoMemoryEnabled": false`: la memoria automática de Claude Code (`MEMORY.md`) compite con episteme y el agente acaba guardando en dos sitios. Pregunta a la persona antes de escribirlo. El `MEMORY.md` vive por proyecto en `~/.claude/projects/<proyecto>/memory/`, no en la raíz del repo. Si el proyecto ya tiene uno con contenido, ofrece pasarlo a episteme con `remember` antes de desactivarla. Un `autoMemoryEnabled: true` explícito se respeta: no lo cambies. En `.claude/settings.json` (versionado) la clave afecta a todo el equipo: prefiere `settings.local.json`.
 
@@ -103,24 +105,33 @@ Necesita un clone de episteme (`<clone>`) y Claude Code reiniciado (paso 1). En 
 
 ```bash
 # 1. Copia de OMEGA en reposo (sin sesiones abiertas): ~/.omega solo se lee.
-mkdir -p /tmp/omega-home && cp ~/.omega/{omega.db,omega.db-wal,omega.db-shm,.key} /tmp/omega-home/
-sqlite3 /tmp/omega-home/omega.db 'PRAGMA wal_checkpoint(TRUNCATE)'
+#    mktemp -d crea una carpeta privada (0700): la base y la clave no quedan legibles para otros usuarios.
+d=$(mktemp -d)
+mkdir "$d/omega-home" && cp ~/.omega/{omega.db,omega.db-wal,omega.db-shm,.key} "$d/omega-home/"
+sqlite3 "$d/omega-home/omega.db" 'PRAGMA wal_checkpoint(TRUNCATE)'
 # 2. Con qué etiquetas de proyecto guardó OMEGA las memorias (nombre, ruta o ninguna).
-sqlite3 /tmp/omega-home/omega.db 'select project, count(*) from memories group by project'
+sqlite3 "$d/omega-home/omega.db" 'select project, count(*) from memories group by project'
 # 3. Exportar desde la copia, para que OMEGA no escriba en ~/.omega.
-OMEGA_HOME=/tmp/omega-home omega export-obsidian --output-dir /tmp/omega --project <p> --limit 0
+OMEGA_HOME="$d/omega-home" omega export-obsidian --output-dir "$d/omega" --project <p> --limit 0
 # 4. Ensayo sobre el vault (el dry-run refresca el índice: mejor sobre una copia).
 cd <clone>
-uv run scripts/migrate_omega.py --export /tmp/omega/omega-memories \
-  --vault "$HOME/.episteme" --project <p> --omega-db /tmp/omega-home/omega.db \
+uv run scripts/migrate_omega.py --export "$d/omega/omega-memories" \
+  --vault "$HOME/.episteme" --project <p> --omega-db "$d/omega-home/omega.db" \
   --map-project '<ruta del proyecto en OMEGA>=<p>' --dry-run
+```
+
+Haz todo en la misma shell (la variable `d` no pasa de una shell a otra). Cuando el ensayo esté bien, repite el paso 4 sin `--dry-run` y, solo entonces, borra la copia (lleva la clave de OMEGA):
+
+```bash
+rm -rf "$d"
 ```
 
 En Windows (PowerShell; sin la CLI de `sqlite3`, se usa la de Python a través de uv):
 
 ```powershell
 # 1. Copia de OMEGA en reposo (sin sesiones abiertas).
-$omega = "$env:TEMP\omega-home"
+$d = Join-Path $env:TEMP "episteme-$([guid]::NewGuid())"
+$omega = "$d\omega-home"
 New-Item -ItemType Directory -Force $omega | Out-Null
 Copy-Item "$HOME\.omega\omega.db*", "$HOME\.omega\.key" $omega
 uv run --no-project python -c "import sqlite3,sys; sqlite3.connect(sys.argv[1]).execute('PRAGMA wal_checkpoint(TRUNCATE)')" "$omega\omega.db"
@@ -128,11 +139,13 @@ uv run --no-project python -c "import sqlite3,sys; sqlite3.connect(sys.argv[1]).
 uv run --no-project python -c "import sqlite3,sys; [print(*r) for r in sqlite3.connect(sys.argv[1]).execute('select project, count(*) from memories group by project')]" "$omega\omega.db"
 # 3. Exportar desde la copia.
 $env:OMEGA_HOME = $omega
-omega export-obsidian --output-dir "$env:TEMP\omega" --project <p> --limit 0
+omega export-obsidian --output-dir "$d\omega" --project <p> --limit 0
 Remove-Item Env:OMEGA_HOME
 # 4. Ensayo, en una sola línea.
 cd <clone>
-uv run scripts/migrate_omega.py --export "$env:TEMP\omega\omega-memories" --vault "$HOME\.episteme" --project <p> --omega-db "$omega\omega.db" --map-project '<ruta del proyecto en OMEGA>=<p>' --dry-run
+uv run scripts/migrate_omega.py --export "$d\omega\omega-memories" --vault "$HOME\.episteme" --project <p> --omega-db "$omega\omega.db" --map-project '<ruta del proyecto en OMEGA>=<p>' --dry-run
+# Tras repetir el paso 4 sin --dry-run, y solo entonces, borra la copia (lleva la clave de OMEGA):
+# Remove-Item -Recurse -Force $d
 ```
 
 - OMEGA suele etiquetar el mismo proyecto con el nombre y con la ruta (`/home/ana/app`, `C:\Users\ana\app`). Lo que no sea `--project` ni esté en un `--map-project` se omite: pasa un `--map-project` por cada ruta del paso 2. La salida del ensayo termina con `Proyectos omitidos: …` para comprobar que no queda ninguna del proyecto.

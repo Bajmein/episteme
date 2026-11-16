@@ -13,6 +13,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - El filtro de credenciales detecta más casos: claves `sk-proj-…`, `Authorization: Bearer …`, asignaciones como `DB_PASSWORD=…`, claves con caracteres de ancho cero (se normaliza antes de buscar) y `$secreto` en una URL (solo `$NOMBRE` en mayúsculas cuenta como marcador). Ahora también revisa `project` en `remember` y los valores anidados de `revise(action="set")`; `edit` rechaza un texto con más credenciales que el que reemplaza.
 - `remember` y `revise` rechazan en `files` los patrones que casan con todo (`*`, `**`, `**/*`, `*.*`).
 - `project` solo admite `[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}`: ya no se crean carpetas ocultas ni nombres de 300 caracteres, y una ruta con byte nulo o demasiado larga da `invalid_argument` sin mostrar la ruta absoluta del vault.
+- `/episteme:setup` ya no copia la base y la clave de OMEGA a una ruta fija de `/tmp`: usa una carpeta privada (`mktemp -d`) y pide borrarla al terminar. `docs/migracion-omega.md` también usa `mktemp -d`.
+- La skill de setup y la documentación dejan de llamar «de solo lectura» a `context` (su primera bienvenida puede archivar memorias vencidas y lanzar el backup) y aclaran que el `deny` de `Read`/`Edit` sobre el vault no cubre Bash: es una barrera contra el uso accidental, no un aislamiento.
 
 ### Añadido
 
@@ -22,6 +24,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Cambiado
 
+- La instalación es por HTTPS (`git+https://github.com/Bajmein/episteme@<tag>`) y no pide credenciales; `git+ssh` queda como alternativa. La documentación, `/episteme:setup` y `scripts/bench_calls.py` ya no hablan de repo privado ni de colaboradores.
+- `docs/instalacion.md` avisa de que `episteme` en PyPI es otro proyecto.
 - El ejemplo de `keywords` en la descripción de `remember` usa un nombre ficticio.
 - Los workflows fijan las acciones por SHA, declaran `permissions` mínimos y desvían los PR de forks y de Dependabot a `ubuntu-latest`.
 - El CI de Windows vuelve a correr en `main` y en los PR que tocan código, tests o dependencias, pero solo en un repo público (en uno privado se omite).

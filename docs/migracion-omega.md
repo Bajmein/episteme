@@ -3,12 +3,15 @@
 [← Volver al README](../README.md)
 
 ```bash
-omega export-obsidian --output-dir /tmp/omega --project fabrik --limit 1000
-uv run scripts/migrate_omega.py --export /tmp/omega/omega-memories \
+d=$(mktemp -d)   # carpeta privada (0700), no una ruta fija de /tmp
+omega export-obsidian --output-dir "$d/omega" --project fabrik --limit 1000
+uv run scripts/migrate_omega.py --export "$d/omega/omega-memories" \
   --vault "$HOME/.episteme" --project fabrik \
   --omega-db ~/.omega/omega.db \
   --map-project /home/ana/src/fabrik=fabrik --dry-run
 ```
+
+Haz todo en la misma shell (`d` no pasa de una shell a otra). Tras repetir el segundo comando sin `--dry-run`, borra el export con `rm -rf "$d"`.
 
 Sin `--dry-run` escribe; `--dry-run` cuenta lo mismo que la ejecución real. Usa la misma validación y detección de duplicados que `remember`, así que una segunda ejecución no duplica nada. Qué hace con cada cosa:
 

@@ -39,7 +39,7 @@ from episteme.index import query_terms
 from episteme.vault import INDEX_DIR
 
 REPO = Path(__file__).resolve().parents[1]
-BASELINE_CMD = "uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.6.0 episteme"
+BASELINE_CMD = "uvx --from git+https://github.com/Bajmein/episteme@v0.6.0 episteme"
 FILTERS = ("path", "type", "tags", "status", "zone")
 AB_TOOLS = ("search", "read", "context", "links")
 RUN_TIMEOUT = 900

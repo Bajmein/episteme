@@ -80,7 +80,7 @@ Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.
 
 ## Instalación
 
-**Necesitas** [uv](https://docs.astral.sh/uv/), git y ser colaborador del repo `Bajmein/episteme` (es privado). uv consigue Python por ti si falta.
+**Necesitas** [uv](https://docs.astral.sh/uv/) y git. uv consigue Python por ti si falta.
 
 ### Opción A · Con la skill (recomendada)
 
@@ -91,7 +91,7 @@ claude plugin marketplace add Bajmein/episteme
 claude plugin install episteme@episteme
 ```
 
-Más detalles (repo privado, actualizar, quitar) en la [guía de instalación](docs/instalacion.md#el-plugin).
+Más detalles (actualizar, quitar) en la [guía de instalación](docs/instalacion.md#el-plugin).
 
 Después, en cada proyecto que quieras conectar:
 
@@ -115,7 +115,7 @@ Un solo comando registra el servidor. Cambia `<proyecto>` por el nombre del tuyo
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.12.0 episteme --project <proyecto>
+  uvx --from git+https://github.com/Bajmein/episteme@v0.12.0 episteme --project <proyecto>
 ```
 
 **Windows** (PowerShell, en una sola línea)

@@ -2,20 +2,20 @@
 
 [← Volver al README](../README.md)
 
-Se distribuye con `uvx` desde un tag de GitHub. El repo es privado: hay que ser colaborador de `Bajmein/episteme`. Requiere [uv](https://docs.astral.sh/uv/) y git; uv consigue Python 3.14 o superior si falta (el servidor comprueba al arrancar que SQLite tiene FTS5).
+Se distribuye con `uvx` desde un tag de GitHub. El repo es público y se instala por HTTPS, sin credenciales. `episteme` en PyPI es otro proyecto: instala siempre con `--from git+https://…`. Requiere [uv](https://docs.astral.sh/uv/) y git; uv consigue Python 3.14 o superior si falta (el servidor comprueba al arrancar que SQLite tiene FTS5).
 
 Lo más corto es instalar el plugin (ver [El plugin](#el-plugin)) y correr `/episteme:setup` en cada proyecto: registra el servidor, fusiona permisos y hooks en `.claude/settings.json` y añade la regla al `CLAUDE.md`. A mano, son estos pasos.
 
 ## Linux y macOS
 
-Por `git+ssh`, con la misma clave que `git push`:
+Por HTTPS, que no pide credenciales:
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.12.0 episteme --project fabrik
+  uvx --from git+https://github.com/Bajmein/episteme@v0.12.0 episteme --project fabrik
 ```
 
-Sin clave SSH, vale la URL de Windows (`git+https://…`). Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
+Quien ya use SSH con GitHub puede usar `git+ssh://git@github.com/Bajmein/episteme@v0.12.0` en su lugar. Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
 
 Actualizar es cambiar el tag (`claude mcp remove --scope local episteme` y otra vez el `add`). Para desarrollo, una entrada aparte que no fija versión:
 
@@ -34,7 +34,7 @@ Requiere [Git for Windows](https://git-scm.com/download/win) (Claude Code ya lo 
 winget install --id=astral-sh.uv -e
 ```
 
-Se instala por HTTPS, y la primera vez Git Credential Manager abre el navegador para iniciar sesión en GitHub:
+Se instala por HTTPS, sin iniciar sesión en GitHub:
 
 ```powershell
 claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.12.0 episteme --project <proyecto>
@@ -60,7 +60,7 @@ claude plugin install episteme@episteme
 Los mismos dos comandos sirven en PowerShell. Después, reinicia Claude Code.
 
 - **Por máquina y por cuenta.** Los plugins viven en el directorio de configuración de Claude Code. Si usas varias cuentas (`CLAUDE_CONFIG_DIR` o lanzadores que lo cambian), repite la instalación con cada una.
-- **Repo privado.** Claude Code clona por SSH si `ssh -T git@github.com` responde; si no, por HTTPS, y entonces no pide credenciales: hace falta `gh auth login` y `gh auth setup-git` antes. `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` fuerza HTTPS. En Windows hace falta Git for Windows en el `PATH`.
+- **Sin credenciales.** El repo es público, así que el marketplace se clona sin iniciar sesión. El atajo `Bajmein/episteme` puede clonar por SSH: si no tienes clave SSH, usa `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` o la URL completa (`claude plugin marketplace add https://github.com/Bajmein/episteme`). En Windows hace falta Git for Windows en el `PATH`.
 - **Actualizar.** `claude plugin update episteme@episteme` y reinicia Claude Code (o `/reload-plugins`). Llegan cambios cuando sube la versión del plugin, que es la del release. La actualización automática viene apagada en los marketplaces de terceros; se enciende en `/plugin` → Marketplaces.
 - **Quitar.** `claude plugin uninstall episteme@episteme`.
 - **Quien tenía la skill enlazada** (versiones anteriores, en `~/.claude/skills/episteme-setup`): borra el enlace; si no, quedan las dos, `/episteme-setup` y `/episteme:setup`.
