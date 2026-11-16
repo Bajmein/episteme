@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.12.0] - 2026-11-16
+
 ### Añadido
 
 - `scripts/measure_semantic.py` lista las memorias huérfanas con sus candidatas a enlazar por significado, y dice cuáles ya ofrece `review` (`--link-score`).
@@ -218,7 +220,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.11.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/Bajmein/episteme/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Bajmein/episteme/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/Bajmein/episteme/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Bajmein/episteme/compare/v0.9.1...v0.10.0
