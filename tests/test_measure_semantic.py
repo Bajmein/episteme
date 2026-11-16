@@ -58,6 +58,33 @@ def test_semantic_neighbours_add_what_keywords_miss(tmp_path: Path) -> None:
     assert [(a, b) for a, b, _s, _t in result["pairs"]] == [("memory/a.md", "memory/b.md")]
 
 
+def test_keyword_side_falls_back_to_any_word_like_search(tmp_path: Path) -> None:
+    m = _script()
+    root = _vault(tmp_path)
+
+    result = m.measure(root, _fake_embed, queries=["perro factura", "perro ladra"])
+
+    any_row, all_row = result["rows"]
+    assert any_row["keyword"] == ["memory/a.md", "memory/c.md"]
+    assert {r for r, _ in any_row["new"]} == {"memory/b.md"}
+    assert all_row["keyword"] == ["memory/a.md"]
+
+
+def test_new_neighbours_are_split_by_strong_score(tmp_path: Path) -> None:
+    m = _script()
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        base = _fake_embed(texts)
+        return [[0.6, 0.8] if t == "zzz" else v for t, v in zip(texts, base, strict=True)]
+
+    result = m.measure(_vault(tmp_path), embed, queries=["zzz"])
+
+    row = result["rows"][0]
+    assert {r for r, _ in row["new"]} == {"memory/a.md", "memory/b.md", "memory/c.md"}
+    assert [r for r, _ in row["strong"]] == ["memory/c.md"]
+    assert "1 claros, 2 bajo 0.65" in m.render(result, 5)
+
+
 def test_render_summarises_queries_pairs_and_latency(tmp_path: Path) -> None:
     m = _script()
     result = m.measure(_vault(tmp_path), _fake_embed, queries=["mascota", "factura"])
