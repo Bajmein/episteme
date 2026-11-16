@@ -97,7 +97,7 @@ def test_notice_drops_control_characters_from_note_data(monkeypatch: pytest.Monk
 
     out = json.loads(hookmode.render("SessionStart", "", f"retomada: {hostile}"))
 
-    assert out["systemMessage"] == "retomada: tarea]0;pwn[2J31m\nsegunda" + "línea"
+    assert out["systemMessage"] == "retomada: tarea\nsegunda" + "línea"
     assert not hookmode._CONTROL.search(out["systemMessage"].replace("\n", ""))
 
 
@@ -107,7 +107,7 @@ def test_notice_keeps_its_lines(monkeypatch: pytest.MonkeyPatch) -> None:
 
     out = json.loads(hookmode.render("SessionStart", "", notice))
 
-    assert out["systemMessage"] == "episteme · archivadas 2\nepisteme · revisión pendiente[2J"
+    assert out["systemMessage"] == "episteme · archivadas 2\nepisteme · revisión pendiente"
     assert "\x1b" not in out["systemMessage"]
 
 
@@ -116,7 +116,7 @@ def test_notice_is_painted_line_by_line(monkeypatch: pytest.MonkeyPatch) -> None
 
     out = json.loads(hookmode.render("SessionStart", "", "a\nb\x1b[2J"))
 
-    assert out["systemMessage"] == hookmode.paint("a\nb[2J")
+    assert out["systemMessage"] == hookmode.paint("a\nb")
 
 
 def test_clean_block_cuts_the_whole_block() -> None:
@@ -125,6 +125,24 @@ def test_clean_block_cuts_the_whole_block() -> None:
     assert len(block) == 250
     assert block.endswith("…")
     assert block.count("\n") == 2
+
+
+@pytest.mark.parametrize(
+    ("raw", "clean"),
+    [
+        ("a\x1b[2Jb", "ab"),
+        ("p\x1b[1;31mrojo\x1b[0mq", "projoq"),
+        ("x\x1b]0;título\x07y", "xy"),
+        ("x\x1b]8;;https://ejemplo.test\x1b\\y", "xy"),
+        ("c\x9b2Jd", "cd"),
+        ("e\x1bPdatos\x1b\\f", "ef"),
+        ("g\x1b(Bh", "gh"),
+        ("sin cerrar\x1b]0;resto", "sin cerrar"),
+        ("precio [2J literal", "precio [2J literal"),
+    ],
+)
+def test_clean_line_drops_whole_escape_sequences(raw: str, clean: str) -> None:
+    assert hookmode.clean_line(raw) == clean
 
 
 def test_clean_line_drops_bidi_marks() -> None:

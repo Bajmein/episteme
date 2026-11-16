@@ -118,4 +118,4 @@ async def test_restore_notice_has_no_control_characters(vault: Path, project_dir
 
     notice = json.loads(hook[1])["systemMessage"]
     assert "\x1b]0;" not in notice and "\x07" not in notice and "\x1b[2J" not in notice
-    assert "pwn" in notice
+    assert "pwn" not in notice and "«001  demo»" in notice

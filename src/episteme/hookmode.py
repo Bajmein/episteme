@@ -21,6 +21,14 @@ LINE_MAX = 120
 NOTICE_MAX = 600
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff\u061c]")
 _BREAKS = re.compile(r"[\t\r\n]+")
+# Whole escape sequences, so their parameters do not stay behind as text: CSI (ESC [ or
+# 0x9b, e.g. "\x1b[2J"), OSC, DCS, SOS, PM and APC strings up to BEL or ST, and the
+# two-character ESC sequences.
+_ESCAPES = re.compile(
+    r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]"
+    r"|(?:\x1b[\]PX^_]|[\x90\x98\x9d-\x9f])[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)?"
+    r"|\x1b[ -/]*[0-~]"
+)
 CUT_MARK = f"\n[episteme: output cut at {CAP:,} characters]"
 
 
@@ -30,12 +38,12 @@ def check(event: str | None) -> None:
 
 
 def clean_line(text: object, limit: int = LINE_MAX) -> str:
-    """One printable line: control characters (ESC, BEL, C1) dropped, cut at ``limit``.
+    """One printable line: escape sequences and control characters dropped, cut at ``limit``.
 
     Titles and task names come from notes and project files, so they must not reach the
     person's terminal with escape sequences.
     """
-    line = _CONTROL.sub("", _BREAKS.sub(" ", str(text)))
+    line = _CONTROL.sub("", _ESCAPES.sub("", _BREAKS.sub(" ", str(text))))
     return line if len(line) <= limit else line[: limit - 1] + "…"
 
 

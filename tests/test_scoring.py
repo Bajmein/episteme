@@ -146,7 +146,7 @@ def test_entry_line_drops_control_characters_from_the_title() -> None:
     line = entry_line(row)
 
     assert "\x1b" not in line and "\x07" not in line and "‮" not in line
-    assert line.startswith("- [decision p5] Título ]0;pwnhostil al revés (memory/x.md)")
+    assert line.startswith("- [decision p5] Título hostil al revés (memory/x.md)")
 
 
 async def test_session_start_output_has_no_escape_from_a_hostile_title(vault: Path) -> None:

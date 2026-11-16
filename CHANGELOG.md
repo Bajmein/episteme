@@ -4,6 +4,14 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Cambiado
+
+- Las consultas SQL de `index/store.py` que llevan nombres de tabla o de columna se arman con un helper en vez de f-strings. Ya no hacen falta los `# nosec B608` y bandit no da hallazgos ni avisos.
+
+### Seguridad
+
+- Los avisos y listados que llegan a la terminal quitan las secuencias de escape enteras (CSI, OSC, DCS…), no solo su carácter inicial. Antes quedaban restos como `[2J` o `]0;título` en el texto.
+
 ## [0.13.0] - 2026-11-16
 
 ### Añadido

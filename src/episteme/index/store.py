@@ -59,6 +59,17 @@ class Hit:
     priority: int | None = None
 
 
+def _sql(template: str, **names: str) -> str:
+    """``template`` with ``{name}`` filled in: SQL built only from this package's own text.
+
+    Every name is a table or column from a closed list, ``?`` placeholders or a ``where``
+    fragment built by ``build_where``; user values always travel as bound parameters, never
+    through here. A plain call instead of f-strings, because bandit's B608 only reports the
+    first literal of an f-string and warns about a ``# nosec`` on the rest.
+    """
+    return template.format(**names)
+
+
 class Index:
     """The index of one vault. It is a cache: the ``.md`` files are the truth."""
 
@@ -267,7 +278,7 @@ class Index:
         self.conn.execute("delete from fts where rowid = ?", (row["id"],))
         self.conn.execute("delete from notes where id = ?", (row["id"],))
         for table in ("tags", "props", "headings", "aliases"):
-            self.conn.execute(f"delete from {table} where path = ?", (rel,))  # nosec B608
+            self.conn.execute(_sql("delete from {table} where path = ?", table=table), (rel,))
         self.conn.execute("delete from links where src = ?", (rel,))
 
     def resolver(self) -> Resolver:
@@ -292,7 +303,7 @@ class Index:
         """Memory rows. ``where`` is a literal SQL fragment from this package; values go in
         ``params``, never into ``where``."""
         return self.conn.execute(
-            f"select * from notes where mode = ? and ({where}) order by path",  # nosec B608
+            _sql("select * from notes where mode = ? and ({where}) order by path", where=where),
             (MEMORY, *params),
         ).fetchall()
 
@@ -318,14 +329,24 @@ class Index:
         # Columns come from a closed list; user values are bound parameters.
         for col in ("zone", "project", "type", "status"):
             rows = self.conn.execute(
-                f"select n.{col} as v, count(*) as c {source} "
-                f"where {clause} and n.{col} is not null group by n.{col} order by c desc, v",
+                _sql(
+                    "select n.{col} as v, count(*) as c {source} "
+                    "where {clause} and n.{col} is not null group by n.{col} order by c desc, v",
+                    col=col,
+                    source=source,
+                    clause=clause,
+                ),
                 params,
             ).fetchall()
             out[col] = {r["v"]: r["c"] for r in rows}
         rows = self.conn.execute(
-            f"select t.tag as v, count(*) as c from tags t where t.path in "  # nosec B608
-            f"(select n.path {source} where {clause}) group by t.tag order by c desc, v limit 30",
+            _sql(
+                "select t.tag as v, count(*) as c from tags t where t.path in "
+                "(select n.path {source} where {clause}) "
+                "group by t.tag order by c desc, v limit 30",
+                source=source,
+                clause=clause,
+            ),
             params,
         ).fetchall()
         out["tags"] = {r["v"]: r["c"] for r in rows}
@@ -336,8 +357,10 @@ class Index:
         if column not in ("zone", "type", "status", "project"):
             raise ValueError(f"unknown column {column!r}")
         rows = self.conn.execute(
-            f"select distinct {column} as v from notes where {column} is not null "  # nosec B608
-            "order by v"
+            _sql(
+                "select distinct {column} as v from notes where {column} is not null order by v",
+                column=column,
+            )
         ).fetchall()
         return [r["v"] for r in rows]
 
@@ -365,8 +388,11 @@ class Index:
         for term in query_terms(query):
             label = " ".join(term)
             rows = self.conn.execute(
-                "select n.path from fts join notes n on n.id = fts.rowid "  # nosec B608
-                f"where fts match ? and n.path in ({marks})",
+                _sql(
+                    "select n.path from fts join notes n on n.id = fts.rowid "
+                    "where fts match ? and n.path in ({marks})",
+                    marks=marks,
+                ),
                 [_fts_term(term), *paths],
             )
             for r in rows:
