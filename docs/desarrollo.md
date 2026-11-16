@@ -146,3 +146,21 @@ Además mide lo que hace falta para decidir si el grafo sirve para consultar:
 La sección de búsquedas reales no filtra por `--project`, lee `activity.db` en modo de solo lectura y sale vacía si el vault no tiene registro. Una lectura «vecina de un resultado» puede ser un enlace que el agente siguió a mano tras leer el resultado: es justo el paso que el grafo ahorraría.
 
 Criterio: vale la pena usar las vecinas si una parte apreciable de las memorias tiene `related` y esas vecinas usan otro vocabulario (es lo que un hook ganaría, porque la búsqueda literal ya encuentra las que comparten palabras). Si casi ninguna memoria tiene `related`, o las vecinas repiten el vocabulario, no compensa. Para usar los backlinks, además, las lecturas vecinas «solo por backlink» tienen que ser una parte visible de las búsquedas reales.
+
+## Medir el indexador
+
+`scripts/measure_index.py` mide cuánto tarda el indexador antes de decidir si hay que tocarlo. Nunca escribe en el vault: `Index` crea `<vault>/.index/index.db`, así que el script copia el vault (sin lo que empieza por punto, como `.index` u `.obsidian`) a un directorio temporal y mide sobre la copia.
+
+```bash
+uv run scripts/measure_index.py --vault ~/.episteme [--runs 5]
+```
+
+Mide, con la mediana de `--runs` repeticiones:
+
+| Medida | Qué es |
+|---|---|
+| Indexado completo | Abrir `Index` y el primer `refresh()` sin `.index` |
+| `refresh()` sin cambios | Lo que paga cada llamada de tool |
+| `refresh()` con 1 y con 10 notas cambiadas | El incremental, moviendo el `mtime` de esas notas |
+
+El informe trae además el número de notas y el tamaño de `index.db`. El criterio: tocar el indexador solo si, en el vault real, el `refresh()` sin cambios pasa de unos 20 ms o el indexado completo, de unos 3 s.
