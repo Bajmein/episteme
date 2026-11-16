@@ -224,7 +224,10 @@ def _register_review(server: MCPServer, engine: Engine) -> None:
         Returns JSON {"totals", "stale", "expired", "contradictions", "similar", "cut_titles",
         "orphans", "broken_links", "invalid_frontmatter", "flagged", "read_only"}.
         "similar" lists groups {"paths", "similarity"} of active memories (any type or
-        project, not session or reminder) to merge; "cut_titles" lists memories whose
+        project, not session or reminder) to merge; "orphans" lists active memories (not
+        session or reminder) with no links in or out, each {"path", "title", "candidates":
+        [{"path", "title", "reason"}]} with up to 3 memories of its project or _shared to
+        link (shared file or 2+ tags), linkable first; "cut_titles" lists memories whose
         first body line repeats the title and goes on. "expired" lists active memories
         {"path", "title", "type", "valid_until"} whose valid_until is before today
         (checkpoints are left out: checkpoint manages them); it only reports, so for each
