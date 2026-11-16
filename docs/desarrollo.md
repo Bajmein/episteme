@@ -79,7 +79,7 @@ uv run scripts/measure_recall.py --vault ~/.episteme [--zone memory] [--terms a,
 
 Sin `--terms`, mide los `--top` tokens alfabéticos de `--min-len` letras o más con más documentos. Por término compara cuatro conjuntos de documentos: `exact` (el token), `prefix` (tokens que empiezan por él), `stem` (misma raíz según `snowballstemmer` en español) y `trigram` (el texto plegado lo contiene como subcadena). La salida trae las familias de raíz, la tabla de los términos con mayor ganancia, la ganancia relativa media y mediana de cada estrategia y el «ruido estimado del trigrama» (documentos que solo añade el trigrama, con ejemplos `término → token que lo contiene` para juzgar a ojo).
 
-Criterio: adoptar el lematizador si une variantes que hoy se pierden (ganancia de `stem` sobre `exact`) sin el ruido del trigrama; si casi todo lo que añade el trigrama son coincidencias dentro de otras palabras, no compensa.
+Criterio: adoptar el lematizador si une variantes que hoy se pierden (ganancia de `stem` sobre `exact`) sin el ruido del trigrama; si casi todo lo que añade el trigrama son coincidencias dentro de otras palabras, no compensa. Para usar los backlinks, además, las lecturas vecinas «solo por backlink» tienen que ser una parte visible de las búsquedas reales.
 
 ## Medir si los embeddings aportan
 
@@ -127,11 +127,22 @@ Los diagramas del README y de `docs/` están en `static/diagrams/`: cada uno es 
 Para decidir si conviene que los hooks sugieran memorias vecinas por `related`, el script mide cuánto grafo hay de verdad entre las memorias. Es de solo lectura: recorre el vault con `Vault.iter_notes` y `parse`, y no abre ni crea el índice.
 
 ```bash
-uv run scripts/measure_links.py --vault ~/.episteme [--zone memory] [--project <proyecto>] [--examples 15]
+uv run scripts/measure_links.py --vault ~/.episteme [--zone memory] [--project <proyecto>] [--examples 15] [--days 30]
 ```
 
 Sin índice, un destino se resuelve por ruta exacta (con o sin `.md`) o por nombre base único en el vault; lo demás cuenta como «sin resolver» (el informe lo dice). Solo se miden las memorias activas; con `--project` se miden las de ese proyecto (sus vecinas pueden ser también `_shared`).
 
 El informe trae: memorias activas; enlaces por tipo (`body`, `related`, `supersedes`, `contradicts`) con los no resueltos; memorias con al menos un `related` (saliente o entrante) y su porcentaje; huérfanas (sin enlaces en ningún sentido); la distribución de vecinas `related` activas del mismo proyecto o `_shared` por memoria (0, 1, 2, 3 o más); cuántos de esos pares comparten pocas palabras (Jaccard de tokens < 0,2, es decir, vocabulario distinto) y ejemplos de pares, de menor a mayor similitud.
 
-Criterio: vale la pena usar las vecinas si una parte apreciable de las memorias tiene `related` y esas vecinas usan otro vocabulario (es lo que un hook ganaría, porque la búsqueda literal ya encuentra las que comparten palabras). Si casi ninguna memoria tiene `related`, o las vecinas repiten el vocabulario, no compensa.
+Además mide lo que hace falta para decidir si el grafo sirve para consultar:
+
+| Qué | Cómo se lee |
+|---|---|
+| Todos los wikilinks | Memorias con algún enlace de cualquier tipo (cuerpo o frontmatter), y cuántas ganan vecinas al recorrer los backlinks: son las que un recorrido solo hacia adelante no alcanza |
+| Origen | Los pares `related` separados en «de OMEGA» (las dos memorias traen `source: omega:…`) y nativos, para ver si los enlaces migrados se comportan distinto |
+| Línea base | El mismo Jaccard para todos los pares de memorias del mismo proyecto, enlazados o no. Sobre 200 000 pares toma uno de cada tantos. Si los pares enlazados no se parecen más que la línea base, el enlace no dice nada sobre el vocabulario |
+| Búsquedas reales | Con el registro de actividad de los últimos `--days` días (30; `0` lo omite): de las memorias leídas después de un `search` en el mismo proceso, cuántas estaban en el resultado, cuántas no estaban pero eran vecinas de un resultado (enlazadas por él, o solo por backlink), cuántas venían de una búsqueda anterior, cuántas ya las había mostrado otro tool o un hook en ese proceso, y cuántas no tienen origen en el registro: estas últimas son las que `search` no supo dar |
+
+La sección de búsquedas reales no filtra por `--project`, lee `activity.db` en modo de solo lectura y sale vacía si el vault no tiene registro. Una lectura «vecina de un resultado» puede ser un enlace que el agente siguió a mano tras leer el resultado: es justo el paso que el grafo ahorraría.
+
+Criterio: vale la pena usar las vecinas si una parte apreciable de las memorias tiene `related` y esas vecinas usan otro vocabulario (es lo que un hook ganaría, porque la búsqueda literal ya encuentra las que comparten palabras). Si casi ninguna memoria tiene `related`, o las vecinas repiten el vocabulario, no compensa. Para usar los backlinks, además, las lecturas vecinas «solo por backlink» tienen que ser una parte visible de las búsquedas reales.
