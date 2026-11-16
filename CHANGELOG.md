@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.13.1] - 2026-11-16
+
 ### Cambiado
 
 - Las consultas SQL de `index/store.py` que llevan nombres de tabla o de columna se arman con un helper en vez de f-strings. Ya no hacen falta los `# nosec B608` y bandit no da hallazgos ni avisos.
@@ -262,7 +264,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.13.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/Bajmein/episteme/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/Bajmein/episteme/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Bajmein/episteme/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Bajmein/episteme/compare/v0.10.1...v0.11.0
