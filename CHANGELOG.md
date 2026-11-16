@@ -8,6 +8,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - `scripts/measure_semantic.py` lista las memorias huérfanas con sus candidatas a enlazar por significado, y dice cuáles ya ofrece `review` (`--link-score`).
 
+### Cambiado
+
+- `index.db` ocupa cerca de la mitad: el índice de búsqueda ya no guarda su propia copia del texto (con SQLite 3.43 o posterior) y el cuerpo solo se guarda para las memorias. Al arrancar la versión nueva, el índice se rehace una vez y devuelve al disco el espacio que sobra.
+
 ## [0.11.0] - 2026-11-16
 
 ### Añadido

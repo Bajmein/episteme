@@ -168,3 +168,7 @@ Mide, con la mediana de `--runs` repeticiones:
 | `refresh()` con 1 y con 10 notas cambiadas | El incremental, moviendo el `mtime` de esas notas |
 
 El informe trae además el número de notas y el tamaño de `index.db`. El criterio: tocar el indexador solo si, en el vault real, el `refresh()` sin cambios pasa de unos 20 ms o el indexado completo, de unos 3 s.
+
+### Qué guarda `index.db`
+
+El texto de cada nota se guarda una sola vez, en `notes.search_text` (todas las líneas del archivo, con el frontmatter y los comentarios `%%` en blanco), que es de donde salen los fragmentos de `search`. La tabla `fts` es *contentless* (`content=''`, `contentless_delete=1`, SQLite 3.43 o posterior): guarda solo el índice invertido, y `bm25` y `match` funcionan igual; con un SQLite anterior, `fts_schema` (`src/episteme/index/schema.py`) la crea con su propia copia, como antes. `notes.body` (el cuerpo sin frontmatter) solo se llena en las memorias, que son las únicas filas que lo leen. Un cambio de esquema sube `SCHEMA_VERSION`: el índice se rehace al abrirlo y, si venía de otra versión, `vacuum` devuelve al disco las páginas libres (si otro proceso lo tiene abierto, se salta y el índice solo queda más grande).
