@@ -331,3 +331,31 @@ def test_fts_is_contentless_only_where_sqlite_can_delete_from_it(
 
     assert ("content = ''" in sql) is contentless
     conn.close()
+
+
+def test_alias_bomb_note_does_not_block_indexing(vault: Path) -> None:
+    lines = ["a0: &a0 [x, x]"] + [f"a{i}: &a{i} [*a{i - 1}, *a{i - 1}]" for i in range(1, 25)]
+    (vault / "plans").mkdir()
+    (vault / "plans" / "bomb.md").write_text("---\n" + "\n".join(lines) + "\n---\n# Bomb\n")
+    ix = _index(vault)
+
+    row = ix.note("plans/bomb.md")
+    assert row is not None and row["fm_valid"] == 0
+
+
+def test_note_over_2_mb_is_skipped_with_a_warning(vault: Path, caplog) -> None:
+    (vault / "plans").mkdir()
+    (vault / "plans" / "huge.md").write_text("# Huge\n\n" + "zorbhuge palabra\n" * 150_000)
+
+    with caplog.at_level("WARNING"):
+        ix = _index(vault)
+
+    assert ix.note("plans/huge.md") is None
+    assert "plans/huge.md" in caplog.text
+
+
+def test_query_terms_are_capped_in_count_and_length() -> None:
+    assert len(query_terms(" ".join(f"w{i}" for i in range(100)))) == 32
+    assert query_terms("a " * 5000 + "zorbtail") == [["a"]] * 32
+    assert query_terms("x" * 1990 + " tail words") == [["x" * 1990], ["tail"], ["word"]]
+    assert query_terms("x" * 1990 + " tail words more") == query_terms("x" * 1990 + " tail word")

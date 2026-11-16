@@ -38,6 +38,10 @@ def _parts(phrase: str, word: str) -> list[str]:
     return [phrase] if phrase else word.split("-")
 
 
+QUERY_MAX_CHARS = 2000
+QUERY_MAX_TERMS = 32
+
+
 def query_terms(query: str, drop_stopwords: bool = False) -> list[list[str]]:
     """Split a user query into terms (a quoted phrase is one term) of folded tokens.
 
@@ -45,10 +49,11 @@ def query_terms(query: str, drop_stopwords: bool = False) -> list[list[str]]:
     with hyphens (``save-clear``) gives one term per part; other punctuation (``ROADMAP.md``)
     keeps the word as a phrase. A bare ``word*`` is a prefix term: its last token keeps a
     trailing ``*``. With ``drop_stopwords``, single Spanish function words are dropped
-    (phrases are kept).
+    (phrases are kept). The query is cut to ``QUERY_MAX_CHARS`` characters and the result to
+    ``QUERY_MAX_TERMS`` terms; the rest is dropped.
     """
-    terms = []
-    for phrase, word in re.findall(r'"([^"]*)"|(\S+)', query):
+    terms: list[list[str]] = []
+    for phrase, word in re.findall(r'"([^"]*)"|(\S+)', query[:QUERY_MAX_CHARS]):
         parts = _parts(phrase, word)
         for n, part in enumerate(parts, 1):
             toks = re.findall(r"[^\W_]+", fold(part))
@@ -59,7 +64,7 @@ def query_terms(query: str, drop_stopwords: bool = False) -> list[list[str]]:
             if _is_prefix_part(word, n, len(parts)):
                 toks[-1] += "*"
             terms.append(toks)
-    return terms
+    return terms[:QUERY_MAX_TERMS]
 
 
 def _fts_term(term: list[str]) -> str:

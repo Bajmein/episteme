@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -23,6 +24,17 @@ from episteme.index.text import _fts_term, locate, query_terms
 from episteme.links import Resolver
 from episteme.markdown import ParsedNote, parse
 from episteme.vault import INDEX_DIR, MEMORY, DirListing, Vault
+
+NOTE_MAX_BYTES = 2 * 1024 * 1024
+_log = logging.getLogger(__name__)
+
+
+def _too_big(rel: str, size: int) -> bool:
+    """True (with a warning in the log) for a note the index skips for its size."""
+    if size <= NOTE_MAX_BYTES:
+        return False
+    _log.warning("skipping %s: %d bytes, the limit is %d", rel, size, NOTE_MAX_BYTES)
+    return True
 
 
 @dataclass
@@ -157,7 +169,11 @@ class Index:
 
     def refresh(self) -> bool:
         """Reindex what changed on disk since the last call. True if anything changed."""
-        disk = {rel: (st.st_mtime_ns, st.st_size) for rel, st in self.vault.scan_notes(self._dirs)}
+        disk = {
+            rel: (st.st_mtime_ns, st.st_size)
+            for rel, st in self.vault.scan_notes(self._dirs)
+            if not _too_big(rel, st.st_size)
+        }
         changed, removed = _diff(disk, self._stored_signatures())
         if not changed and not removed:
             return False
@@ -228,6 +244,8 @@ class Index:
         path = self.vault.root / rel
         try:
             st = path.stat()
+            if _too_big(rel, st.st_size):
+                return None
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return None

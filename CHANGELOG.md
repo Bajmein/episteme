@@ -6,6 +6,9 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Seguridad
 
+- Una nota con alias YAML en el frontmatter (`&a` y `*a` anidados) ya no deja el servidor colgado: los alias se rechazan, la nota queda con `fm_valid` falso y el frontmatter no puede pasar de 64 KB. Efecto: una nota que reutilice un ancla (`<<: *base`) queda con `fm_valid` falso.
+- El índice salta las notas de más de 2 MB (con un aviso en el log); `remember` rechaza un `body` de más de 100.000 caracteres.
+- `search` y `context` (`task`) descartan lo que pase de 32 términos o 2.000 caracteres en la consulta.
 - Los avisos y listados que llegan a la terminal o al contexto (`systemMessage` de `SessionStart`, el aviso de `checkpoint`, las líneas de bienvenida, `surface` y recordatorios) quitan los caracteres de control (`ESC`, `BEL`, C1, saltos) de los títulos, de `task_title` y de los cuerpos, y cortan cada título a 120 caracteres. Antes, un `estado.md` o una memoria podían cambiar el título de la ventana o borrar la pantalla (#113).
 
 ### Añadido

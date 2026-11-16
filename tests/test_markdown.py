@@ -179,3 +179,27 @@ def test_fold_with_map_matches_the_per_character_fold() -> None:
         assert fold_with_map(text) == reference(text), text
     assert fold_with_map("Él SÍ") == ("el si", [0, 1, 2, 3, 4])
     assert fold_with_map("aßb") == ("assb", [0, 1, 1, 2])
+
+
+def _alias_frontmatter(levels: int) -> str:
+    lines = ["a0: &a0 [x, x]"]
+    lines += [f"a{i}: &a{i} [*a{i - 1}, *a{i - 1}]" for i in range(1, levels)]
+    return "---\n" + "\n".join(lines) + "\n---\n# Bomb\n"
+
+
+def test_yaml_aliases_are_rejected_without_blowing_up() -> None:
+    import time
+
+    start = time.perf_counter()
+    note = parse(_alias_frontmatter(25), "plans/bomb.md")
+
+    assert time.perf_counter() - start < 1
+    assert not note.fm_valid
+    assert note.fm_error and "alias" in note.fm_error
+
+
+def test_frontmatter_over_the_cap_is_flagged_invalid() -> None:
+    note = parse("---\nbig: " + "x" * 70_000 + "\n---\n# Big\n", "plans/big.md")
+
+    assert not note.fm_valid
+    assert note.fm_error and "64 KB" in note.fm_error

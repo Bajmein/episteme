@@ -80,11 +80,27 @@ def split_frontmatter(lines: list[str]) -> tuple[str | None, int]:
     return None, 0
 
 
+FRONTMATTER_MAX_BYTES = 64 * 1024
+
+
+class _NoAliasLoader(yaml.SafeLoader):
+    """A safe loader that refuses ``*alias``: aliases share nodes and can blow up the walks."""
+
+    def compose_node(self, parent: Any, index: Any) -> Any:
+        if self.check_event(yaml.events.AliasEvent):
+            event = self.peek_event()
+            raise yaml.YAMLError(f"YAML aliases are not supported (*{event.anchor})")
+        return super().compose_node(parent, index)
+
+
 def load_frontmatter(raw: str | None) -> tuple[dict[str, Any], bool, str | None]:
     if raw is None:
         return {}, True, None
+    if len(raw) > FRONTMATTER_MAX_BYTES:
+        return {}, False, f"frontmatter is larger than {FRONTMATTER_MAX_BYTES // 1024} KB"
     try:
-        data = yaml.safe_load(raw) if raw.strip() else {}
+        # _NoAliasLoader subclasses yaml.SafeLoader: as safe as safe_load, minus aliases.
+        data = yaml.load(raw, Loader=_NoAliasLoader) if raw.strip() else {}  # nosec B506
     except Exception as exc:  # YAMLError, or a ValueError from an impossible date
         return {}, False, " ".join(str(exc).split())
     if data is None:

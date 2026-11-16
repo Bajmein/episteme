@@ -141,3 +141,12 @@ async def test_links_hint(vault: Path) -> None:
             "remember", type="reminder", title="Aviso suelto", body="Recordar.", due="2026-12-01"
         )
         assert "links_hint" not in rem
+
+
+async def test_remember_rejects_a_body_over_100000_characters(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        err = await c.error("remember", type="insight", title="Enorme", body="x " * 50_001)
+
+        assert err.startswith("invalid_argument") and "100000" in err
+        ok = await c.ok("remember", type="insight", title="Justo", body="y" * 100_000)
+        assert ok["created"]

@@ -39,6 +39,7 @@ from episteme.vault import MEMORY, today
 if TYPE_CHECKING:
     from episteme.engine import Engine
 
+BODY_MAX_CHARS = 100_000
 SLUG_WORDS = 5
 SLUG_CHARS = 40
 MAX_CANDIDATES = 5
@@ -185,6 +186,11 @@ def _clean_title(title: str) -> str:
 def _check_body(body: str) -> None:
     if not (body or "").strip():
         raise invalid("body is empty. Describe the memory and name the files or tools involved.")
+    if len(body) > BODY_MAX_CHARS:
+        raise invalid(
+            f"body has {len(body)} characters, the limit is {BODY_MAX_CHARS}. "
+            "Shorten it or split it into several memories."
+        )
 
 
 def _reject_all_secrets(fields: tuple[tuple[str, Any], ...]) -> None:
