@@ -88,6 +88,32 @@ def test_measure_counts(tmp_path: Path) -> None:
     assert r["empty_total"] == 3
 
 
+def test_agent_calls_take_the_session_of_their_server_process(tmp_path: Path) -> None:
+    m = _script()
+    root = _vault(tmp_path, [])
+    conn = sqlite3.connect(root / ".index/activity.db")
+    rows = [
+        (0, "s1", 10, "context", "UserPromptSubmit", {"mode": "welcome"}, [A]),
+        (1, None, 10, "read", None, {"notes": [A]}, [A]),
+        (2, None, 20, "read", None, {"note": B}, [B]),
+    ]
+    for mins, session, pid, tool, hook, args, paths in rows:
+        at = (NOW - timedelta(days=1) + timedelta(minutes=mins)).isoformat(timespec="seconds")
+        conn.execute(
+            "insert into calls (at, pid, session, tool, hook_event, project, args, paths, ok)"
+            " values (?,?,?,?,?,?,?,?,1)",
+            (at, pid, session, tool, hook, "p", json.dumps(args), json.dumps(paths)),
+        )
+    conn.commit()
+    conn.close()
+
+    r = m.measure(root, days=7, now=NOW)
+
+    assert r["followed"] == 1
+    assert r["stats"][A]["reads_after"] == 1
+    assert r["sessions_read"] == 2
+
+
 def test_window_and_project_filter(tmp_path: Path) -> None:
     m = _script()
     root = _vault(tmp_path, CALLS)

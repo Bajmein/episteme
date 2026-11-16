@@ -14,6 +14,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - El aviso de mantención y `/episteme:mantencion corta` ofrecen una ronda corta con los 3 casos más claros.
 
+### Corregido
+
+- `scripts/measure_uptake.py` ya empareja las entregas con las lecturas del agente. Las llamadas del agente no traen sesión, así que el informe daba 0 entregas seguidas de lectura y 0 sesiones con lecturas. Ahora cada llamada sin sesión toma la última que informó un hook desde el mismo proceso del servidor.
+
 ## [0.10.1] - 2026-11-13
 
 ### Cambiado
