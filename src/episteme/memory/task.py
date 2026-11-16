@@ -153,10 +153,10 @@ def _relevant_memories(
     return _rank(scored)
 
 
-def _related_paths(engine: Engine, path: str) -> list[str | None]:
-    """The paths one ``related`` link away from ``path``, outgoing then backlinks."""
-    near = [x["dst_path"] for x in engine.index.outgoing(path) if x["kind"] == "related"]
-    near += [x["src"] for x in engine.index.backlinks(path) if x["kind"] == "related"]
+def _linked_paths(engine: Engine, path: str) -> list[str | None]:
+    """The paths one link (any kind) away from ``path``, outgoing then backlinks."""
+    near = [x["dst_path"] for x in engine.index.outgoing(path)]
+    near += [x["src"] for x in engine.index.backlinks(path)]
     return near
 
 
@@ -170,12 +170,12 @@ def _is_linkable(r: Any, project: str, iso: str) -> bool:
 
 
 def _linked_memories(engine: Engine, chosen: list[str], project: str) -> list[Any]:
-    """Active memories one ``related`` link away from the first ``LINK_SEEDS`` of ``chosen``."""
+    """Active memories one link (any kind) away from the first ``LINK_SEEDS`` of ``chosen``."""
     iso = today().isoformat()
     listed = set(chosen)
     linked: list[Any] = []
     for path in chosen[:LINK_SEEDS]:
-        for other in _related_paths(engine, path):
+        for other in _linked_paths(engine, path):
             if other is None or other in listed:
                 continue
             r = engine.index.note(other)

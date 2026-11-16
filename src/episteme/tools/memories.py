@@ -125,7 +125,9 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
         "project"}], "new_tags": [{"tag", "similar"}] (tags no other note has, with close
         spellings), "link_candidates": [{"path", "title", "reason"}] (up to 5 memories sharing
         a file or 2 tags; consider related), "keywords_hint": str (when keywords is empty and the
-        type is not session or reminder)}. The last three appear only when non-empty.
+        type is not session or reminder), "links_hint": str (when it has no related, supersedes
+        or [[wikilink]] in the body, and is not a session or reminder)}. The last four appear
+        only when non-empty.
         """
         with engine.session():
             return dump(

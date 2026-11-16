@@ -121,3 +121,23 @@ async def test_keywords_hint(vault: Path) -> None:
         assert "keywords_hint" not in rem
         ses = await c.ok("remember", type="session", title="Jornada", body="Resumen del dia.")
         assert "keywords_hint" not in ses
+
+
+async def test_links_hint(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        bare = await c.ok("remember", type="insight", title="Suelta", body="Nada enlazado.")
+        assert bare["links_hint"].startswith("No links.")
+        linked = await c.ok(
+            "remember", type="insight", title="Con related", body="Otra cosa aparte.",
+            related=[bare["path"]],
+        )  # fmt: skip
+        assert "links_hint" not in linked
+        name = bare["path"].rsplit("/", 1)[-1].removesuffix(".md")
+        body = await c.ok(
+            "remember", type="insight", title="Con wikilink", body=f"Sigue a [[{name}]] aqui."
+        )
+        assert "links_hint" not in body
+        rem = await c.ok(
+            "remember", type="reminder", title="Aviso suelto", body="Recordar.", due="2026-12-01"
+        )
+        assert "links_hint" not in rem
