@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
-from episteme.index import Index, jsonable, normalize_tag, query_terms, to_json
+from episteme.index import NOTE_MAX_BYTES, Index, jsonable, normalize_tag, query_terms, to_json
 from episteme.links import reachable
 from episteme.markdown import (
     ParsedNote,
@@ -83,10 +83,34 @@ class Engine:
             raise invalid("note is empty. Pass a path relative to the vault or a note name.")
         note = note.strip()
         self.check_path(note)
-        rel = self.index.resolver().resolve(note)
+        rel = self._resolve_indexed(note)
         if is_ignored(rel):
             raise EpistemeError(NOT_FOUND, f'no note "{note}". Use search to find the path.')
         return rel
+
+    def _resolve_indexed(self, note: str) -> str:
+        """``note`` resolved against the index; a note skipped for its size says so."""
+        try:
+            return self.index.resolver().resolve(note)
+        except EpistemeError as err:
+            if err.code == NOT_FOUND:
+                self._reject_oversize(note)
+            raise
+
+
+    def _reject_oversize(self, note: str) -> None:
+        """``invalid_argument`` when ``note`` is a file on disk the index skips for its size."""
+        path = self.vault.resolve(note if note.lower().endswith(".md") else note + ".md")
+        try:
+            size = path.stat().st_size if path.is_file() else 0
+        except OSError:
+            return
+        rel = self.vault.rel(path)
+        if size > NOTE_MAX_BYTES and not is_ignored(rel):
+            raise invalid(
+                f"{rel} has {size} bytes, over the 2 MB limit; episteme does not index it. "
+                "Split the note."
+            )
 
     def load(self, rel: str) -> ParsedNote:
         path = self.vault.resolve(rel)

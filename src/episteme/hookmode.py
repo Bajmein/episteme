@@ -19,7 +19,7 @@ NOTICE_RESET = "\x1b[0m"
 CAP = 10_000
 LINE_MAX = 120
 NOTICE_MAX = 600
-_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff\u061c]")
 _BREAKS = re.compile(r"[\t\r\n]+")
 CUT_MARK = f"\n[episteme: output cut at {CAP:,} characters]"
 
@@ -39,6 +39,17 @@ def clean_line(text: object, limit: int = LINE_MAX) -> str:
     return line if len(line) <= limit else line[: limit - 1] + "…"
 
 
+def clean_block(text: object, limit: int) -> str:
+    """Several printable lines: each one cleaned with ``clean_line``, empty ones dropped.
+
+    The whole block is cut at ``limit`` with ``…``. Used for notices that list several items,
+    one per line, so they keep their line breaks without letting control characters through.
+    """
+    lines = (clean_line(line, LINE_MAX) for line in str(text).splitlines())
+    block = "\n".join(line for line in lines if line.strip())
+    return block if len(block) <= limit else block[: limit - 1] + "…"
+
+
 def paint(text: str) -> str:
     """``text`` in bold green for the terminal; plain when ``NO_COLOR`` is set."""
     if os.environ.get("NO_COLOR"):
@@ -51,8 +62,9 @@ def render(event: str, text: str, notice: str = "") -> str:
 
     Plain text is not used: Claude Code 2.1.322 drops it for ``mcp_tool`` hooks.
 
-    ``notice`` is a one-line message for the person, not the model: it goes out as a coloured
-    ``systemMessage``, only on ``SessionStart`` (Claude Code shows it as "SessionStart:<source>
+    ``notice`` is a short message for the person, not the model, one item per line: it goes
+    out as a coloured ``systemMessage`` (each line cleaned, at most ``NOTICE_MAX`` characters),
+    only on ``SessionStart`` (Claude Code shows it as "SessionStart:<source>
     says: ..."), with or without text.
 
     Nothing to say is an empty string. Never emits decision, permissionDecision or continue.
@@ -63,7 +75,7 @@ def render(event: str, text: str, notice: str = "") -> str:
     notice = notice.strip() if event in NOTICE_EVENTS else ""
     out: dict[str, Any] = {}
     if notice:
-        out["systemMessage"] = paint(clean_line(notice, NOTICE_MAX))
+        out["systemMessage"] = paint(clean_block(notice, NOTICE_MAX))
     if text.strip():
         text = text.strip("\n")
         if len(text) > CAP:

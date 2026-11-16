@@ -100,7 +100,9 @@ def load_frontmatter(raw: str | None) -> tuple[dict[str, Any], bool, str | None]
         return {}, False, f"frontmatter is larger than {FRONTMATTER_MAX_BYTES // 1024} KB"
     try:
         # _NoAliasLoader subclasses yaml.SafeLoader: as safe as safe_load, minus aliases.
-        data = yaml.load(raw, Loader=_NoAliasLoader) if raw.strip() else {}  # nosec B506
+        data: Any = {}
+        if raw.strip():
+            data = yaml.load(raw, Loader=_NoAliasLoader)  # nosec B506
     except Exception as exc:  # YAMLError, or a ValueError from an impossible date
         return {}, False, " ".join(str(exc).split())
     if data is None:

@@ -30,11 +30,17 @@ NOTE_MAX_BYTES = 2 * 1024 * 1024
 _log = logging.getLogger(__name__)
 
 
-def _too_big(rel: str, size: int) -> bool:
-    """True (with a warning in the log) for a note the index skips for its size."""
+def _too_big(rel: str, size: int, warned: set[tuple[str, int]]) -> bool:
+    """True for a note the index skips for its size.
+
+    The warning goes to the log once per ``(rel, size)``: ``refresh`` runs on every tool call,
+    and ``warned`` (owned by the index) remembers what was already logged.
+    """
     if size <= NOTE_MAX_BYTES:
         return False
-    _log.warning("skipping %s: %d bytes, the limit is %d", rel, size, NOTE_MAX_BYTES)
+    if (rel, size) not in warned:
+        warned.add((rel, size))
+        _log.warning("skipping %s: %d bytes, the limit is %d", rel, size, NOTE_MAX_BYTES)
     return True
 
 
@@ -63,6 +69,7 @@ class Index:
         self.generation = 0
         self._resolver: tuple[tuple[int, int], Resolver] | None = None
         self._dirs: dict[str, DirListing] = {}
+        self._too_big_warned: set[tuple[str, int]] = set()
         self.conn = self._open()
 
     # -- connection --------------------------------------------------------
@@ -174,7 +181,7 @@ class Index:
         disk = {
             rel: (st.st_mtime_ns, st.st_size)
             for rel, st in self.vault.scan_notes(self._dirs)
-            if not _too_big(rel, st.st_size)
+            if not _too_big(rel, st.st_size, self._too_big_warned)
         }
         changed, removed = _diff(disk, self._stored_signatures())
         if not changed and not removed:
@@ -246,7 +253,7 @@ class Index:
         path = self.vault.root / rel
         try:
             st = path.stat()
-            if _too_big(rel, st.st_size):
+            if _too_big(rel, st.st_size, self._too_big_warned):
                 return None
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:

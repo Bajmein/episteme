@@ -97,8 +97,38 @@ def test_notice_drops_control_characters_from_note_data(monkeypatch: pytest.Monk
 
     out = json.loads(hookmode.render("SessionStart", "", f"retomada: {hostile}"))
 
-    assert out["systemMessage"] == "retomada: tarea]0;pwn[2J31m segunda" + "línea"
-    assert not hookmode._CONTROL.search(out["systemMessage"])
+    assert out["systemMessage"] == "retomada: tarea]0;pwn[2J31m\nsegunda" + "línea"
+    assert not hookmode._CONTROL.search(out["systemMessage"].replace("\n", ""))
+
+
+def test_notice_keeps_its_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NO_COLOR", "1")
+    notice = "episteme · archivadas 2\n\n  \nepisteme · revisión pendiente\x1b[2J"
+
+    out = json.loads(hookmode.render("SessionStart", "", notice))
+
+    assert out["systemMessage"] == "episteme · archivadas 2\nepisteme · revisión pendiente[2J"
+    assert "\x1b" not in out["systemMessage"]
+
+
+def test_notice_is_painted_line_by_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
+    out = json.loads(hookmode.render("SessionStart", "", "a\nb\x1b[2J"))
+
+    assert out["systemMessage"] == hookmode.paint("a\nb[2J")
+
+
+def test_clean_block_cuts_the_whole_block() -> None:
+    block = hookmode.clean_block("\n".join(["x" * 100] * 10), 250)
+
+    assert len(block) == 250
+    assert block.endswith("…")
+    assert block.count("\n") == 2
+
+
+def test_clean_line_drops_bidi_marks() -> None:
+    assert hookmode.clean_line("a\u061cb\u202ec\u2066d") == "abcd"
 
 
 def test_clean_line_cuts_long_text() -> None:

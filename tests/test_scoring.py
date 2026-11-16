@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 from conftest import mcp_client
 
-from episteme import memory
+from episteme import hookmode, memory
 from episteme.engine import Engine
+from episteme.memory.scoring import entry_line
 
 pytestmark = pytest.mark.anyio
 
@@ -131,3 +132,38 @@ async def test_task_linked_by_body_wikilink(vault: Path) -> None:
         text = hook_text(raw)
         assert "Memorias enlazadas:" in text
         assert text.index(main) < text.index("Memorias enlazadas:") < text.index(target)
+
+
+HOSTILE_TITLE = "Título \x1b]0;pwn\x07hostil ‮al revés"
+
+
+def test_entry_line_drops_control_characters_from_the_title() -> None:
+    row = {
+        "type": "decision", "priority": 5, "title": HOSTILE_TITLE, "path": "memory/x.md",
+        "body": "Primera frase \x1b[2Jcon ESC. Segunda.",
+    }  # fmt: skip
+
+    line = entry_line(row)
+
+    assert "\x1b" not in line and "\x07" not in line and "‮" not in line
+    assert line.startswith("- [decision p5] Título ]0;pwnhostil al revés (memory/x.md)")
+
+
+async def test_session_start_output_has_no_escape_from_a_hostile_title(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        await c.ok(
+            "remember", type="decision", title=HOSTILE_TITLE,
+            body="Regla \x1b[2Jcon una secuencia de escape.", priority=5,
+        )  # fmt: skip
+
+        raw = await c.ok(
+            "context", mode="welcome", session="hostil", hook_event="SessionStart", source="clear"
+        )
+
+    out = json.loads(raw)
+    text = out["hookSpecificOutput"]["additionalContext"]
+    assert "al revés" in text
+    assert "\x1b" not in text and "‮" not in text
+    assert "\x1b" not in out["systemMessage"].removeprefix(hookmode.NOTICE_STYLE).removesuffix(
+        hookmode.NOTICE_RESET
+    )

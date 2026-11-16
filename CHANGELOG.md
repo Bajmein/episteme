@@ -7,10 +7,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Seguridad
 
 - Una nota con alias YAML en el frontmatter (`&a` y `*a` anidados) ya no deja el servidor colgado: los alias se rechazan, la nota queda con `fm_valid` falso y el frontmatter no puede pasar de 64 KB. Efecto: una nota que reutilice un ancla (`<<: *base`) queda con `fm_valid` falso.
-- El índice salta las notas de más de 2 MB (con un aviso en el log); `remember` rechaza un `body` de más de 100.000 caracteres.
+- El índice salta las notas de más de 2 MB (con un aviso en el log, una vez por nota y tamaño); `read` explica que la nota pesa demasiado en vez de dar `not_found`; `revise` rechaza un cambio que dejaría una nota por encima de 2 MB (antes la memoria desaparecía del índice), y `remember` rechaza un `body` de más de 100.000 caracteres.
 - `search` y `context` (`task`) descartan lo que pase de 32 términos o 2.000 caracteres en la consulta.
-- Los avisos y listados que llegan a la terminal o al contexto (`systemMessage` de `SessionStart`, el aviso de `checkpoint`, las líneas de bienvenida, `surface` y recordatorios) quitan los caracteres de control (`ESC`, `BEL`, C1, saltos) de los títulos, de `task_title` y de los cuerpos, y cortan cada título a 120 caracteres. Antes, un `estado.md` o una memoria podían cambiar el título de la ventana o borrar la pantalla (#113).
-- El filtro de credenciales detecta más casos: claves `sk-proj-…`, `Authorization: Bearer …`, asignaciones como `DB_PASSWORD=…`, claves con caracteres de ancho cero (se normaliza antes de buscar) y `$secreto` en una URL (solo `$NOMBRE` en mayúsculas cuenta como marcador). Ahora también revisa `project` en `remember` y los valores anidados de `revise(action="set")`; `edit` rechaza un texto con más credenciales que el que reemplaza.
+- Los avisos y listados que llegan a la terminal o al contexto (`systemMessage` de `SessionStart`, el aviso de `checkpoint`, las líneas de bienvenida, `surface` y recordatorios) quitan los caracteres de control (`ESC`, `BEL`, C1, marcas bidi) de los títulos, de `task_title` y de la primera frase de cada línea, y cortan cada título a 120 caracteres. El aviso de `SessionStart` conserva sus líneas. Antes, un `estado.md` o una memoria podían cambiar el título de la ventana o borrar la pantalla (#113).
+- El filtro de credenciales detecta más casos: claves `sk-proj-…`, `Authorization: Bearer …` (sin distinguir mayúsculas), asignaciones como `DB_PASSWORD=…`, `AWS_SECRET_ACCESS_KEY=…` o `"password": "…"` (en una asignación, el valor tiene que tener un dígito y no llevar corchetes ni paréntesis, para que «token: identificador» no bloquee), claves con caracteres de ancho cero (se normaliza antes de buscar) y `$secreto` en una URL (solo `$NOMBRE` en mayúsculas cuenta como marcador). Ahora también revisa `project` en `remember` y los valores anidados de `revise(action="set")`; `edit` rechaza un texto con más credenciales que el que reemplaza.
 - `remember` y `revise` rechazan en `files` los patrones que casan con todo (`*`, `**`, `**/*`, `*.*`).
 - `project` solo admite `[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}`: ya no se crean carpetas ocultas ni nombres de 300 caracteres, y una ruta con byte nulo o demasiado larga da `invalid_argument` sin mostrar la ruta absoluta del vault.
 - `/episteme:setup` ya no copia la base y la clave de OMEGA a una ruta fija de `/tmp`: usa una carpeta privada (`mktemp -d`) y pide borrarla al terminar. `docs/migracion-omega.md` también usa `mktemp -d`.
@@ -19,7 +19,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `.index/` se crea con permisos 0700 y sus bases (`index.db`, `activity.db`, `maintenance.db`) con 0600 en Linux y macOS. Parte de #113.
 - El registro de actividad sustituye por `[redacted: <tipo>]` los argumentos que parecen una credencial. Parte de #113.
 - `checkpoint` (save) copia del frontmatter de `estado.md` solo `estado`, `etapa`, `tags`, `keywords` y `files`, y rechaza con `invalid_argument` un `estado.md` que parece contener una credencial. Parte de #113.
-- Se quitan los `# nosec` que bandit marcaba como innecesarios. Parte de #113.
+- Se quitan los `# nosec` que sobraban, y el de `yaml.load` pasa a una línea propia para que bandit no avise. Los de SQL en `index/store.py` se quedan: sin ellos sale B608, y bandit 1.9.4 avisa igual porque revisa cada trozo del f-string. Parte de #113.
 
 ### Añadido
 

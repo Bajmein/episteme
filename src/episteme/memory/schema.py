@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import INVALID_SCHEMA, EpistemeError, invalid
-from episteme.index import STOPWORDS_ES, as_date
+from episteme.index import NOTE_MAX_BYTES, STOPWORDS_ES, as_date
 from episteme.markdown import (
     dump_frontmatter,
     load_frontmatter,
@@ -322,7 +322,14 @@ class NoteFile:
     def save(self) -> None:
         if self.engine.vault.mode_for(self.rel) == MEMORY:
             validate(self.fm)
-        self.engine.vault.write_atomic(self.rel, self.text())
+        text = self.text()
+        size = len(text.encode("utf-8"))
+        if size > NOTE_MAX_BYTES:
+            raise invalid(
+                f"{self.rel} would be {size} bytes, the limit is 2 MB. "
+                "Shorten it or split it into several memories."
+            )
+        self.engine.vault.write_atomic(self.rel, text)
         self.engine.index.reindex(self.rel)
 
 

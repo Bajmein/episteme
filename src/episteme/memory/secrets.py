@@ -16,7 +16,10 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GitHub token", re.compile(r"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{22,}")),
     ("Anthropic API key", re.compile(r"(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}")),
     ("API key", re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}")),
-    ("Bearer token", re.compile(r"(?<![A-Za-z0-9_-])Bearer\s+[A-Za-z0-9._~+/-]{20,}")),
+    (
+        "Bearer token",
+        re.compile(r"(?<![A-Za-z0-9_-])Bearer\s+[A-Za-z0-9._~+/-]{20,}", re.IGNORECASE),
+    ),
     ("Stripe live key", re.compile(r"(?<![A-Za-z0-9_-])sk_live_[A-Za-z0-9]{16,}")),
     ("npm token", re.compile(r"(?<![A-Za-z0-9_-])npm_[A-Za-z0-9]{36}")),
     ("Hugging Face token", re.compile(r"(?<![A-Za-z0-9_-])hf_[A-Za-z0-9]{30,}")),
@@ -30,8 +33,12 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 _URL_CREDENTIALS = re.compile(r"://[^\s/:@]+:([^\s/@]{6,})@")
+# The key may be quoted (JSON) and end in ``key``/``access_key`` (``AWS_SECRET_ACCESS_KEY``);
+# ``password_hash`` and the like do not match. The value must still pass _looks_like_value.
 _ASSIGNED_SECRET = re.compile(
-    r"(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[\"'`]?(\S{8,})", re.IGNORECASE
+    r"(?:password|passwd|secret|token|api[_-]?key)(?:[_-]?(?:access[_-]?)?key)?[\"'`]?"
+    r"\s*[:=]\s*[\"'`]?([^\s\"'`,;]{8,})",
+    re.IGNORECASE,
 )
 _ENV_REFERENCE = re.compile(r"\$(?:[A-Z_][A-Z0-9_]*|\{[A-Z_][A-Z0-9_]*\})")
 _PLACEHOLDER_PASSWORDS = {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -335,12 +336,17 @@ def test_fts_is_contentless_only_where_sqlite_can_delete_from_it(
 
 def test_alias_bomb_note_does_not_block_indexing(vault: Path) -> None:
     lines = ["a0: &a0 [x, x]"] + [f"a{i}: &a{i} [*a{i - 1}, *a{i - 1}]" for i in range(1, 25)]
+    ix = _index(vault)  # the full build is not what is timed
     (vault / "plans").mkdir()
     (vault / "plans" / "bomb.md").write_text("---\n" + "\n".join(lines) + "\n---\n# Bomb\n")
-    ix = _index(vault)
+
+    start = time.perf_counter()
+    ix.refresh()
+    elapsed = time.perf_counter() - start
 
     row = ix.note("plans/bomb.md")
     assert row is not None and row["fm_valid"] == 0
+    assert elapsed < 1
 
 
 def test_note_over_2_mb_is_skipped_with_a_warning(vault: Path, caplog) -> None:
@@ -352,6 +358,22 @@ def test_note_over_2_mb_is_skipped_with_a_warning(vault: Path, caplog) -> None:
 
     assert ix.note("plans/huge.md") is None
     assert "plans/huge.md" in caplog.text
+
+
+def test_note_over_2_mb_is_warned_once_per_size(vault: Path, caplog) -> None:
+    (vault / "plans").mkdir()
+    huge = vault / "plans" / "huge.md"
+    huge.write_text("# Huge\n\n" + "zorbhuge palabra\n" * 150_000)
+    ix = Index(Vault(vault))
+
+    with caplog.at_level("WARNING"):
+        ix.refresh()
+        ix.refresh()
+        ix.refresh()
+        huge.write_text("# Huge\n\n" + "zorbhuge palabra\n" * 160_000)
+        ix.refresh()
+
+    assert caplog.text.count("skipping plans/huge.md") == 2
 
 
 def test_query_terms_are_capped_in_count_and_length() -> None:

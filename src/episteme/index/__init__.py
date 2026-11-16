@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from episteme.index.store import Hit, Index
+from episteme.index.store import NOTE_MAX_BYTES, Hit, Index
 from episteme.index.text import STOPWORDS_ES, locate, normalize_tag, query_terms
 from episteme.index.text import _term_regex as _term_regex
 from episteme.index.values import as_date, as_int, is_past, jsonable, to_json
 
 __all__ = [
+    "NOTE_MAX_BYTES",
     "STOPWORDS_ES",
     "Hit",
     "Index",

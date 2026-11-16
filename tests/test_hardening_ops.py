@@ -1,4 +1,4 @@
-"""Hardening of backups, the activity log and checkpoints (issue #113, points 7, 9 and 10)."""
+"""Hardening of backups, the activity log, checkpoints and notes over the size limit."""
 
 from __future__ import annotations
 
@@ -141,3 +141,44 @@ async def test_checkpoint_save_rejects_a_secret(vault: Path, project_dir: Path, 
     assert error.startswith("invalid_argument:")
     assert "secret" in error
     assert FAKE_TOKEN not in error
+
+
+HUGE_LINE = "zorbhuge palabra\n"
+
+
+@pytest.mark.anyio
+async def test_revise_rejects_an_edit_over_2_mb_and_keeps_the_memory(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        made = await c.ok(
+            "remember", type="decision", title="Memoria que no debe crecer",
+            body="Texto corto con zorbkeep.",
+        )  # fmt: skip
+        before = (vault / made["path"]).read_bytes()
+
+        err = await c.error(
+            "revise", note=made["path"], action="edit", old="zorbkeep", new=HUGE_LINE * 170_000
+        )
+        hits = await c.ok("search", query="zorbkeep")
+        note = await c.ok("read", note=made["path"])
+
+    assert err.startswith(f"invalid_argument: {made['path']} would be ")
+    assert "the limit is 2 MB. Shorten it or split it into several memories." in err
+    assert (vault / made["path"]).read_bytes() == before
+    assert [r["path"] for r in hits["results"]] == [made["path"]]
+    assert "zorbkeep" in note["content"]
+
+
+@pytest.mark.anyio
+async def test_read_explains_a_note_over_2_mb(vault: Path) -> None:
+    (vault / "plans").mkdir(exist_ok=True)
+    (vault / "plans" / "huge.md").write_text("# Huge\n\n" + HUGE_LINE * 190_000, encoding="utf-8")
+
+    async with mcp_client(vault) as c:
+        err = await c.error("read", note="plans/huge.md")
+        bare = await c.error("read", note="plans/huge")
+        missing = await c.error("read", note="plans/nada.md")
+
+    assert err.startswith("invalid_argument: plans/huge.md has ")
+    assert err.endswith("over the 2 MB limit; episteme does not index it. Split the note.")
+    assert bare == err
+    assert missing.startswith("not_found: ")
