@@ -1,7 +1,7 @@
 ---
 name: mantencion
 description: Mantención de las memorias de episteme con review y revise. Úsala cuando la bienvenida diga «mantención pendiente», o cuando pidan limpiar, ordenar, unificar o revisar memorias, ver duplicadas, contradicciones o vencidas, o con /episteme:mantencion.
-argument-hint: "[proyecto | *] [corta]"
+argument-hint: "[proyecto | *] [corta | huerfanas]"
 ---
 
 # /episteme:mantencion: revisar y ordenar las memorias
@@ -32,7 +32,7 @@ Antes de proponer algo sobre una memoria, léela: `read(notes=[...])` con todas 
 | `cut_titles` | El título quedó cortado y la primera línea del cuerpo lo repite | `revise(action="edit")` para quitar la repetición del cuerpo |
 | `invalid_frontmatter` | El frontmatter no cumple el esquema | `revise(action="set", fields={…})` con el campo corregido |
 | `broken_links` | Enlaces a notas que no existen | Corregir el enlace con `edit`, o quitarlo si la nota ya no existe |
-| `orphans` | Notas a las que nadie enlaza | Solo informar: no es un error por sí solo |
+| `orphans` | Memorias activas sin ningún enlace, cada una con hasta 3 `candidates` a enlazar | Proponer enlaces (ver el paso 7) |
 
 ## 3. Unificar un grupo de parecidas
 
@@ -67,3 +67,14 @@ Con el argumento `corta`, o si la persona dice que tiene poco tiempo, toma como 
 3. La contradicción de `contradictions` con mayor `similarity`.
 
 Propón cada caso, aplica solo lo aprobado y termina diciendo cuántos pendientes quedan (los `totals` de un `review` nuevo). Las reglas de la sección 5 siguen valiendo.
+
+## 7. Ronda de huérfanas
+
+Con el argumento `huerfanas`, o cuando la persona lo pida, recorre las `orphans` de `review` de 10 en 10 (vienen primero las que traen `candidates`). Para cada tanda:
+
+1. `read(notes=[…])` con las huérfanas de la tanda y sus `candidates`, en una llamada.
+2. Para cada huérfana, propón qué candidatas van de verdad con ella: la misma decisión, el mismo tema, una causa y su efecto. Compartir tags no basta. Si no trae candidatas, busca con `search(query=<palabras del título y de keywords>, match="any", zone="memory")`.
+3. Aplica lo aprobado con `revise(note=<huérfana>, action="set", fields={"related": ["[[nombre]]", …]})`. Basta enlazar desde la huérfana: el sentido inverso lo calcula el índice.
+4. Si nada va con ella, se deja: una huérfana no es un error.
+
+Termina con los `totals` de un `review` nuevo. Las reglas de la sección 5 siguen valiendo.

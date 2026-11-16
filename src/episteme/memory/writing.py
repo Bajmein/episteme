@@ -97,6 +97,19 @@ def _active_memories(engine: Engine, project: str) -> list[Any]:
     return engine.index.memories("status = 'active' and project in (?, ?)", (project, SHARED))
 
 
+def shared_reason(
+    my_files: set[str], my_tags: set[str], other_files: set[str], other_tags: set[str]
+) -> str | None:
+    """Why two memories are worth linking (a shared file or 2+ shared tags), or ``None``."""
+    shared_files = sorted(my_files & other_files)
+    if shared_files:
+        return f"shares file {shared_files[0]}"
+    shared_tags = sorted(my_tags & other_tags)
+    if len(shared_tags) >= MIN_SHARED_TAGS:
+        return f"shares tags {', '.join(shared_tags)}"
+    return None
+
+
 def _match_reason(
     engine: Engine,
     row: Any,
@@ -105,14 +118,11 @@ def _match_reason(
     files: dict[str, list[str]],
 ) -> str | None:
     """Why a memory is worth linking (a shared file or 2+ shared tags), or ``None``."""
-    shared_files = sorted(my_files & set(files.get(row["path"], [])))
-    if shared_files:
-        return f"shares file {shared_files[0]}"
+    other_files = set(files.get(row["path"], []))
+    if my_files & other_files:
+        return shared_reason(my_files, my_tags, other_files, set())
     raw_tags = engine.index.props(row["path"]).get("tags")
-    shared_tags = sorted(my_tags & set(_as_list(raw_tags)))
-    if len(shared_tags) >= MIN_SHARED_TAGS:
-        return f"shares tags {', '.join(shared_tags)}"
-    return None
+    return shared_reason(my_files, my_tags, other_files, set(_as_list(raw_tags)))
 
 
 def _top_candidates(found: list[tuple[Any, ...]]) -> list[dict[str, str]]:

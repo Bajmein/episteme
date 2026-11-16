@@ -77,8 +77,9 @@ async def test_review_categories(vault: Path) -> None:
             "memory/fabrik/decisions/2026-10-19-serena-lsp-markdown.md",
         }
         assert ".serena/project.yml" in pair["reason"]
-        assert "memory/fabrik/lessons/2026-10-14-omega-rss-limit.md" in res["orphans"]
-        assert "memory/fabrik/decisions/2026-10-02-serena-ty.md" not in res["orphans"]
+        orphans = [o["path"] for o in res["orphans"]]
+        assert "memory/fabrik/lessons/2026-10-14-omega-rss-limit.md" in orphans
+        assert "memory/fabrik/decisions/2026-10-02-serena-ty.md" not in orphans
         assert {(b["path"], b["target"]) for b in res["broken_links"]} == {
             ("plans/p.md", "nowhere"),
             ("plans/p.md", "hooks-reference#No such"),
@@ -101,6 +102,39 @@ async def test_review_categories(vault: Path) -> None:
         pairs = [{p["a"], p["b"]} for p in (await c.ok("review"))["contradictions"]]
         assert {new["path"], "memory/fabrik/decisions/2026-10-02-serena-ty.md"} not in pairs
         assert {new["path"], "memory/fabrik/decisions/2026-10-19-serena-lsp-markdown.md"} in pairs
+
+
+def _orphan(vault: Path, slug: str, tags: str = "[]", status: str = "active") -> str:
+    rel = f"memory/orph/insights/{slug}.md"
+    path = vault / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\ntype: insight\nproject: orph\npriority: 3\nstatus: {status}\n"
+        f"created: 2026-10-10\ntags: {tags}\n---\n# {slug}\n\ntexto {slug}\n",
+        encoding="utf-8",
+        newline="",
+    )
+    return rel
+
+
+async def test_review_orphans_carry_candidates_linkable_first(vault: Path) -> None:
+    lone = _orphan(vault, "lone")
+    a = _orphan(vault, "alpha", "[tema/x, tema/y]")
+    b = _orphan(vault, "beta", "[tema/x, tema/y, tema/z]")
+    gone = _orphan(vault, "gone", "[tema/x, tema/y]", status="archived")
+
+    async with mcp_client(vault) as c:
+        res = await c.ok("review", project="orph")
+
+    by_path = {o["path"]: o for o in res["orphans"]}
+    assert gone not in by_path
+    assert by_path[a]["candidates"] == [
+        {"path": b, "title": "beta", "reason": "shares tags tema/x, tema/y"}
+    ]
+    assert [x["path"] for x in by_path[b]["candidates"]] == [a]
+    assert by_path[lone]["candidates"] == []
+    order = [o["path"] for o in res["orphans"]]
+    assert order.index(a) < order.index(lone) and order.index(b) < order.index(lone)
 
 
 async def test_task_context(vault: Path) -> None:

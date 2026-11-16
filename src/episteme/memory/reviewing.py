@@ -12,6 +12,7 @@ from episteme.markdown import (
 )
 from episteme.memory.schema import NoteFile, dedup_tokens, similarity, validate
 from episteme.memory.scoring import days_since
+from episteme.memory.writing import shared_reason
 from episteme.vault import MEMORY, READ_ONLY, today
 
 if TYPE_CHECKING:
@@ -30,6 +31,7 @@ STALE_EXEMPT_TYPES = ("preference", "constraint")
 DECISION_TYPES = ("decision", "constraint")
 NOT_SIMILAR_TYPES = ("session", "reminder")
 CHECKPOINT_PREFIX = "checkpoint-"
+ORPHAN_CANDIDATES = 3
 
 
 def expired_memories(rows: list[Any], iso: str) -> list[Any]:
@@ -225,15 +227,59 @@ def _find_cut_titles(mems: list[Any]) -> list[str]:
     return [r["path"] for r in mems if _is_cut_title(r)]
 
 
-def _find_orphans(engine: Engine, mems: list[Any]) -> list[str]:
-    orphans = []
-    for r in mems:
-        out = [
-            x for x in engine.index.outgoing(r["path"]) if x["dst_path"] not in (None, r["path"])
-        ]
-        if not out and not engine.index.backlinks(r["path"]):
-            orphans.append(r["path"])
-    return orphans
+def _is_orphan(engine: Engine, path: str) -> bool:
+    """True when the note links to no other note and nothing links to it."""
+    out = [x for x in engine.index.outgoing(path) if x["dst_path"] not in (None, path)]
+    return not out and not engine.index.backlinks(path)
+
+
+def _by_rank(rows: list[Any]) -> list[Any]:
+    """Rows by priority, then created, both descending; the path breaks ties."""
+    by_path = sorted(rows, key=lambda r: r["path"])
+    return sorted(
+        by_path, key=lambda r: (r["priority"] or 0, str(r["created"] or "")), reverse=True
+    )
+
+
+def _can_link(r: Any, other: Any) -> bool:
+    """True for another memory of the same project, or of _shared."""
+    return other["path"] != r["path"] and other["project"] in (r["project"], "_shared")
+
+
+def _files_and_tags(props: dict[str, Any]) -> tuple[set[str], set[str]]:
+    return set(_list_prop(props, "files")), set(_list_prop(props, "tags"))
+
+
+def _orphan_candidates(
+    r: Any, pool: list[Any], props: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Up to ``ORPHAN_CANDIDATES`` memories of ``pool`` sharing a file or 2+ tags with ``r``."""
+    my_files, my_tags = _files_and_tags(props.get(r["path"], {}))
+    found: list[dict[str, Any]] = []
+    for other in pool:
+        if len(found) == ORPHAN_CANDIDATES:
+            break
+        if not _can_link(r, other):
+            continue
+        other_files, other_tags = _files_and_tags(props.get(other["path"], {}))
+        reason = shared_reason(my_files, my_tags, other_files, other_tags)
+        if reason:
+            found.append({"path": other["path"], "title": other["title"], "reason": reason})
+    return found
+
+
+def _find_orphans(
+    engine: Engine, active: list[Any], props: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Active memories with no links in or out, each with its candidates, linkable first."""
+    pool = _by_rank([r for r in active if r["type"] not in NOT_SIMILAR_TYPES])
+    orphans = [
+        {"path": r["path"], "title": r["title"], "candidates": _orphan_candidates(r, pool, props)}
+        for r in pool
+        if _is_orphan(engine, r["path"])
+    ]
+    # Stable: within each half the rank order of pool holds.
+    return sorted(orphans, key=lambda o: not o["candidates"])
 
 
 def _find_broken_links(engine: Engine, scope: _Scope) -> list[dict[str, Any]]:
@@ -301,7 +347,7 @@ def _collect_findings(engine: Engine, scope: _Scope, mems: list[Any]) -> dict[st
         "contradictions": _find_contradictions(engine, active, props, toks),
         "similar": _similar_groups([r for r in active if r["type"] not in NOT_SIMILAR_TYPES], toks),
         "cut_titles": _find_cut_titles(mems),
-        "orphans": _find_orphans(engine, mems),
+        "orphans": _find_orphans(engine, active, props),
         "broken_links": _find_broken_links(engine, scope),
         "invalid_frontmatter": _find_invalid_frontmatter(engine, scope, props),
         "flagged": _find_flagged(mems),

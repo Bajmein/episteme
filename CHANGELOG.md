@@ -16,6 +16,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - El aviso de mantención y `/episteme:mantencion corta` ofrecen una ronda corta con los 3 casos más claros.
 - `context(mode="task")` sigue los enlaces de cualquier tipo, no solo `related`.
+- `review` entrega cada huérfana con hasta 3 candidatas a enlazar y solo cuenta las memorias activas; `/episteme:mantencion huerfanas` las recorre por tandas.
 
 ### Corregido
 
