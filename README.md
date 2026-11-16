@@ -47,7 +47,7 @@ Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una 
 | **Encuentra** | Busca en todo el vault, en español, sin distinguir mayúsculas ni tildes |
 | **Avisa a tiempo** | Antes de editar un archivo, muestra las normas que le aplican; después, lo que ya se sabe de él |
 | **Retoma** | Guarda en qué ibas antes de que la conversación se compacte y lo recupera después |
-| **Cuida el orden** | Detecta duplicados, memorias vencidas y enlaces rotos; rechaza guardar contraseñas y tokens |
+| **Cuida el orden** | Detecta duplicados, memorias vencidas, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
 
 Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
 
@@ -103,7 +103,7 @@ El plugin trae además estas skills:
 | Skill | Para qué |
 | :-- | :-- |
 | `/episteme:pausa` | Guardar en qué estabas antes de `/clear` o de cerrar, y retomarlo después con `/episteme:pausa retomar` |
-| `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido |
+| `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido. Con `corta` hace una ronda rápida de 3 casos; con `huerfanas`, enlaza las memorias que quedaron sueltas |
 | `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
 
 ### Opción B · A mano
@@ -139,12 +139,12 @@ No hay comandos que aprender: se usa conversando con Claude.
 | Dices «recuerda que…» | Guarda una memoria nueva, salvo que ya exista una casi igual |
 | Preguntas «¿qué decidimos sobre…?» | Claude busca en el vault antes de responder |
 | Claude va a editar un archivo | Le muestra las normas que aplican a ese archivo |
-| La conversación se compacta | Guarda el estado del trabajo y lo recupera al seguir |
+| La conversación se compacta o la limpias con `/clear` | Al compactar guarda el estado del trabajo; en los dos casos lo recupera al seguir |
 
 ### Lo que pasa solo en cada sesión
 
 <p align="center">
-  <img src="static/diagrams/hooks-sesion.png" alt="Secuencia de una sesión: al enviar un mensaje, antes y después de usar un archivo, al compactar y al reanudar, Claude Code llama a una herramienta de episteme y recibe contexto" width="880">
+  <img src="static/diagrams/hooks-sesion.png" alt="Secuencia de una sesión: al enviar un mensaje, antes y después de usar un archivo, al compactar o limpiar la conversación, Claude Code llama a una herramienta de episteme y recibe contexto" width="880">
 </p>
 
 Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. Funcionan como un semáforo, no como un muro: Claude puede leer la norma y aun así equivocarse. La configuración está en [Hooks](docs/hooks.md).
@@ -156,8 +156,8 @@ Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. 
 | Al escribir un mensaje | hook | La primera vez entrega la bienvenida; después sugiere memorias que vienen al caso |
 | Antes de editar un archivo | hook | Muestra las normas de ese archivo. No pausa ni bloquea la edición |
 | Después de leer o editar un archivo | hook | Muestra lo que ya se sabe de él |
-| Al compactar y al reanudar | hook | Guarda el estado del trabajo y lo recupera |
-| En la primera bienvenida, como mucho una vez por periodo | episteme | Avisa de lo pendiente de revisar; si lo activas, archiva lo vencido y hace un backup |
+| Al compactar o con `/clear` | hook | Al compactar guarda el estado del trabajo; después de compactar o de `/clear`, lo recupera |
+| En la primera bienvenida, como mucho una vez por periodo | episteme | Avisa de lo pendiente de revisar y propone una ronda corta; si lo activas, archiva lo vencido y hace un backup |
 | Cuando lo necesita | Claude | Busca, lee, guarda («recuerda que…») y corrige memorias |
 | Cuando tú lo pides | tú | `/episteme:mantencion` para revisar y ordenar |
 
@@ -173,9 +173,9 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `context` | Dar la bienvenida de la sesión y reunir lo relevante para una tarea | ● |
 | `surface` | Mostrar lo que se sabe de un archivo | |
 | `constraints` | Mostrar las normas que aplican a un archivo | |
-| `remember` | Guardar una memoria nueva | ● |
+| `remember` | Guardar una memoria nueva; avisa si le faltan palabras clave o enlaces | ● |
 | `revise` | Corregir, reemplazar o archivar una nota | ● |
-| `review` | Revisar el vault: duplicados, vencidas, enlaces rotos | |
+| `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
 | `checkpoint` | Guardar y recuperar el estado del trabajo | ● |
 
 Los parámetros y el comportamiento exacto de cada una están en [Tools y memorias](docs/tools.md).

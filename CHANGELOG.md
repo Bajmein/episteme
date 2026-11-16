@@ -1,6 +1,6 @@
 # Changelog
 
-Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones, [SemVer](https://semver.org/lang/es/). Cada versión es un tag `vX.Y.Z` del repo, que es lo que los proyectos fijan en su config.
+Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones, [SemVer](https://semver.org/lang/es/). Cada versión es un tag `vX.Y.Z` del repo, que es lo que los proyectos fijan en su config. Solo se conservan los tags de las versiones recientes: las anteriores a 0.6.0 no llevan enlace de comparación.
 
 ## [Sin publicar]
 
@@ -68,17 +68,17 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [0.9.0] - 2026-11-13
 
-### Cambiado
-
-- El paquete pide Python 3.14 o superior (antes 3.11); el repo y el CI usan 3.15, fijado en `.python-version`.
-- Dependencias actualizadas en `uv.lock` (pydantic 2.14.3, pytest 9.2.0, ruff 0.17.5).
-- El `README.md` abre con banner y badges.
-
 ### Añadido
 
 - Mantención automática configurable (`[maintenance]` y `[backup]` en `episteme.toml`): en la primera bienvenida de cada sesión, `context` avisa de los pendientes de `review`, archiva las memorias vencidas (opcional) y deja un `.tar.gz` rotado del vault (opcional), una vez por periodo y coordinado entre procesos con `.index/maintenance.db`. `context` deja de ser de solo lectura.
 - Dependabot: PR semanal del ecosistema `uv` y mensual de GitHub Actions.
 - Este `CHANGELOG.md`.
+
+### Cambiado
+
+- El paquete pide Python 3.14 o superior (antes 3.11); el repo y el CI usan 3.15, fijado en `.python-version`.
+- Dependencias actualizadas en `uv.lock` (pydantic 2.14.3, pytest 9.2.0, ruff 0.17.5).
+- El `README.md` abre con banner y badges.
 
 ## [0.8.0] - 2026-11-13
 
@@ -135,7 +135,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - La salida de `UserPromptSubmit` y `SessionStart` se entrega como `additionalContext`.
 - `surface` vuelve a entregar tras una compactación.
 
-## [0.5.0] - 2026-10-29
+## 0.5.0 - 2026-10-29
 
 ### Añadido
 
@@ -143,7 +143,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `migrate_omega.py`: rutas de Windows, informe de los proyectos omitidos y `--unassigned`.
 - `episteme-setup`: migración en Windows, reinicio tras registrar y `settings.local.json`.
 
-## [0.4.1] - 2026-10-29
+## 0.4.1 - 2026-10-29
 
 ### Añadido
 
@@ -155,7 +155,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `project_relative` reconoce `project_dir` con rutas de Windows.
 - El índice cierra la conexión cuando un pragma falla sobre un índice corrupto.
 
-## [0.4.0] - 2026-10-24
+## 0.4.0 - 2026-10-24
 
 ### Añadido
 
@@ -165,13 +165,13 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - Los nombres y las fechas de las memorias usan la fecha local.
 
-## [0.3.3] - 2026-10-22
+## 0.3.3 - 2026-10-22
 
 ### Corregido
 
 - La migración de OMEGA reconoce el texto del harness después del prefijo «Decision:».
 
-## [0.3.2] - 2026-10-22
+## 0.3.2 - 2026-10-22
 
 Sin tag propio: salió dentro de `v0.3.3`.
 
@@ -179,13 +179,13 @@ Sin tag propio: salió dentro de `v0.3.3`.
 
 - La migración de OMEGA acepta frontmatter en estilo de bloque y se salta el texto del harness.
 
-## [0.3.1] - 2026-10-22
+## 0.3.1 - 2026-10-22
 
 ### Corregido
 
 - `search` encuentra palabras con guion, `review` agrupa las notas de solo lectura y las líneas de las listas se calculan a demanda.
 
-## [0.3.0] - 2026-10-22
+## 0.3.0 - 2026-10-22
 
 ### Añadido
 
@@ -204,14 +204,14 @@ Sin tag propio: salió dentro de `v0.3.3`.
 
 - El parser reinicia el estado de código indentado alrededor de los bloques con cerca.
 
-## [0.2.0] - 2026-10-20
+## 0.2.0 - 2026-10-20
 
 ### Cambiado
 
 - **Incompatible:** `episteme-mcp` pasa a llamarse `episteme` (paquete y comando) y el índice se mueve de `<vault>/.episteme/` a `<vault>/.index/`.
 - Sin `--vault` ni `EPISTEME_VAULT`, el servidor usa `~/.episteme` y lo crea con un `episteme.toml` mínimo si no existe.
 
-## [0.1.0] - 2026-10-19
+## 0.1.0 - 2026-10-19
 
 ### Añadido
 
@@ -229,13 +229,4 @@ Sin tag propio: salió dentro de `v0.3.3`.
 [0.9.0]: https://github.com/Bajmein/episteme/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Bajmein/episteme/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Bajmein/episteme/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/Bajmein/episteme/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/Bajmein/episteme/compare/v0.4.1...v0.5.0
-[0.4.1]: https://github.com/Bajmein/episteme/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/Bajmein/episteme/compare/v0.3.3...v0.4.0
-[0.3.3]: https://github.com/Bajmein/episteme/compare/v0.3.1...v0.3.3
-[0.3.2]: https://github.com/Bajmein/episteme/commit/09df069
-[0.3.1]: https://github.com/Bajmein/episteme/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/Bajmein/episteme/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/Bajmein/episteme/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/Bajmein/episteme/releases/tag/v0.1.0
+[0.6.0]: https://github.com/Bajmein/episteme/releases/tag/v0.6.0
