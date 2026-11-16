@@ -30,6 +30,13 @@ SECRETS = [
     ("Google API key", "AIza" + "f" * 35),
     ("JWT", "eyJ" + "a" * 10 + ".eyJ" + "b" * 10 + "." + "c" * 12),
     ("password in URL", "postgres://admin:" + "s3cr3tvalue" + "@db.local/x"),
+    ("password in URL", "mysql://u:" + "$ecret" + "123@h/db"),
+    ("API key", "sk-" + "proj-" + "A1b2C3d4" * 4),
+    ("Bearer token", "Authorization: Bearer " + "abcdEFGH12" * 3),
+    ("credential assignment", "DB_PASSWORD" + "=" + "hunter2hunter2"),
+    ("credential assignment", 'api_key: "' + "k9" * 8 + '"'),
+    ("private key", "-----BEGIN RSA PRIV\u200bATE KEY-----"),
+    ("private key", "-----BEGIN RSA PRIVATE KEY-----"),
 ]
 HARMLESS = [
     "el token empieza por ghp_",
@@ -42,6 +49,16 @@ HARMLESS = [
     "https://user:******@host/x",
     "https://user:changeme@host/x",
     "https://host:8080/x",
+    "https://user:${DB_PASS}@host/x",
+    "password: <tu clave>",
+    "token = $GITHUB_TOKEN_VALUE",
+    "DB_PASSWORD=changeme",
+    "el password es corto",
+    "Bearer token en la cabecera",
+    "token = get_token(user)",
+    "api_key=settings.API_KEY",
+    "password=$(vault read x1)",
+    "token: ${{ secrets.GITHUB_TOKEN }}",
     "nombre-de-tarea-sk-" + "x" * 5,
     "disk-" + "a" * 40,
     "task-sk-" + "a" * 10,
@@ -158,3 +175,69 @@ def test_migrate_reports_secret_and_continues(vault: Path, tmp_path: Path) -> No
     assert done["error:lesson"] == 1
     assert "ghp_" + "a" * 36 not in text
     assert done["lesson"] >= 1  # the other lessons still migrate
+
+
+@pytest.mark.anyio
+async def test_remember_rejects_secret_project(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        err = await c.error(
+            "remember", type="lesson", title="Algo", body="Texto.", project="ghp_" + "a" * 36
+        )
+        assert "looks like a secret" in err and "a" * 36 not in err
+
+
+@pytest.mark.anyio
+async def test_revise_rejects_nested_secret_and_more_secrets(vault: Path) -> None:
+    secret = "ghp_" + "a" * 36
+    async with mcp_client(vault) as c:
+        made = await c.ok("remember", type="lesson", title="Nota anidada", body="Texto inicial.")
+        path = made["path"]
+        for value in ({"a": {"b": secret}}, {"a": [secret]}, [{"x": secret}]):
+            err = await c.error("revise", note=path, action="set", fields={"extra": value})
+            assert "looks like a secret" in err and secret not in err
+    note = vault / path
+    text = note.read_text(encoding="utf-8").replace("Texto inicial.", f"Texto {secret}")
+    note.write_text(text, encoding="utf-8", newline="")
+    async with mcp_client(vault) as c:
+        err = await c.error(
+            "revise", note=path, action="edit", old=f"Texto {secret}", new=f"{secret} y {secret}"
+        )
+        assert "looks like a secret" in err
+        other = "ghp_" + "b" * 36
+        err = await c.error(
+            "revise", note=path, action="edit", old=f"Texto {secret}", new=f"Texto {other}"
+        )
+        assert "looks like a secret" in err and other not in err
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("pattern", ["*", "**", "**/*", "*.*", " ./** ", "*/**", "?*", "."])
+async def test_files_reject_match_all(vault: Path, pattern: str) -> None:
+    async with mcp_client(vault) as c:
+        base = {"type": "constraint", "title": "Norma", "body": "Texto de la norma."}
+        err = await c.error("remember", **base, files=["src/a.py", pattern])
+        assert err.startswith("invalid_argument: files entry")
+        made = await c.ok("remember", **base, files=["src/**/*.py"])
+        err = await c.error(
+            "revise", note=made["path"], action="set", fields={"files": [pattern]}
+        )
+        assert err.startswith("invalid_argument: files entry")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "project", ["../x", "con espacios", ".oculto", "-x", "a" * 65, "a\x00b", "a/b", "x:y"]
+)
+async def test_remember_rejects_invalid_project(vault: Path, project: str) -> None:
+    async with mcp_client(vault) as c:
+        err = await c.error("remember", type="lesson", title="Algo", body="Texto.", project=project)
+        assert err.startswith(("invalid_schema:", "invalid_argument:"))
+        assert str(vault) not in err
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("project", ["_shared", "fabrik", "a.b-c_d", "a" * 64])
+async def test_remember_accepts_valid_project(vault: Path, project: str) -> None:
+    async with mcp_client(vault) as c:
+        out = await c.ok("remember", type="lesson", title="Algo", body="Texto.", project=project)
+        assert out["created"] is True

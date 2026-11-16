@@ -197,3 +197,18 @@ def test_iter_notes_skips_hidden_and_non_markdown(vault: Path) -> None:
     assert "docs/llms.txt" not in notes
     assert not any(n.startswith(".") for n in notes)
     assert is_ignored(".git/x.md") and is_ignored("docs/llms.txt")
+
+
+def test_resolve_wraps_os_errors(vault: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    v = Vault(vault)
+    with pytest.raises(EpistemeError) as err:
+        v.resolve("memory/a\x00b.md")
+    assert err.value.code == "invalid_argument" and str(vault) not in str(err.value)
+
+    def boom(_path: object) -> str:
+        raise OSError("File name too long")
+
+    monkeypatch.setattr(os.path, "realpath", boom)
+    with pytest.raises(EpistemeError) as err:
+        v.resolve("memory/" + "a" * 300 + ".md")
+    assert err.value.code == "invalid_argument" and str(vault) not in str(err.value)

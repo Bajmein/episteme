@@ -24,6 +24,7 @@ from episteme.memory.schema import (
     TYPES,
     NoteFile,
     _date_arg,
+    check_files,
     dedup_tokens,
     default_priority,
     kind_for,
@@ -436,7 +437,14 @@ def remember(
 ) -> dict[str, Any]:
     """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration."""
     project = engine.need_project(project)
-    secret_fields = (("keywords", keywords), ("source", source), ("tags", tags), ("files", files))
+    check_files(files)
+    secret_fields = (
+        ("keywords", keywords),
+        ("source", source),
+        ("tags", tags),
+        ("files", files),
+        ("project", project),
+    )
     zone, title = _check_args(engine, type, title, body, secret_fields)
 
     slug = _check_slug(slug) if slug is not None else memory_slug(title, project, type)

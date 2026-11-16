@@ -91,7 +91,7 @@ async def test_welcome_notice_over_mcp(vault: Path) -> None:
 
 def test_notice_fits_with_a_long_project_name(vault: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EPISTEME_TODAY", "2026-10-19")
-    project = "proyecto-con-un-nombre-muy-largo-" * 4
+    project = ("proyecto-con-un-nombre-muy-largo-" * 2)[:64].rstrip("-")
     eng = Engine(vault, project)
     eng.index.refresh()
     for i in range(40):

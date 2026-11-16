@@ -202,6 +202,33 @@ def _is_absolute_like(rel: str, pure: PurePosixPath) -> bool:
     return pure.is_absolute() or rel.startswith("~") or (len(rel) > 1 and rel[1] == ":")
 
 
+def _relative_parts(rel: str) -> tuple[str, PurePosixPath]:
+    """Check a path that arrives from a tool; return it with ``/`` separators, and its parts."""
+    if not isinstance(rel, str) or not rel.strip():
+        raise invalid("empty path. Pass a path relative to the vault.")
+    if "\x00" in rel:
+        raise invalid("path has a null character. Use a plain path relative to the vault.")
+    rel = rel.replace("\\", "/")
+    pure = PurePosixPath(rel)
+    if _is_absolute_like(rel, pure):
+        raise EpistemeError(
+            OUTSIDE_VAULT, f'"{rel}" is absolute. Use a path relative to the vault.'
+        )
+    if ".." in pure.parts:
+        raise EpistemeError(
+            OUTSIDE_VAULT, f'"{rel}" leaves the vault. Use a path relative to the vault.'
+        )
+    return rel, pure
+
+
+def _real_path(root: Path, rel: str, pure: PurePosixPath) -> Path:
+    """``realpath`` of ``root / pure``; an unusable path is ``invalid_argument``, not a crash."""
+    try:
+        return Path(os.path.realpath(root / pure))
+    except OSError, ValueError:
+        raise invalid(f'"{rel}" is not a usable path. Use a shorter plain path.') from None
+
+
 def is_ignored(rel: str) -> bool:
     """Dot folders (.obsidian, .index, .git…) and non-Markdown files are invisible."""
     parts = PurePosixPath(rel).parts
@@ -227,19 +254,8 @@ class Vault:
 
     def resolve(self, rel: str) -> Path:
         """Turn a vault-relative path into an absolute one, confined to the vault."""
-        if not isinstance(rel, str) or not rel.strip():
-            raise invalid("empty path. Pass a path relative to the vault.")
-        rel = rel.replace("\\", "/")
-        pure = PurePosixPath(rel)
-        if _is_absolute_like(rel, pure):
-            raise EpistemeError(
-                OUTSIDE_VAULT, f'"{rel}" is absolute. Use a path relative to the vault.'
-            )
-        if ".." in pure.parts:
-            raise EpistemeError(
-                OUTSIDE_VAULT, f'"{rel}" leaves the vault. Use a path relative to the vault.'
-            )
-        full = Path(os.path.realpath(self.root / pure))
+        rel, pure = _relative_parts(rel)
+        full = _real_path(self.root, rel, pure)
         if full != self.root and self.root not in full.parents:
             raise EpistemeError(
                 OUTSIDE_VAULT,

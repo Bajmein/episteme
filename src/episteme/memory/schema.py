@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,7 @@ from episteme.markdown import (
     split_frontmatter,
     tokens,
 )
+from episteme.memory.secrets import _strings_in
 from episteme.vault import MEMORY
 
 if TYPE_CHECKING:
@@ -111,8 +113,19 @@ def _is_str_list(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(v, str) for v in value)
 
 
-def _is_unsafe_project(project: str) -> bool:
-    return "/" in project or "\\" in project or project in (".", "..")
+_PROJECT_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}")
+_MATCH_ALL = re.compile(r"[*?/.]*[*?][*?/.]*|\.+/?")
+
+
+def check_files(files: Any) -> None:
+    """Reject a ``files`` entry that matches every file (``*``, ``**``, ``**/*``, ``*.*``)."""
+    for entry in _strings_in(files):
+        clean = entry.strip().replace("\\", "/").removeprefix("./")
+        if _MATCH_ALL.fullmatch(clean):
+            raise invalid(
+                f'files entry "{clean}" matches every file. '
+                'Name the files or use a narrower pattern, e.g. "src/**/*.py".'
+            )
 
 
 def _check_type(fm: dict[str, Any]) -> None:
@@ -125,8 +138,11 @@ def _check_project(fm: dict[str, Any]) -> None:
     project = fm.get("project")
     if not isinstance(project, str) or not project.strip():
         raise schema_error("project is required.")
-    if _is_unsafe_project(project):
-        raise schema_error(f'project must be a plain name without "/" or "..", got {project!r}.')
+    if not _PROJECT_NAME.fullmatch(project):
+        raise schema_error(
+            "project must be 1-64 letters, digits, dots, hyphens or underscores and not start "
+            f"with a dot or hyphen, got {project!r}."
+        )
 
 
 def _check_priority(fm: dict[str, Any]) -> None:
@@ -260,8 +276,6 @@ def wikilink(engine: Engine, rel: str) -> str:
     stem = PurePosixPath(rel).name.removesuffix(".md")
     target = stem if engine.index.resolver().resolve_quiet(stem) == rel else rel[:-3]
     return f"[[{target}]]"
-
-
 
 
 class NoteFile:

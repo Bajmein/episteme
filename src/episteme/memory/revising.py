@@ -18,11 +18,12 @@ from episteme.memory.schema import (
     MEMORY_ACTIONS,
     TYPES,
     NoteFile,
+    check_files,
     kind_for,
     validate,
     wikilink,
 )
-from episteme.memory.secrets import _reject_secrets, find_secrets
+from episteme.memory.secrets import _reject_secrets, has_new_secrets
 from episteme.vault import MEMORY
 
 if TYPE_CHECKING:
@@ -35,7 +36,7 @@ FEEDBACK_VALUES = ("helpful", "unhelpful", "outdated")
 def _edit(nf: NoteFile, old: str | None, new: str | None) -> list[str]:
     if not old or new is None:
         raise invalid("edit needs old (text to replace) and new.")
-    if find_secrets(new) != find_secrets(old):  # editing around an old false positive is fine
+    if has_new_secrets(new, old):  # editing around an old false positive is fine
         _reject_secrets("new", new)
     count = nf.body.count(old)
     if count != 1:
@@ -79,6 +80,8 @@ def _set(
     if not fields:
         raise invalid('set needs fields, e.g. {"priority": 5}.')
     _reject_field_secrets(fields)
+    if "files" in fields:
+        check_files(fields["files"])
     changed = nf.set_fields({k: _coerce(k, v) for k, v in fields.items()})
     if not _needs_move(changed, is_memory):
         return changed, nf.rel
