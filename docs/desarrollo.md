@@ -20,7 +20,7 @@ El paquete pide Python 3.14 o superior (`requires-python`); el repo se desarroll
 
 Dependabot (`.github/dependabot.yml`) abre un PR agrupado por semana con las dependencias de Python (`pyproject.toml` y `uv.lock`) y otro al mes con las GitHub Actions.
 
-El CI tiene dos workflows. `ci.yml` (`lint` y `test` en Linux) corre en un runner propio, registrado en el repo con las etiquetas `self-hosted` y `linux`; si ese equipo está apagado, los jobs esperan en cola hasta 24 horas. `ci-windows.yml` corre los tests en `windows-latest`, que gasta la cuota de Actions: siempre en `main`, y en un PR solo si cambian `src/`, `tests/`, `scripts/`, `pyproject.toml`, `uv.lock` o `.python-version`. En los dos, un push nuevo cancela la ejecución anterior de la misma rama. La configuración del runner no está en este repo.
+El CI tiene dos workflows. `ci.yml` (`lint` y `test` en Linux) corre en un runner propio, registrado en el repo con las etiquetas `self-hosted` y `linux`; si ese equipo está apagado, los jobs esperan en cola hasta 24 horas. `ci-windows.yml` corre los tests en `windows-latest`, que gasta la cuota de Actions: siempre en `main`, y en un PR solo si cambian `src/`, `tests/`, `scripts/`, `pyproject.toml`, `uv.lock` o `.python-version`. **En pausa hasta el 1 de diciembre de 2026** (cuota de Actions agotada): mientras tanto solo corre a mano, con `gh workflow run "CI (Windows)"`. En los dos, un push nuevo cancela la ejecución anterior de la misma rama. La configuración del runner no está en este repo.
 
 El banner es `static/banner-episteme.jpg` (1600 px de ancho, JPEG progresivo). El badge de versión de la cabecera es estático: se cambia en cada release, junto con el tag de los ejemplos de instalación.
 

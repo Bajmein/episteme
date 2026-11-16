@@ -1,19 +1,27 @@
 name: CI (Windows)
 
-# Windows corre en GitHub y gasta cuota: siempre en main, y en un PR solo
-# si cambia algo que puede afectar a los tests.
+# EN PAUSA hasta el 1 de diciembre de 2026: la cuota de Actions del mes se
+# agotó y cada ejecución falla a los pocos segundos. Mientras tanto solo se
+# lanza a mano (pestaña Actions o `gh workflow run "CI (Windows)"`).
+#
+# Para reactivarlo, cambia el bloque `on:` por este. Windows corre en GitHub
+# y gasta cuota: siempre en main, y en un PR solo si cambia algo que puede
+# afectar a los tests.
+#
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     paths:
+#       - "src/**"
+#       - "tests/**"
+#       - "scripts/**"
+#       - "pyproject.toml"
+#       - "uv.lock"
+#       - ".python-version"
+#       - ".github/workflows/ci-windows.yml"
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".python-version"
-      - ".github/workflows/ci-windows.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
