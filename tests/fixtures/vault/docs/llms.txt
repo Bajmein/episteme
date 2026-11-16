@@ -1,0 +1,14 @@
+# episteme
+
+> Vault de prueba con notas sintéticas sobre un agente de código ficticio. Empezar por el índice local.
+
+## Vault (local)
+
+- [Índice de documentación](docs/claude-code/README.index.md): Mapa de contenido por objetivos y categorías; punto de entrada del vault de prueba
+- [Home](Home.md): Página de inicio
+
+## Notas de ejemplo
+
+- [Hooks](docs/claude-code/hooks-reference.md): Referencia sintética de eventos
+- [Ajustes](docs/claude-code/settings-reference.md): Nota grande para probar el truncado
+- [Skills](docs/claude-code/skills.md): Nota sintética sobre skills
