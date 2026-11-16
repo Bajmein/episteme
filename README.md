@@ -4,7 +4,7 @@
 
 <a href="https://github.com/Bajmein/episteme/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Bajmein/episteme/actions/workflows/ci.yml/badge.svg?branch=main" height="24"></a>
 <a href="https://codescene.io/projects/87754"><img alt="CodeScene general" src="https://codescene.io/images/analyzed-by-codescene-badge.svg" height="24"></a>
-<a href="https://github.com/Bajmein/episteme/tags"><img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-v0.10.1-8B5CF6" height="24"></a>
+<a href="https://github.com/Bajmein/episteme/tags"><img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-v0.11.0-8B5CF6" height="24"></a>
 <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white" height="24"></a>
 <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/uv-Astral-DE5FE9?logo=uv&logoColor=white" height="24"></a>
 <a href="https://github.com/modelcontextprotocol/python-sdk"><img alt="MCP SDK" src="https://img.shields.io/badge/MCP_SDK-2.x-005571" height="24"></a>
@@ -47,7 +47,7 @@ Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una 
 Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
 
 > [!NOTE]
-> **Versión actual: v0.10.1.** Funciona en Linux, macOS y Windows. Las novedades de cada versión están en el [CHANGELOG](CHANGELOG.md).
+> **Versión actual: v0.11.0.** Funciona en Linux, macOS y Windows. Las novedades de cada versión están en el [CHANGELOG](CHANGELOG.md).
 
 ## Cómo funciona
 
@@ -109,13 +109,13 @@ Un solo comando registra el servidor. Cambia `<proyecto>` por el nombre del tuyo
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.10.1 episteme --project <proyecto>
+  uvx --from git+ssh://git@github.com/Bajmein/episteme@v0.11.0 episteme --project <proyecto>
 ```
 
 **Windows** (PowerShell, en una sola línea)
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.10.1 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.11.0 episteme --project <proyecto>
 ```
 
 Luego faltan los hooks, los permisos y la regla del `CLAUDE.md`: los pasos están en la [guía de instalación](docs/instalacion.md#después-de-registrar).
