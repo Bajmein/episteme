@@ -68,17 +68,17 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [0.9.0] - 2026-11-13
 
-### Cambiado
-
-- El paquete pide Python 3.14 o superior (antes 3.11); el repo y el CI usan 3.15, fijado en `.python-version`.
-- Dependencias actualizadas en `uv.lock` (pydantic 2.14.3, pytest 9.2.0, ruff 0.17.5).
-- El `README.md` abre con banner y badges.
-
 ### Añadido
 
 - Mantención automática configurable (`[maintenance]` y `[backup]` en `episteme.toml`): en la primera bienvenida de cada sesión, `context` avisa de los pendientes de `review`, archiva las memorias vencidas (opcional) y deja un `.tar.gz` rotado del vault (opcional), una vez por periodo y coordinado entre procesos con `.index/maintenance.db`. `context` deja de ser de solo lectura.
 - Dependabot: PR semanal del ecosistema `uv` y mensual de GitHub Actions.
 - Este `CHANGELOG.md`.
+
+### Cambiado
+
+- El paquete pide Python 3.14 o superior (antes 3.11); el repo y el CI usan 3.15, fijado en `.python-version`.
+- Dependencias actualizadas en `uv.lock` (pydantic 2.14.3, pytest 9.2.0, ruff 0.17.5).
+- El `README.md` abre con banner y badges.
 
 ## [0.8.0] - 2026-11-13
 
