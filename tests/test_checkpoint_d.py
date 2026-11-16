@@ -98,3 +98,24 @@ async def test_other_worktree_state_does_not_archive_checkpoint(
         assert res["source"] == "state"
         res = await c.ok("checkpoint", action="restore")
         assert res["found"] is True and res["path"] == saved["path"]
+
+
+async def test_restore_notice_has_no_control_characters(vault: Path, project_dir: Path) -> None:
+    state = next(project_dir.rglob("estado.md"))
+    text = state.read_text(encoding="utf-8")
+    hostile = '"001 \\e]0;pwn\\a\\e[2J demo"'.replace("\\e", "\\x1b").replace("\\a", "\\x07")
+    patched = text.replace("task_title: 001 · demo", f"task_title: {hostile}")
+    assert patched != text
+    state.write_text(patched, encoding="utf-8", newline="")
+
+    async with mcp_client(vault) as c:
+        hook = await c.call(
+            "checkpoint",
+            action="restore",
+            project_dir=str(project_dir),
+            hook_event="SessionStart",
+        )
+
+    notice = json.loads(hook[1])["systemMessage"]
+    assert "\x1b]0;" not in notice and "\x07" not in notice and "\x1b[2J" not in notice
+    assert "pwn" in notice

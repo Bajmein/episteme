@@ -6,6 +6,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import invalid
+from episteme.hookmode import clean_line
 from episteme.markdown import (
     body_without_title,
     clip,
@@ -161,7 +162,7 @@ def constraints(
     if items:
         parts = [f"Constraints that apply to {rel}:"]
         for item in items:
-            parts.append(f"- {item['title']} ({item['path']})")
+            parts.append(f"- {clean_line(item['title'])} ({item['path']})")
             parts.append(item["body"])
         text = "\n".join(parts)
     return text, {"file": rel, "constraints": items}

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from episteme import memory
+from episteme.hookmode import clean_line
 from episteme.index import STOPWORDS_ES, is_past
 from episteme.markdown import tokens
 from episteme.memory import STOPWORDS_EN
@@ -110,7 +111,7 @@ def trail_block(engine: Engine, skip: set[str]) -> tuple[str, list[dict[str, Any
         chosen,
         "trail",
         lambda r: (
-            f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']}) "
+            f"- [{r['type']} p{r['priority']}] {clean_line(r['title'])} ({r['path']}) "
             f"· {labels[TRAIL[r['path']]]}"
         ),
     )
@@ -149,7 +150,7 @@ def overdue_block(engine: Engine, project: str) -> tuple[str, list[dict[str, Any
         'episteme · recordatorios vencidos (al resolver uno: revise(note, action="dismiss")):',
         rows,
         "reminder",
-        lambda r: f"- [{r['due']}] {r['title']} ({r['path']})",
+        lambda r: f"- [{r['due']}] {clean_line(r['title'])} ({r['path']})",
     )
 
 
@@ -314,7 +315,7 @@ def recall(
         "episteme · memorias que pueden venir al caso (ábrelas con read si aplican):",
         chosen,
         "recall",
-        lambda r: f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})",
+        lambda r: f"- [{r['type']} p{r['priority']}] {clean_line(r['title'])} ({r['path']})",
     )
 
 

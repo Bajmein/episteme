@@ -6,6 +6,7 @@ import datetime as dt
 import math
 from typing import TYPE_CHECKING, Any
 
+from episteme.hookmode import clean_line
 from episteme.markdown import (
     first_sentence,
 )
@@ -38,9 +39,10 @@ def welcome_score(row: Any, now: dt.date) -> float:
 
 
 def entry_line(row: Any) -> str:
-    sentence = first_sentence(row["body"] or "")
+    sentence = clean_line(first_sentence(row["body"] or ""))
     tail = f" — {sentence}" if sentence else ""
-    return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']}){tail}"
+    title = clean_line(row["title"])
+    return f"- [{row['type']} p{row['priority']}] {title} ({row['path']}){tail}"
 
 
 def _neg_date(value: str | None) -> int:

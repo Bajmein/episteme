@@ -89,3 +89,20 @@ def test_notice_is_a_coloured_system_message_on_session_start(
     assert hookmode.render("PreCompact", "ctx", "aviso") == ""
     monkeypatch.setenv("NO_COLOR", "1")
     assert json.loads(hookmode.render("SessionStart", "", "plano"))["systemMessage"] == "plano"
+
+
+def test_notice_drops_control_characters_from_note_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NO_COLOR", "1")
+    hostile = "tarea\x1b]0;pwn\x07\x1b[2J\x9b31m\nsegunda\x00línea"
+
+    out = json.loads(hookmode.render("SessionStart", "", f"retomada: {hostile}"))
+
+    assert out["systemMessage"] == "retomada: tarea]0;pwn[2J31m segunda" + "línea"
+    assert not hookmode._CONTROL.search(out["systemMessage"])
+
+
+def test_clean_line_cuts_long_text() -> None:
+    cleaned = hookmode.clean_line("x" * 500)
+
+    assert len(cleaned) == hookmode.LINE_MAX
+    assert cleaned.endswith("…")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 from episteme.errors import invalid
@@ -16,12 +17,26 @@ NOTICE_EVENTS = ("SessionStart",)
 NOTICE_STYLE = "\x1b[1;32m"
 NOTICE_RESET = "\x1b[0m"
 CAP = 10_000
+LINE_MAX = 120
+NOTICE_MAX = 600
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]")
+_BREAKS = re.compile(r"[\t\r\n]+")
 CUT_MARK = f"\n[episteme: output cut at {CAP:,} characters]"
 
 
 def check(event: str | None) -> None:
     if event is not None and event not in EVENTS:
         raise invalid(f'hook_event must be one of {", ".join(EVENTS)}, got "{event}".')
+
+
+def clean_line(text: object, limit: int = LINE_MAX) -> str:
+    """One printable line: control characters (ESC, BEL, C1) dropped, cut at ``limit``.
+
+    Titles and task names come from notes and project files, so they must not reach the
+    person's terminal with escape sequences.
+    """
+    line = _CONTROL.sub("", _BREAKS.sub(" ", str(text)))
+    return line if len(line) <= limit else line[: limit - 1] + "…"
 
 
 def paint(text: str) -> str:
@@ -48,7 +63,7 @@ def render(event: str, text: str, notice: str = "") -> str:
     notice = notice.strip() if event in NOTICE_EVENTS else ""
     out: dict[str, Any] = {}
     if notice:
-        out["systemMessage"] = paint(notice)
+        out["systemMessage"] = paint(clean_line(notice, NOTICE_MAX))
     if text.strip():
         text = text.strip("\n")
         if len(text) > CAP:

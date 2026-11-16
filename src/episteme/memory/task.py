@@ -6,6 +6,7 @@ import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import invalid
+from episteme.hookmode import clean_line
 from episteme.index import is_past
 from episteme.markdown import (
     body_without_title,
@@ -206,7 +207,8 @@ def _related_notes(engine: Engine, query: str, terms: list[list[str]]) -> list[A
 def _memory_block(row: Any) -> str:
     """The listing of a memory: header line plus a clipped excerpt of its body."""
     excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), EXCERPT_CHARS)
-    return f"- [{row['type']} p{row['priority']}] {row['title']} ({row['path']})\n  {excerpt}"
+    head = f"- [{row['type']} p{row['priority']}] {clean_line(row['title'])} ({row['path']})"
+    return f"{head}\n  {excerpt}"
 
 
 def _linked_group(
@@ -215,7 +217,7 @@ def _linked_group(
     """``(line, entry)`` items for the linked memories, at most ``LINKED_MAX``."""
     return [
         (
-            f"- [{r['type']} p{r['priority']}] {r['title']} ({r['path']})",
+            f"- [{r['type']} p{r['priority']}] {clean_line(r['title'])} ({r['path']})",
             {"path": r["path"], "score": None, "kind": "linked"},
         )
         for r in _linked_memories(engine, chosen, project)[:LINKED_MAX]
@@ -227,7 +229,7 @@ def _notes_group(
 ) -> list[tuple[str, dict[str, Any]]]:
     """``(line, entry)`` items for the related documentation notes."""
     return [
-        (f"- {n.path} — {n.title}", {"path": n.path, "score": n.score, "kind": "note"})
+        (f"- {n.path} — {clean_line(n.title)}", {"path": n.path, "score": n.score, "kind": "note"})
         for n in _related_notes(engine, query, terms)
     ]
 

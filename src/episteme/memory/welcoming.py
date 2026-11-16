@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from episteme.hookmode import clean_line
 from episteme.index import is_past
 from episteme.memory.schema import UPCOMING_DAYS
 from episteme.memory.scoring import _neg_date, entry_line, welcome_score
@@ -80,7 +81,7 @@ class _Page:
 
 
 def _reminder_line(r: Any) -> str:
-    return f"- [{r['due']}] {r['title']} ({r['path']})"
+    return f"- [{r['due']}] {clean_line(r['title'])} ({r['path']})"
 
 
 def _memory_order(scored: list[tuple[float, Any]], project: str) -> list[tuple[Any, float | None]]:

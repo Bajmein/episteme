@@ -234,7 +234,8 @@ def _checkpoint_restore(
     notice = ""
     if data["found"]:
         origin = "estado.md" if data["source"] == "state" else "checkpoint guardado"
-        notice = f"episteme · tarea retomada: «{data['task_title']}» ({origin})"
+        title = hookmode.clean_line(data["task_title"])
+        notice = f"episteme · tarea retomada: «{title}» ({origin})"
     return data, data["content"], notice
 
 

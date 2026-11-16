@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Seguridad
+
+- Los avisos y listados que llegan a la terminal o al contexto (`systemMessage` de `SessionStart`, el aviso de `checkpoint`, las líneas de bienvenida, `surface` y recordatorios) quitan los caracteres de control (`ESC`, `BEL`, C1, saltos) de los títulos, de `task_title` y de los cuerpos, y cortan cada título a 120 caracteres. Antes, un `estado.md` o una memoria podían cambiar el título de la ventana o borrar la pantalla (#113).
+
 ### Añadido
 
 - Licencia MIT (`LICENSE`), con sus metadatos en `pyproject.toml` (autor, palabras clave, clasificadores y URLs), `plugin.json` y `marketplace.json`, y la sección «Licencia» del README.
