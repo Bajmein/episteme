@@ -10,6 +10,7 @@
 <a href="https://obsidian.md/"><img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-483699?style=for-the-badge&logo=obsidian&logoColor=white"></a>
 <a href="https://www.markdownguide.org/"><img alt="Markdown" src="https://img.shields.io/badge/markdown-000000?style=for-the-badge&logo=markdown&logoColor=white"></a>
 <a href="https://codescene.io/projects/87754"><img alt="CodeScene" src="https://img.shields.io/badge/CodeScene-analyzed-5F46EB?style=for-the-badge"></a>
+<a href="LICENSE"><img alt="Licencia MIT" src="https://img.shields.io/badge/licencia-MIT-yellow?style=for-the-badge"></a>
 <br>
 <a href="#instalación"><img alt="Linux" src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black"></a>
 <a href="#instalación"><img alt="macOS" src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=macos&logoColor=F0F0F0"></a>
@@ -226,3 +227,7 @@ uv run pytest      # tests
 ```
 
 El resto (el lint completo del CI, la revisión de calidad de cada PR con CodeScene y los scripts de medición) está en [Desarrollo](docs/desarrollo.md).
+
+## Licencia
+
+[MIT](LICENSE), © 2026 Benjamín Criado.

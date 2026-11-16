@@ -3,5 +3,7 @@
   "version": "0.12.0",
   "description": "Skills de episteme: conectar un proyecto, pausar y retomar una tarea, mantención de memorias y recordatorios.",
   "author": { "name": "Bajmein" },
+  "license": "MIT",
+  "homepage": "https://github.com/Bajmein/episteme",
   "repository": "https://github.com/Bajmein/episteme"
 }

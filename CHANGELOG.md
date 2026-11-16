@@ -6,11 +6,13 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Añadido
 
+- Licencia MIT (`LICENSE`), con sus metadatos en `pyproject.toml` (autor, palabras clave, clasificadores y URLs), `plugin.json` y `marketplace.json`, y la sección «Licencia» del README.
 - Archivos de comunidad: `SECURITY.md`, `.github/CONTRIBUTING.md`, plantillas de issue y de PR, `CODEOWNERS`, `.gitmessage`, `copilot-instructions.md`, `.gitattributes` y `.editorconfig`.
 - Workflows `stale` y `dependency-review`, y `zizmor` en el job `lint` del CI.
 
 ### Cambiado
 
+- El ejemplo de `keywords` en la descripción de `remember` usa un nombre ficticio.
 - Los workflows fijan las acciones por SHA, declaran `permissions` mínimos y desvían los PR de forks y de Dependabot a `ubuntu-latest`.
 - El CI de Windows vuelve a correr en `main` y en los PR que tocan código, tests o dependencias, pero solo en un repo público (en uno privado se omite).
 - Dependabot espera 7 días antes de proponer una versión recién publicada.

@@ -6,6 +6,7 @@
     {
       "name": "episteme",
       "source": "./plugin",
+      "license": "MIT",
       "description": "Skills de episteme: conectar un proyecto, pausar y retomar una tarea, mantención de memorias y recordatorios."
     }
   ]

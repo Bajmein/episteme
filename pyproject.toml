@@ -3,12 +3,26 @@ name = "episteme"
 version = "0.12.0"
 description = "Agentic memory and knowledge vault: an MCP server that serves an Obsidian-compatible Markdown vault as persistent project documentation and memory."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Benjamín Criado" }]
+keywords = ["mcp", "claude-code", "obsidian", "markdown", "memory"]
+classifiers = [
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development",
+]
 requires-python = ">=3.14"
 dependencies = [
     "mcp>=2.3,<3",
     "pydantic>=2.14.3,<3",
     "pyyaml>=6.0.3",
 ]
+
+[project.urls]
+Repository = "https://github.com/Bajmein/episteme"
+Issues = "https://github.com/Bajmein/episteme/issues"
+Changelog = "https://github.com/Bajmein/episteme/blob/main/CHANGELOG.md"
 
 [project.scripts]
 episteme = "episteme.__main__:main"
