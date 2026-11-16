@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from episteme.index import Index, locate, query_terms
+from episteme.index.schema import fts_schema
 from episteme.vault import Vault
 
 
@@ -270,3 +271,63 @@ def test_search_without_snippets_returns_the_same_notes(vault: Path) -> None:
     assert [h.path for h in bare] == [h.path for h in full]
     assert [h.score for h in bare] == [h.score for h in full]
     assert all(h.snippet == "" and h.line == 1 for h in bare)
+
+
+def test_fts_keeps_no_copy_of_the_text(vault: Path) -> None:
+    ix = _index(vault)
+
+    tables = {r[0] for r in ix.conn.execute("select name from sqlite_master")}
+
+    assert "fts" in tables
+    assert "fts_content" not in tables
+
+
+def test_body_is_stored_only_for_memories(vault: Path) -> None:
+    ix = _index(vault)
+
+    memory = ix.note("memory/_shared/perfil.md")
+    doc = ix.note("docs/claude-code/hooks-reference.md")
+
+    assert memory is not None and memory["body"]
+    assert doc is not None and doc["body"] is None and doc["search_text"]
+
+
+def test_deleted_note_leaves_the_fts_index(vault: Path) -> None:
+    (vault / "plans").mkdir()
+    (vault / "plans/gone.md").write_text("# Gone\n\nquimbombo\n")
+    ix = _index(vault)
+    assert ix.search("quimbombo")[1] == 1
+
+    os.unlink(vault / "plans/gone.md")
+    ix.refresh()
+
+    assert ix.search("quimbombo")[1] == 0
+
+
+def test_index_from_an_older_schema_is_rebuilt_without_free_pages(vault: Path) -> None:
+    _index(vault).close()
+    with sqlite3.connect(vault / ".index/index.db") as conn:
+        # Schema 1 kept the body of every note, not just of memories.
+        conn.execute("update notes set body = search_text where body is null")
+        conn.execute("update meta set value = '1' where key = 'schema'")
+    conn.close()
+
+    ix = _index(vault)
+
+    assert ix.conn.execute("pragma freelist_count").fetchone()[0] == 0
+    assert ix.note("memory/_shared/perfil.md") is not None
+
+
+@pytest.mark.parametrize(
+    ("version", "contentless"), [((3, 42, 0), False), ((3, 43, 0), True), ((3, 53, 1), True)]
+)
+def test_fts_is_contentless_only_where_sqlite_can_delete_from_it(
+    tmp_path: Path, version: tuple[int, int, int], contentless: bool
+) -> None:
+    conn = sqlite3.connect(tmp_path / "x.db")
+
+    sql = fts_schema(version)
+    conn.execute(sql)
+
+    assert ("content = ''" in sql) is contentless
+    conn.close()

@@ -10,7 +10,7 @@ from typing import Any
 from episteme.index.values import as_date, as_int, to_json
 from episteme.links import Resolver, _strip_md
 from episteme.markdown import ParsedNote, normalize_heading
-from episteme.vault import Vault
+from episteme.vault import MEMORY, Vault
 
 
 def _str_field(fm: dict[str, Any], key: str) -> str | None:
@@ -24,6 +24,9 @@ def _insert_note_row(
     """Insert the ``notes`` row and return its rowid."""
     fm = note.frontmatter
     zone = vault.zone_for(rel)
+    mode = vault.mode_for(rel)
+    # Only memory rows read ``body``; other notes are found and shown via ``search_text``.
+    body = note.body if mode == MEMORY else None
     cur = conn.execute(
         """insert into notes(path, title, mtime_ns, size, zone, mode, fm_valid, fm_error,
             type, project, status, priority, created, due, valid_until, helpful, flagged,
@@ -35,7 +38,7 @@ def _insert_note_row(
             sig[0],
             sig[1],
             zone.path if zone else None,
-            vault.mode_for(rel),
+            mode,
             int(note.fm_valid),
             note.fm_error,
             _str_field(fm, "type"),
@@ -48,7 +51,7 @@ def _insert_note_row(
             as_int(fm.get("helpful")) or 0,
             int(fm.get("flagged") is True),
             hashlib.sha1(note.body.encode(), usedforsecurity=False).hexdigest(),
-            note.body,
+            body,
             note.search_text,
         ),
     )

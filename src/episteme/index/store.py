@@ -12,7 +12,13 @@ from typing import Any
 
 from episteme.index.ingest import build_resolver, insert_note, relink
 from episteme.index.query import Built, build_where
-from episteme.index.schema import SCHEMA, SCHEMA_VERSION, TABLES, WELCOMED_TTL_DAYS
+from episteme.index.schema import (
+    SCHEMA,
+    SCHEMA_VERSION,
+    TABLES,
+    WELCOMED_TTL_DAYS,
+    fts_schema,
+)
 from episteme.index.text import _fts_term, locate, query_terms
 from episteme.links import Resolver
 from episteme.markdown import ParsedNote, parse
@@ -99,17 +105,24 @@ class Index:
                 pass
 
     def _create(self, conn: sqlite3.Connection) -> None:
+        upgrading = False
+
         def create() -> None:
-            if _schema_version(conn) == SCHEMA_VERSION:
+            nonlocal upgrading
+            old = _schema_version(conn)
+            if old == SCHEMA_VERSION:
                 return  # another process got here first
+            upgrading = old is not None
             for table in TABLES:
                 conn.execute(f"drop table if exists {table}")
-            for stmt in SCHEMA.split(";"):
+            for stmt in [*SCHEMA.split(";"), fts_schema()]:
                 if stmt.strip():
                     conn.execute(stmt)
             conn.execute("insert into meta(key, value) values ('schema', ?)", (SCHEMA_VERSION,))
 
         self._in_transaction(conn, create)
+        if upgrading:
+            _shrink(conn)
 
     @staticmethod
     def _in_transaction(conn: sqlite3.Connection, fn: Any) -> Any:
@@ -446,6 +459,18 @@ def _schema_version(conn: sqlite3.Connection) -> str | None:
         return None
     row = conn.execute("select value from meta where key='schema'").fetchone()
     return row[0] if row else None
+
+
+def _shrink(conn: sqlite3.Connection) -> None:
+    """Give back to the disk the pages the tables of an older schema left free.
+
+    Skipped when another process holds the index: it stays valid, only larger.
+    """
+    try:
+        conn.execute("vacuum")
+    except sqlite3.OperationalError as exc:
+        if not _is_lock(exc):
+            raise
 
 
 def _backoff(delay: float) -> float:

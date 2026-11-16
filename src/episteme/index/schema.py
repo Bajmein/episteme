@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-SCHEMA_VERSION = "1"
+import sqlite3
+
+SCHEMA_VERSION = "2"
 
 # ``welcomed`` rows older than this are dropped when a new session is recorded.
 WELCOMED_TTL_DAYS = 30
@@ -17,9 +19,6 @@ create table notes(
     priority integer, created text, due text, valid_until text,
     helpful integer, flagged integer, body_hash text,
     body text, search_text text
-);
-create virtual table fts using fts5(
-    title, tags, body, tokenize = 'unicode61 remove_diacritics 2'
 );
 create table links(
     src text not null, dst_raw text, dst_path text, kind text,
@@ -39,3 +38,19 @@ create table welcomed(session_id text primary key, at text);
 """
 
 TABLES = ("meta", "notes", "fts", "links", "tags", "props", "headings", "aliases", "welcomed")
+
+# The text of each note already lives in ``notes.search_text``, so the FTS is contentless
+# (it keeps only its index); ``contentless_delete`` lets a row go by rowid. Older SQLite
+# has no ``contentless_delete``: there the FTS keeps its own copy, as before.
+CONTENTLESS_MIN_SQLITE = (3, 43, 0)
+
+
+def fts_schema(sqlite_version: tuple[int, int, int] = sqlite3.sqlite_version_info) -> str:
+    """The ``create`` statement of the FTS table for this SQLite."""
+    options = ""
+    if sqlite_version >= CONTENTLESS_MIN_SQLITE:
+        options = ", content = '', contentless_delete = 1"
+    return (
+        "create virtual table fts using fts5("
+        f"title, tags, body, tokenize = 'unicode61 remove_diacritics 2'{options})"
+    )
