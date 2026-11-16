@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- `scripts/measure_semantic.py` lista las memorias huérfanas con sus candidatas a enlazar por significado, y dice cuáles ya ofrece `review` (`--link-score`).
+
 ## [0.11.0] - 2026-11-16
 
 ### Añadido

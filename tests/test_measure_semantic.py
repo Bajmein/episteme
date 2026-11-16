@@ -148,3 +148,65 @@ def test_main_rejects_non_local_url(tmp_path: Path, capsys) -> None:
 
     assert code == 1
     assert capsys.readouterr().err.startswith("invalid_argument:")
+
+
+def _memory_vault(tmp_path: Path) -> Path:
+    root = tmp_path / "m"
+    (root / "memory").mkdir(parents=True)
+    (root / "episteme.toml").write_text('[zones."memory"]\nmode = "memory"\n', encoding="utf-8")
+    notes = {
+        "orphan": ("decision", "p", "active", "tags: [dominio/x, tema/y]", "# Perro\n\nEl perro."),
+        "tagged": ("lesson", "p", "active", "tags: [dominio/x, tema/y]\nrelated: ['[[bill]]']",
+                   "# Can\n\nEl can ladra."),
+        "bill": ("decision", "p", "active", "tags: []", "# Factura\n\nPagar la factura."),
+        "other": ("decision", "q", "active", "tags: []", "# Mascota\n\nLa mascota de q."),
+        "old": ("decision", "p", "archived", "tags: []", "# Perro viejo\n\nEl perro viejo."),
+        "log": ("session", "p", "active", "tags: []", "# Sesion\n\nEl perro en sesion."),
+        "common": ("insight", "_shared", "active", "tags: []", "# Mascota comun\n\nLa mascota."),
+    }
+    for name, (kind, project, status, extra, body) in notes.items():
+        fm = f"---\ntype: {kind}\nproject: {project}\nstatus: {status}\n{extra}\n---\n"
+        (root / "memory" / f"{name}.md").write_text(fm + body + "\n", encoding="utf-8")
+    return root
+
+
+def test_orphans_get_semantic_candidates_of_their_project_or_shared(tmp_path: Path) -> None:
+    m = _script()
+    root = _memory_vault(tmp_path)
+
+    result = m.measure(root, _fake_embed)
+
+    by_path = {o["path"]: o for o in result["orphans"]}
+    assert set(by_path) == {"memory/orphan.md", "memory/other.md", "memory/common.md"}
+    found = {c["path"]: c for c in by_path["memory/orphan.md"]["candidates"]}
+    assert set(found) == {"memory/tagged.md", "memory/common.md"}
+    assert found["memory/tagged.md"]["reason"] == "shares tags dominio/x, tema/y"
+    assert found["memory/common.md"]["reason"] is None
+    (only,) = by_path["memory/other.md"]["candidates"]
+    assert (only["path"], only["title"], only["score"]) == (
+        "memory/common.md", "Mascota comun", 1.0
+    )
+    assert by_path["memory/common.md"]["candidates"] == []
+    assert result["orphans"][-1]["path"] == "memory/common.md"
+
+
+def test_orphan_candidates_respect_the_link_score(tmp_path: Path) -> None:
+    m = _script()
+    root = _memory_vault(tmp_path)
+
+    result = m.measure(root, _fake_embed, opts=m.Options(link_score=1.5))
+
+    assert all(o["candidates"] == [] for o in result["orphans"])
+
+
+def test_render_reports_orphans_with_candidates_review_does_not_offer(tmp_path: Path) -> None:
+    m = _script()
+    root = _memory_vault(tmp_path)
+
+    report = m.render(m.measure(root, _fake_embed), examples=5)
+
+    assert "## Huérfanas y candidatas por significado" in report
+    assert "- Huérfanas: 3" in report
+    assert "- Con alguna candidata: 2" in report
+    assert "- Con alguna candidata que review no ofrece: 2" in report
+    assert "Mascota comun (memory/common.md)" in report
