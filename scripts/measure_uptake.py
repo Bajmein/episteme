@@ -13,6 +13,8 @@ Per memory (``memory/...``) it counts, over the last ``--days`` days:
   is the subset with ``args.mode=welcome``), ``surface`` and ``constraints``;
 - agent reads (``tool=read`` without ``hook_event``; path in ``args.note``, ``args.notes`` or
   ``paths``), and how many happened in the same session after a delivery of that memory;
+  agent calls carry no session, so each one takes the last session a hook reported from the
+  same server process (``pid``), or ``pid:<n>`` if none did;
 - appearances in agent ``search`` calls (without ``hook_event``).
 
 The summary answers: (a) share of deliveries followed by a read, (b) memories delivered N times
@@ -44,7 +46,7 @@ DEFAULT_MIN_DELIVERIES = 3
 DEFAULT_OLD_DAYS = 90
 
 _ROWS_SQL = (
-    "select session, tool, hook_event, args, paths, ok, project from calls"
+    "select session, tool, hook_event, args, paths, ok, project, pid from calls"
     " where at >= ? order by at, id"
 )
 
@@ -59,6 +61,7 @@ class Row(NamedTuple):
     paths: str | None
     ok: int
     project: str | None
+    pid: int | None = None
 
 
 @dataclass
@@ -168,10 +171,27 @@ def _read_paths(args: dict, paths: list[str]) -> list[str]:
     return list(dict.fromkeys(paths[: len(asked) or len(paths)]))
 
 
+def _with_sessions(rows: list[Row]) -> list[Row]:
+    """Give each call without a session the last one a hook reported from the same process.
+
+    The agent's own calls (read, search, remember) carry no session; the hooks of that
+    Claude Code session go through the same stdio server, so they share its ``pid``.
+    """
+    last: dict[int | None, str] = {}
+    out = []
+    for r in rows:
+        if r.session:
+            last[r.pid] = r.session
+            out.append(r)
+            continue
+        out.append(r._replace(session=last.get(r.pid) or f"pid:{r.pid}"))
+    return out
+
+
 def _load_rows(vault_root: Path, since: str, project: str | None) -> list[Row]:
     conn = _open_ro(vault_root)
     try:
-        rows = [Row(*r) for r in conn.execute(_ROWS_SQL, (since,)).fetchall()]
+        rows = _with_sessions([Row(*r) for r in conn.execute(_ROWS_SQL, (since,)).fetchall()])
     finally:
         conn.close()
     if project:
