@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import re
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,7 +19,7 @@ from episteme.markdown import (
     section_text,
     slugify,
 )
-from episteme.memory import NoteFile, ordered, validate
+from episteme.memory import NoteFile, find_secrets, ordered, validate
 from episteme.vault import today
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ SECTIONS = ("Plan", "Progreso", "Decisiones", "Trampas", "Siguientes pasos")
 VALID_DAYS = 7
 CHECKPOINT_PRIORITY = 3
 CHECKPOINT_HELPFUL = 0
+COPIED_KEYS = ("estado", "etapa", "tags", "keywords", "files")
 TASK_CHECKBOX = re.compile(r"^[-*]\s*\[([ xX~])\]\s*(\S+)", re.MULTILINE)
 BRANCH_CHANGE = re.compile(r"refs/heads/[a-z]+/(\d{3}-[a-z0-9][a-z0-9-]*)$")
 
@@ -155,6 +157,35 @@ def _render(path: Path, note: ParsedNote) -> tuple[str, str]:
     return title, "\n\n".join(parts) + "\n"
 
 
+def _children(value: Any) -> Iterable[Any]:
+    """The items nested directly inside a frontmatter value (none for a scalar)."""
+    if isinstance(value, dict):
+        return value.values()
+    if isinstance(value, (list, tuple)):
+        return value
+    return ()
+
+
+def _strings(value: Any) -> Iterator[str]:
+    """Every string inside a frontmatter value, however nested."""
+    if isinstance(value, str):
+        yield value
+        return
+    for item in _children(value):
+        yield from _strings(item)
+
+
+def _reject_secrets_in(meta: dict[str, Any], body: str) -> None:
+    """Raise ``invalid_argument`` when what is about to be saved looks like a credential."""
+    for text in (body, *_strings(meta)):
+        found = find_secrets(text)
+        if found:
+            raise invalid(
+                f"estado.md looks like it holds a secret ({found}). "
+                "Remove it from the state file and say where it is stored instead."
+            )
+
+
 def save(engine: Engine, project_dir: str | None, project: str | None) -> dict[str, Any]:
     project = engine.need_project(project)
     zone = engine.vault.memory_zone
@@ -181,9 +212,8 @@ def save(engine: Engine, project_dir: str | None, project: str | None) -> dict[s
     }
     if project_dir:  # without it the base is the server's cwd, which says nothing of the session
         meta["worktree"] = _project_dir(project_dir).as_posix()
-    for key, value in fm.items():
-        if key not in meta:
-            meta[key] = value
+    meta.update({key: fm[key] for key in COPIED_KEYS if key in fm and key not in meta})
+    _reject_secrets_in(meta, body)
     validate(meta)
     rel = f"{zone.path}/{project}/sessions/checkpoint-{slugify(title)}.md"
     engine.vault.check_writable(rel)

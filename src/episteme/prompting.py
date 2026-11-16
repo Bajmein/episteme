@@ -99,7 +99,7 @@ def trail_block(engine: Engine, skip: set[str]) -> tuple[str, list[dict[str, Any
     if not paths:
         return "", []
     marks = ",".join("?" * len(paths))
-    found = engine.index.memories(f"path in ({marks}) and status = 'active'", tuple(paths))  # nosec B608
+    found = engine.index.memories(f"path in ({marks}) and status = 'active'", tuple(paths))
     rows = {r["path"]: r for r in found}
     ordered = [p for p in paths if TRAIL[p] == "written"] + [p for p in paths if TRAIL[p] == "read"]
     chosen = [rows[p] for p in ordered if p in rows][:TRAIL_SHOWN]
@@ -214,7 +214,7 @@ def _recall_terms(prompt: str) -> list[str]:
 def _rare_terms(engine: Engine, terms: list[str], scope: list[str]) -> list[str]:
     """The ``terms`` that appear in few of the active memories of ``scope``."""
     marks = ", ".join("?" * len(scope))
-    clause = f"project in ({marks}) and status = 'active'"  # nosec B608
+    clause = f"project in ({marks}) and status = 'active'"
     rows = engine.index.memories(clause, tuple(scope))
     limit = max(RECALL_RARE_FLOOR, len(rows) // RECALL_RARE_SHARE)
     counted = []

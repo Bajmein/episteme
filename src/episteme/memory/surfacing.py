@@ -32,7 +32,7 @@ def _file_memories(
     and the ``files`` entries of every note."""
     rows = engine.index.memories(
         "project in (?, '_shared') and status = 'active'"
-        f" and {type_clause} and (valid_until is null or valid_until >= ?)",  # nosec B608
+        f" and {type_clause} and (valid_until is null or valid_until >= ?)",
         (project, today().isoformat()),
     )
     return rows, _files_of(engine)

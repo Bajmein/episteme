@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from episteme.index import Index
+from episteme.perms import make_private_dir, restrict_db
 from episteme.vault import INDEX_DIR, today
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ class Store:
 
     def _connect(self) -> sqlite3.Connection:
         if self._conn is None:
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            make_private_dir(self.db_path.parent)
             conn = sqlite3.connect(
                 self.db_path,
                 timeout=CONNECT_TIMEOUT_S,
@@ -56,6 +57,7 @@ class Store:
             try:
                 conn.execute("pragma journal_mode = wal")
                 conn.execute(f"pragma busy_timeout = {BUSY_TIMEOUT_MS}")
+                restrict_db(self.db_path)
                 version = conn.execute("pragma user_version").fetchone()[0]
                 if version < SCHEMA_VERSION:
                     conn.executescript(_SCHEMA)
@@ -148,7 +150,7 @@ class Store:
             if conn is not None:
                 try:
                     conn.close()
-                except sqlite3.Error:  # nosec B110
+                except sqlite3.Error:
                     # Closing is best-effort: a failure here must not break shutdown.
                     pass
 

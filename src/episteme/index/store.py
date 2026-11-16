@@ -23,6 +23,7 @@ from episteme.index.schema import (
 from episteme.index.text import _fts_term, locate, query_terms
 from episteme.links import Resolver
 from episteme.markdown import ParsedNote, parse
+from episteme.perms import make_private_dir, restrict_db
 from episteme.vault import INDEX_DIR, MEMORY, DirListing, Vault
 
 NOTE_MAX_BYTES = 2 * 1024 * 1024
@@ -67,7 +68,7 @@ class Index:
     # -- connection --------------------------------------------------------
 
     def _connect(self) -> sqlite3.Connection:
-        self.dir.mkdir(exist_ok=True)
+        make_private_dir(self.dir)
         conn = sqlite3.connect(
             self.db_path, timeout=5.0, isolation_level=None, check_same_thread=False
         )
@@ -76,6 +77,7 @@ class Index:
             conn.execute("pragma busy_timeout = 5000")
             conn.execute("pragma journal_mode = wal")
             conn.execute("pragma synchronous = normal")
+            restrict_db(self.db_path)
         except BaseException:
             # On a corrupt file the pragmas raise; an open handle blocks the unlink on Windows.
             conn.close()
@@ -309,7 +311,7 @@ class Index:
         # Columns come from a closed list; user values are bound parameters.
         for col in ("zone", "project", "type", "status"):
             rows = self.conn.execute(
-                f"select n.{col} as v, count(*) as c {source} "  # nosec B608
+                f"select n.{col} as v, count(*) as c {source} "
                 f"where {clause} and n.{col} is not null group by n.{col} order by c desc, v",
                 params,
             ).fetchall()
@@ -427,7 +429,7 @@ class Index:
         if built is None:
             return [], 0
         total = self.conn.execute(
-            f"select count(*) {built.source} where {built.clause}",  # nosec B608
+            f"select count(*) {built.source} where {built.clause}",
             built.params,
         ).fetchone()[0]
         rows = self._select_rows(built, ranked=query is not None, limit=limit, snippets=snippets)
@@ -445,7 +447,7 @@ class Index:
             order = "order by coalesce(n.priority, 0) desc, n.path"
         text_col = "n.search_text, " if snippets else ""
         return self.conn.execute(
-            f"select n.path, n.title, {text_col}n.zone, n.type, n.status, n.project, "  # nosec B608
+            f"select n.path, n.title, {text_col}n.zone, n.type, n.status, n.project, "
             f"n.created, n.priority, {cols} {built.source} "
             f"where {built.clause} {order} limit ?",
             [*built.params, limit],

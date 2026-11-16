@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import os
+import stat
 import tarfile
 import tempfile
 import time
@@ -17,17 +18,19 @@ SUFFIX = ".tar.gz"
 STALE_TMP_SECONDS = 3600
 SEAL_LENGTH = 12
 STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
-TMP_GLOB = ".tmp-*.tmp"
+TMP_PREFIX = ".episteme-backup-"
+TMP_GLOB = f"{TMP_PREFIX}*.tmp"
 
 
 def _members(vault: Vault) -> list[tuple[str, os.stat_result]]:
     """Writable notes plus the config file, sorted by relative path."""
     found = [(rel, st) for rel, st in vault.iter_notes() if vault.mode_for(rel) != READ_ONLY]
     try:
-        found.append((CONFIG_FILE, (vault.root / CONFIG_FILE).stat()))
-    except OSError:  # nosec B110
-        # A vault without its config file is still backed up: only the notes go in.
-        pass
+        config = (vault.root / CONFIG_FILE).lstat()
+    except OSError:
+        config = None  # A vault without its config file is still backed up: only notes go in.
+    if config is not None and stat.S_ISREG(config.st_mode):
+        found.append((CONFIG_FILE, config))
     return sorted(found, key=lambda item: item[0])
 
 
@@ -65,11 +68,11 @@ def _write_archive(
     vault: Vault, members: list[tuple[str, os.stat_result]], dest: Path, final: Path
 ) -> None:
     """Write the members to a temp file in ``dest`` and move it to ``final``."""
-    fd, tmp_name = tempfile.mkstemp(dir=dest, prefix=".tmp-", suffix=".tmp")
+    fd, tmp_name = tempfile.mkstemp(dir=dest, prefix=TMP_PREFIX, suffix=".tmp")
     os.close(fd)
     tmp = Path(tmp_name)
     try:
-        with tarfile.open(tmp, "w:gz", dereference=True) as tar:
+        with tarfile.open(tmp, "w:gz") as tar:
             for rel, _ in members:
                 try:
                     tar.add(vault.root / rel, arcname=rel)
@@ -91,6 +94,5 @@ def _rotate(dest: Path, keep: int) -> None:
         try:
             if tmp.stat().st_mtime < cutoff:
                 tmp.unlink()
-        except OSError:  # nosec B110
-            # A stale temp file we cannot stat or remove is retried on the next backup.
-            pass
+        except OSError:
+            continue  # A stale temp file we cannot stat or remove is retried on the next backup.

@@ -180,6 +180,8 @@ def _load_state_glob(data: dict) -> str | None:
 def load_config(root: Path) -> Config:
     """Parse ``episteme.toml``; any invalid value raises StartupError."""
     path = root / CONFIG_FILE
+    if path.is_symlink():
+        raise StartupError(f"{CONFIG_FILE} must be a regular file, not a symlink. Replace it.")
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:

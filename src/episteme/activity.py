@@ -10,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from episteme.memory.secrets import find_secrets
+from episteme.perms import make_private_dir, restrict_db
 from episteme.vault import INDEX_DIR
 
 SCHEMA_VERSION = 1
@@ -38,7 +40,8 @@ create index calls_tool on calls (tool);
 
 def _clip(value: Any) -> Any:
     if isinstance(value, str):
-        return value[:MAX_STRING]
+        found = find_secrets(value)
+        return f"[redacted: {found}]" if found else value[:MAX_STRING]
     if isinstance(value, (list, tuple)):
         return [_clip(v) for v in value]
     return value
@@ -81,7 +84,7 @@ def extract_paths(text: str) -> list[str]:
     if text.lstrip().startswith(("{", "[")):
         try:
             _walk(json.loads(text), 0, found)
-        except ValueError:  # nosec B110
+        except ValueError:
             # Not valid JSON after all: the ``(x.md)`` scan below still applies.
             pass
     found.extend(_MD_IN_PARENS.findall(text))
@@ -89,7 +92,10 @@ def extract_paths(text: str) -> list[str]:
 
 
 def _text(value: Any) -> str | None:
-    return value if isinstance(value, str) and value else None
+    """A non-empty string argument, redacted when it looks like a credential."""
+    if not isinstance(value, str) or not value:
+        return None
+    return _clip(value)
 
 
 class Activity:
@@ -102,7 +108,7 @@ class Activity:
 
     def _connect(self) -> sqlite3.Connection:
         if self._conn is None:
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            make_private_dir(self.db_path.parent)
             conn = sqlite3.connect(
                 self.db_path,
                 timeout=CONNECT_TIMEOUT_S,
@@ -112,6 +118,7 @@ class Activity:
             try:
                 conn.execute("pragma journal_mode = wal")
                 conn.execute(f"pragma busy_timeout = {BUSY_TIMEOUT_MS}")
+                restrict_db(self.db_path)
                 version = conn.execute("pragma user_version").fetchone()[0]
                 if version < SCHEMA_VERSION:
                     conn.execute("drop table if exists calls")

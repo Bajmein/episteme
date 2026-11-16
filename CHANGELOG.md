@@ -15,6 +15,11 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `project` solo admite `[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}`: ya no se crean carpetas ocultas ni nombres de 300 caracteres, y una ruta con byte nulo o demasiado larga da `invalid_argument` sin mostrar la ruta absoluta del vault.
 - `/episteme:setup` ya no copia la base y la clave de OMEGA a una ruta fija de `/tmp`: usa una carpeta privada (`mktemp -d`) y pide borrarla al terminar. `docs/migracion-omega.md` también usa `mktemp -d`.
 - La skill de setup y la documentación dejan de llamar «de solo lectura» a `context` (su primera bienvenida puede archivar memorias vencidas y lanzar el backup) y aclaran que el `deny` de `Read`/`Edit` sobre el vault no cubre Bash: es una barrera contra el uso accidental, no un aislamiento.
+- El backup ya no sigue enlaces simbólicos: un `episteme.toml` que es un symlink se rechaza al arrancar, y los temporales del backup llevan el prefijo `.episteme-backup-` (la rotación solo borra esos, no los `.tmp-*` de otros programas en `backup.dir`). Parte de #113.
+- `.index/` se crea con permisos 0700 y sus bases (`index.db`, `activity.db`, `maintenance.db`) con 0600 en Linux y macOS. Parte de #113.
+- El registro de actividad sustituye por `[redacted: <tipo>]` los argumentos que parecen una credencial. Parte de #113.
+- `checkpoint` (save) copia del frontmatter de `estado.md` solo `estado`, `etapa`, `tags`, `keywords` y `files`, y rechaza con `invalid_argument` un `estado.md` que parece contener una credencial. Parte de #113.
+- Se quitan los `# nosec` que bandit marcaba como innecesarios. Parte de #113.
 
 ### Añadido
 
