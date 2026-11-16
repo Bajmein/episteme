@@ -17,7 +17,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - El ejemplo de `keywords` en la descripción de `remember` usa un nombre ficticio.
 - Los workflows fijan las acciones por SHA, declaran `permissions` mínimos y desvían los PR de forks y de Dependabot a `ubuntu-latest`.
 - El CI de Windows vuelve a correr en `main` y en los PR que tocan código, tests o dependencias, pero solo en un repo público (en uno privado se omite).
-- El vault de prueba (`tests/fixtures/vault/docs/claude-code/` y `docs/llms.txt`) ya no copia documentación de terceros: son 45 notas propias, breves y sintéticas, con la misma ruta y los mismos nombres. Solo afecta a los tests.
+- El vault de prueba (`tests/fixtures/vault/docs/claude-code/` y `docs/llms.txt`) ya no copia documentación de terceros: son 45 notas propias, breves y sintéticas, con títulos y aliases propios; conservan su ruta salvo cinco de `others/`, renombradas sin nombres de terceros. Solo afecta a los tests.
 - Se quitan los `# nosec` que sobraban, y el de `yaml.load` pasa a una línea propia para que bandit no avise. Los de SQL en `index/store.py` se quedan: sin ellos sale B608, y bandit 1.9.4 avisa igual porque revisa cada trozo del f-string.
 
 ### Seguridad

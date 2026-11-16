@@ -23,7 +23,7 @@ async def test_case3_read_only_zone(vault: Path) -> None:
     before = (vault / HOOKS).read_bytes()
     async with mcp_client(vault) as c:
         for action, extra in (
-            ("edit", {"old": "Hooks reference", "new": "x"}),
+            ("edit", {"old": "Referencia de hooks", "new": "x"}),
             ("append", {"text": "x"}),
             ("set", {"fields": {"a": 1}}),
             ("archive", {}),
