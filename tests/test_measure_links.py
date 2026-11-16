@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -101,3 +103,98 @@ def test_unknown_zone_fails(tmp_path: Path, capsys) -> None:
     m = _script()
     assert m.main(["--vault", str(_vault(tmp_path)), "--zone", "memroy"]) == 1
     assert "invalid_argument" in capsys.readouterr().err
+
+
+def _migrated(root: Path, *names: str) -> None:
+    for name in names:
+        path = root / "memory" / "p" / f"{name}.md"
+        text = path.read_text(encoding="utf-8").replace("---\n", "---\nsource: omega:1\n", 1)
+        path.write_text(text, encoding="utf-8")
+
+
+def test_every_wikilink_counts_in_both_directions(tmp_path: Path) -> None:
+    m = _script()
+
+    reach = m.measure(_vault(tmp_path))["reach"]
+
+    # a, b and c by related; d only through the body link of a.
+    assert reach["with_any"] == 4
+    # b and d are only linked to: a forward-only walk never reaches anything from them.
+    assert reach["backlink_gain"] == 2
+    assert reach["backlink_only"] == 2
+
+
+def test_related_pairs_are_split_by_origin(tmp_path: Path) -> None:
+    m = _script()
+    root = _vault(tmp_path)
+    _migrated(root, "a", "b")
+
+    origins = m.measure(root)["origins"]
+
+    assert origins["omega"]["pairs"] == 1  # a-b: both ends came from OMEGA
+    assert origins["nativo"]["pairs"] == 1  # b-c
+
+
+def test_baseline_compares_every_pair_of_the_same_project(tmp_path: Path) -> None:
+    m = _script()
+
+    r = m.measure(_vault(tmp_path))
+
+    assert r["baseline"]["pairs"] == 10  # 5 active memories of one project
+    assert r["baseline"]["low"] == 9  # only a and c share vocabulary
+    assert r["linked"]["pairs"] == 2
+    assert "Línea base" in m.render(r, 3)
+
+
+def _activity_db(root: Path, rows: list[tuple]) -> None:
+    db = root / ".index" / "activity.db"
+    db.parent.mkdir()
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "create table calls (id integer primary key, at text, pid integer, tool text, "
+        "args text, paths text, ok integer)"
+    )
+    conn.executemany(
+        "insert into calls (at, pid, tool, args, paths, ok) values (?, ?, ?, ?, ?, 1)",
+        [("2999-01-01T00:00:00", pid, tool, json.dumps(args), json.dumps(paths))
+         for pid, tool, args, paths in rows],
+    )  # fmt: skip
+    conn.commit()
+    conn.close()
+
+
+def _read(pid: int, name: str) -> tuple:
+    path = f"memory/p/{name}.md"
+    return (pid, "read", {"note": path}, [path])
+
+
+def test_reads_after_a_search_are_matched_against_the_graph(tmp_path: Path) -> None:
+    m = _script()
+    root = _vault(tmp_path)
+    rows = [
+        _read(1, "c"),  # before any search: ignored
+        (1, "search", {"query": "alfa"}, ["memory/p/a.md"]),
+        _read(1, "a"),  # returned by the search
+        _read(1, "b"),  # a links to b
+        _read(1, "f"),  # only f links to a
+        _read(1, "e"),  # neither
+        _read(2, "b"),  # another process, no search
+    ]
+    _activity_db(root, rows)
+
+    r = m.measure(root)
+
+    activity = r["activity"]
+    assert activity["searches"] == 1
+    assert dict(activity["reads"]) == {"returned": 1, "forward": 1, "backlink": 1, "other": 1}
+    assert ("backlink", "memory/p/f.md") in activity["examples"]
+    assert "solo por backlink: 1" in m.render(r, 3)
+
+
+def test_no_activity_log_is_reported_not_an_error(tmp_path: Path) -> None:
+    m = _script()
+
+    r = m.measure(_vault(tmp_path))
+
+    assert r["activity"] is None
+    assert "sin registro de actividad" in m.render(r, 3)

@@ -1,13 +1,19 @@
 """Measure how much link graph there really is between memories.
 
     uv run scripts/measure_links.py --vault <vault> [--zone memory] [--project <name>] \
-        [--examples 15]
+        [--examples 15] [--days 30]
 
 Read-only: walks the vault with ``Vault.iter_notes`` and ``parse``; it never opens or
 creates the index and writes nothing in the vault. It counts the links of the active
 memories by kind, how many memories have a ``related`` neighbour, how many are orphans, and
 how much vocabulary the ``related`` neighbours of the same project (or ``_shared``) add: the
 data to decide whether the hooks should suggest neighbours by ``related``.
+
+It also reports what every wikilink (body and frontmatter) adds when walked both ways, the
+``related`` pairs split by origin (both ends migrated from OMEGA, or not), a baseline (the
+vocabulary overlap of every pair of memories of the same project) and, when the vault has
+an activity log, how many memories read after a ``search`` were not in its results but
+were linked to one of them.
 
 Without an index a link target resolves by exact path (with or without ``.md``) or by a
 base name that is unique in the vault; anything else counts as unresolved.
@@ -16,16 +22,22 @@ base name that is unique in the vault; anything else counts as unresolved.
 from __future__ import annotations
 
 import argparse
+import json
+import sqlite3
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from itertools import chain, combinations, islice
 from pathlib import Path
+from statistics import median
 
-from episteme.errors import INVALID_ARGUMENT, EpistemeError
+from episteme.errors import INVALID_ARGUMENT, NOT_FOUND, EpistemeError
 from episteme.index import STOPWORDS_ES
 from episteme.markdown import Link, parse, tokens
 from episteme.memory import similarity
-from episteme.vault import MEMORY, Vault
+from episteme.vault import INDEX_DIR, MEMORY, Vault
 
 DEFAULT_EXAMPLES = 15
 SHARED = "_shared"
@@ -33,6 +45,17 @@ SHARED = "_shared"
 LOW_OVERLAP = 0.2
 MAX_BUCKET = 3
 RELATED = "related"
+# ``source`` of a memory written by scripts/migrate_omega.py.
+OMEGA_SOURCE = "omega:"
+OMEGA, NATIVE = "omega", "nativo"
+# Above this many same-project pairs the baseline takes one pair in every few.
+BASELINE_MAX_PAIRS = 200_000
+DEFAULT_DAYS = 30
+RETURNED, FORWARD, BACKLINK, OTHER = "returned", "forward", "backlink", "other"
+_ACTIVITY_SQL = (
+    "select tool, args, paths, pid from calls"
+    " where at >= ? and ok = 1 and tool in ('search', 'read') order by at, id"
+)
 
 Edge = tuple[str, str | None, str]  # (source, resolved target or None, kind)
 
@@ -44,6 +67,7 @@ class Memory:
     active: bool
     words: set[str]
     links: list[Link] = field(default_factory=list)
+    omega: bool = False
 
 
 def _zone_prefix(vault: Vault, zone: str | None) -> str:
@@ -72,6 +96,7 @@ def _memory(rel: str, text: str) -> Memory:
         active=fm.get("status") == "active",
         words=words - STOPWORDS_ES,
         links=list(note.links),
+        omega=str(fm.get("source") or "").startswith(OMEGA_SOURCE),
     )
 
 
@@ -135,6 +160,64 @@ def _related_neighbours(active: list[Memory], edges: list[Edge]) -> dict[str, se
     return nb
 
 
+def _outgoing(edges: list[Edge], known: set[str] | None = None) -> dict[str, set[str]]:
+    """Source -> resolved targets, any link kind; only targets in ``known`` when given."""
+    out: dict[str, set[str]] = defaultdict(set)
+    for src, dst, _kind in edges:
+        if dst is not None and dst != src and (known is None or dst in known):
+            out[src].add(dst)
+    return out
+
+
+def _incoming(out: dict[str, set[str]]) -> dict[str, set[str]]:
+    back: dict[str, set[str]] = defaultdict(set)
+    for src, dsts in out.items():
+        for dst in dsts:
+            back[dst].add(src)
+    return back
+
+
+def _reach(measured: list[Memory], active: list[Memory], edges: list[Edge]) -> dict[str, int]:
+    """What every wikilink adds, and what only a backlink reaches, among active memories."""
+    out = _outgoing(edges, {m.rel for m in active})
+    back = _incoming(out)
+    pairs = [(out.get(m.rel, set()), back.get(m.rel, set())) for m in measured]
+    return {
+        "with_any": sum(1 for o, b in pairs if o or b),
+        "backlink_gain": sum(1 for o, b in pairs if b - o),
+        "backlink_only": sum(1 for o, b in pairs if b and not o),
+    }
+
+
+def _overlap(scores: Iterable[float]) -> dict[str, float]:
+    """How many pairs, how many with another vocabulary, and their median Jaccard."""
+    values = list(scores)
+    return {
+        "pairs": len(values),
+        "low": sum(1 for s in values if s < LOW_OVERLAP),
+        "median": median(values) if values else 0.0,
+    }
+
+
+def _by_origin(pairs: list[tuple[float, Memory, Memory]]) -> dict[str, dict[str, float]]:
+    """``related`` pairs split by origin: migrated when both ends came from OMEGA."""
+    split: dict[str, list[float]] = {OMEGA: [], NATIVE: []}
+    for score, a, b in pairs:
+        split[OMEGA if a.omega and b.omega else NATIVE].append(score)
+    return {origin: _overlap(scores) for origin, scores in split.items()}
+
+
+def _baseline(measured: list[Memory]) -> dict[str, float]:
+    """Overlap of the pairs of memories of the same project, linked or not."""
+    by_project: dict[str, list[Memory]] = defaultdict(list)
+    for m in measured:
+        by_project[m.project].append(m)
+    total = sum(len(g) * (len(g) - 1) // 2 for g in by_project.values())
+    step = max(1, -(-total // BASELINE_MAX_PAIRS))
+    every = chain.from_iterable(combinations(g, 2) for g in by_project.values())
+    return _overlap(similarity(a.words, b.words) for a, b in islice(every, 0, None, step))
+
+
 def _in_scope(a: Memory, b: Memory) -> bool:
     return b.project == a.project or b.project == SHARED
 
@@ -184,26 +267,117 @@ def _link_counts(measured: list[Memory], edges: list[Edge]) -> tuple[Counter, Co
     return kinds, unresolved
 
 
-def measure(vault_root: Path, zone: str | None = None, project: str | None = None) -> dict:
+def _json[T](text: str | None, default: T) -> T:
+    try:
+        value = json.loads(text) if text else default
+    except ValueError:
+        return default
+    return value if isinstance(value, type(default)) else default
+
+
+def _norm(path: str) -> str:
+    path = path.replace("\\", "/")
+    return path[2:] if path.startswith("./") else path
+
+
+def _asked(args: dict) -> list[str]:
+    """Normalised note names a ``read`` asked for (``note`` and ``notes``)."""
+    notes = args.get("notes")
+    asked = [args.get("note"), *(notes if isinstance(notes, list) else [])]
+    return [_norm(n) for n in asked if isinstance(n, str)]
+
+
+def _read_paths(args: dict, paths: list[str]) -> list[str]:
+    """Notes a ``read`` opened: path-like args, else as many leading result paths as names.
+
+    ``paths`` is scraped from the result text, so it can also hold the notes it links to.
+    """
+    asked = _asked(args)
+    if asked and all(n.endswith(".md") for n in asked):
+        return list(dict.fromkeys(asked))
+    return list(dict.fromkeys(paths[: len(asked) or len(paths)]))
+
+
+def _activity_rows(vault_root: Path, days: int) -> list[tuple] | None:
+    """The ``search`` and ``read`` calls of the last ``days`` days; None without a log."""
+    db = vault_root / INDEX_DIR / "activity.db"
+    if days <= 0 or not db.is_file():
+        return None
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat(timespec="seconds")
+    try:
+        conn = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            return conn.execute(_ACTIVITY_SQL, (since,)).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        raise EpistemeError(NOT_FOUND, f"cannot read {db}: {e}. Pass --days 0 to skip it.") from e
+
+
+def _how_reached(path: str, results: set[str], out: dict[str, set[str]]) -> str:
+    """How a memory read after a search relates to what the search returned."""
+    if path in results:
+        return RETURNED
+    if any(path in out.get(r, ()) for r in results):
+        return FORWARD
+    return BACKLINK if out.get(path, set()) & results else OTHER
+
+
+def _replay(rows: list[tuple], out: dict[str, set[str]], zone: str) -> dict:
+    """Classify each memory read after a search of the same process, once per search."""
+    reads: Counter[str] = Counter()
+    examples: list[tuple[str, str]] = []
+    pending: dict[int | None, tuple[set[str], set[str]]] = {}  # pid -> (results, counted)
+    searches = 0
+    for tool, args, paths, pid in rows:
+        found = [_norm(p) for p in _json(paths, [])]
+        if tool == "search":
+            searches += 1
+            pending[pid] = (set(found), set())
+            continue
+        if pid not in pending:
+            continue
+        results, counted = pending[pid]
+        opened = dict.fromkeys(_read_paths(_json(args, {}), found))
+        fresh = [p for p in opened if _in_zone(p, zone) and p not in counted]
+        counted.update(fresh)
+        reached = [(_how_reached(p, results, out), p) for p in fresh]
+        reads.update(how for how, _p in reached)
+        examples += [r for r in reached if r[0] in (FORWARD, BACKLINK)]
+    return {"searches": searches, "reads": reads, "examples": examples}
+
+
+def measure(
+    vault_root: Path, zone: str | None = None, project: str | None = None, days: int = DEFAULT_DAYS
+) -> dict:
     """Link counts, neighbour buckets and vocabulary overlap of the active memories."""
     vault = Vault(Path(vault_root))
-    paths, memories = _load(vault, _zone_prefix(vault, zone))
+    prefix = _zone_prefix(vault, zone)
+    paths, memories = _load(vault, prefix)
     active, measured = _select(memories, zone, project)
     resolver = Resolver(paths)
     edges = _edges(active, resolver)
+    every_edge = _edges(memories, resolver)
     nb = _related_neighbours(active, edges)
     pairs, buckets = _pair_stats(measured, {m.rel: m for m in active}, nb)
     kinds, unresolved = _link_counts(measured, edges)
+    rows = _activity_rows(vault.root, days)
     return {
         "active": len(measured),
         "kinds": kinds,
         "unresolved": unresolved,
         "with_related": sum(1 for m in measured if nb[m.rel]),
-        "orphans": _orphans(measured, _edges(memories, resolver)),
+        "orphans": _orphans(measured, every_edge),
         "scoped": len(measured) - buckets[0],
         "buckets": buckets,
         "pairs": pairs,
         "low": [p for p in pairs if p[0] < LOW_OVERLAP],
+        "reach": _reach(measured, active, edges),
+        "linked": _overlap(s for s, _a, _b in pairs),
+        "origins": _by_origin(pairs),
+        "baseline": _baseline(measured),
+        "activity": None if rows is None else _replay(rows, _outgoing(every_edge), prefix),
+        "days": days,
     }
 
 
@@ -227,8 +401,13 @@ def _render_graph(r: dict) -> list[str]:
         f"({_pct(r['with_related'], n)})",
         f"- Huérfanas (sin enlaces resueltos en ningún sentido): {len(r['orphans'])} "
         f"({_pct(len(r['orphans']), n)})",
-        f"- De ellas, con vecinas del mismo proyecto o `_shared`: {r['scoped']} "
+        f"- Con vecinas `related` del mismo proyecto o `_shared`: {r['scoped']} "
         f"({_pct(r['scoped'], n)})",
+        f"- Con al menos un wikilink de cualquier tipo (cuerpo o frontmatter, saliente o "
+        f"entrante): {r['reach']['with_any']} ({_pct(r['reach']['with_any'], n)})",
+        f"- Ganan vecinas al recorrer los backlinks: {r['reach']['backlink_gain']} "
+        f"({_pct(r['reach']['backlink_gain'], n)}); de ellas, solo tienen enlaces "
+        f"entrantes: {r['reach']['backlink_only']}",
         "",
         "Vecinas `related` activas del mismo proyecto o `_shared`, por memoria:",
         "",
@@ -241,6 +420,11 @@ def _render_graph(r: dict) -> list[str]:
     return out
 
 
+def _overlap_row(label: str, o: dict[str, float]) -> str:
+    low = _pct(int(o["low"]), int(o["pairs"]))
+    return f"| {label} | {o['pairs']} | {low} | {o['median']:.2f} |"
+
+
 def _render_decision(r: dict) -> list[str]:
     total, low = len(r["pairs"]), len(r["low"])
     return [
@@ -249,7 +433,37 @@ def _render_decision(r: dict) -> list[str]:
         "",
         f"- Pares memoria-vecina: {total}",
         f"- Con vocabulario distinto (Jaccard < {LOW_OVERLAP}): {low} ({_pct(low, total)})",
+        "",
+        "Línea base: los mismos números para todos los pares de memorias del mismo proyecto, "
+        "enlazados o no. Un par es «de OMEGA» cuando sus dos memorias vienen de la migración.",
+        "",
+        f"| pares | cuántos | Jaccard < {LOW_OVERLAP} | mediana |",
+        "|---|---|---|---|",
+        _overlap_row("enlazados por `related`", r["linked"]),
+        _overlap_row("- de OMEGA", r["origins"][OMEGA]),
+        _overlap_row("- nativos", r["origins"][NATIVE]),
+        _overlap_row("línea base (mismo proyecto)", r["baseline"]),
     ]
+
+
+def _render_activity(r: dict, examples: int) -> list[str]:
+    out = ["", "## Búsquedas reales", ""]
+    a = r["activity"]
+    if a is None:
+        return [*out, "- (sin registro de actividad: no hay `activity.db` o `--days 0`)"]
+    reads = a["reads"]
+    total = sum(reads.values())
+    near = reads[FORWARD] + reads[BACKLINK]
+    out += [
+        f"- Búsquedas de los últimos {r['days']} días: {a['searches']}",
+        f"- Memorias leídas después de una búsqueda, en el mismo proceso: {total}",
+        f"- Estaban en el resultado: {reads[RETURNED]} ({_pct(reads[RETURNED], total)})",
+        f"- No estaban, pero eran vecinas de un resultado: {near} ({_pct(near, total)}); "
+        f"un resultado las enlaza: {reads[FORWARD]}, solo por backlink: {reads[BACKLINK]}",
+        f"- Ni resultado ni vecinas: {reads[OTHER]} ({_pct(reads[OTHER], total)})",
+    ]
+    shown = list(dict.fromkeys(a["examples"]))[:examples]
+    return [*out, "", *[f"- {how}: {path}" for how, path in shown]] if shown else out
 
 
 def _pair_key(pair: tuple[float, Memory, Memory]) -> tuple[float, str, str]:
@@ -275,6 +489,7 @@ def render(result: dict, examples: int) -> str:
     out += _render_links(result)
     out += _render_graph(result)
     out += _render_decision(result)
+    out += _render_activity(result, examples)
     out += _render_examples(result, examples)
     return "\n".join(out) + "\n"
 
@@ -285,9 +500,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--zone", default=None, help="zone path (default: the memory zone)")
     ap.add_argument("--project", default=None, help="only measure this project's memories")
     ap.add_argument("--examples", type=int, default=DEFAULT_EXAMPLES)
+    ap.add_argument("--days", type=int, default=DEFAULT_DAYS, help="activity window; 0 skips it")
     args = ap.parse_args(argv)
     try:
-        result = measure(args.vault, args.zone, args.project)
+        result = measure(args.vault, args.zone, args.project, args.days)
     except EpistemeError as e:
         print(e, file=sys.stderr)
         return 1
