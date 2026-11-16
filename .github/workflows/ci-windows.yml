@@ -25,8 +25,8 @@ concurrency:
 
 jobs:
   test:
-    # Solo en repo público (en uno privado gasta cuota): se activa solo en el
-    # repo público de la fase B de #114.
+    # Solo en repo público (en uno privado gasta cuota): se activa solo al
+    # publicar el repo.
     if: ${{ !github.event.repository.private }}
     runs-on: windows-latest
     timeout-minutes: 20

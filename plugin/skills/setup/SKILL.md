@@ -13,7 +13,7 @@ Pide a la persona el nombre del proyecto (`<p>`, p. ej. `fabrik`). Trabaja desde
 Antes de empezar, comprueba:
 - `uv --version` y `git --version` responden. Si falta uv: `curl -LsSf https://astral.sh/uv/install.sh | sh` en Linux o macOS, `winget install --id=astral-sh.uv -e` en Windows.
 - El repo es público: se instala por HTTPS y no hace falta iniciar sesión en GitHub ni ser colaborador. `episteme` en PyPI es otro proyecto: instala siempre con `--from git+https://…`.
-- El último tag: `git ls-remote --tags --sort=-v:refname --refs https://github.com/Bajmein/episteme | head -1` (en PowerShell, `Select-Object -First 1` en vez de `head -1`).
+- El último tag: `git ls-remote --tags --sort=-v:refname --refs https://github.com/Bajmein/episteme | head -1 | sed 's#.*refs/tags/##'`. En PowerShell: `((git ls-remote --tags --sort=-v:refname --refs https://github.com/Bajmein/episteme) | Select-Object -First 1) -replace '.*refs/tags/',''`.
 
 ## 1. Registrar el servidor (scope local)
 

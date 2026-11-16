@@ -8,8 +8,8 @@ permissions:
 
 jobs:
   dependency-review:
-    # Necesita repo público (grafo de dependencias): se activa solo en el repo
-    # público de la fase B de #114.
+    # Necesita repo público (grafo de dependencias): se activa solo al
+    # publicar el repo.
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
