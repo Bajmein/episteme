@@ -97,7 +97,7 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         and a nudge to save when the session has written no memory.
         task: decisions, constraints and lessons matching the task (Spanish and English stopwords
         ignored; with 3+ words a memory must hold 2 of them and score >= 25% of the best hit;
-        constraints on files always enter), up to 3 memories linked to them by related, and up
+        constraints on files always enter), up to 3 memories one link (any kind) from them, and up
         to 5 related notes to open with read, within budget_tokens.
         Returns JSON {"text", "entries": [{"path", "score", "kind"}]}; score is 0-1, or null for
         norms, reminders, recalled and linked memories (welcome adds "already_sent").

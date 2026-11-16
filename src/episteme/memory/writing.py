@@ -290,6 +290,19 @@ def _needs_keywords_hint(fm: dict[str, Any]) -> bool:
     return not fm.get("keywords") and fm.get("type") not in ("session", "reminder")
 
 
+LINKS_HINT = (
+    'No links. Link it to the memories it builds on or belongs with: revise(action="set", '
+    'fields={"related": ["[[name]]"]}). Pick from link_candidates, or search for them.'
+)
+
+
+def _needs_links_hint(fm: dict[str, Any], body: str) -> bool:
+    """True for a memory with no related, no supersedes and no wikilink in the body."""
+    if fm.get("type") in ("session", "reminder"):
+        return False
+    return not fm.get("related") and not fm.get("supersedes") and "[[" not in body
+
+
 def _extras(engine: Engine, project: str, fm: dict[str, Any], skip: set[str]) -> dict[str, Any]:
     """Hints for the caller: tags no other note has and memories worth linking."""
     extras: dict[str, Any] = {}
@@ -435,6 +448,8 @@ def remember(
     if blocking is not None and not force:
         return _duplicate_reply(similar, blocking)
     extras = _extras(engine, project, fm, _skip_paths(engine, related, links))
+    if _needs_links_hint(fm, text_body):
+        extras["links_hint"] = LINKS_HINT
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"

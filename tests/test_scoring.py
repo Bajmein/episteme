@@ -121,3 +121,13 @@ async def test_task_linked_memories(vault: Path) -> None:
         assert text.index(main) < text.index("Memorias enlazadas:") < text.index(target)
         res = await c.ok("context", mode="task", task="flurbo")
         assert {"path": target, "score": None, "kind": "linked"} in res["entries"]
+
+
+async def test_task_linked_by_body_wikilink(vault: Path) -> None:
+    target = put(vault, "fabrik", "bodylinked", "Bodylinked unrelated words", "Nothing alike.")
+    main = put(vault, "fabrik", "zorblat", "Zorblat main decision", "zorblat, see [[bodylinked]]")
+    async with mcp_client(vault, today="2026-10-22") as c:
+        raw = await c.ok("context", mode="task", task="zorblat", hook_event="UserPromptSubmit")
+        text = hook_text(raw)
+        assert "Memorias enlazadas:" in text
+        assert text.index(main) < text.index("Memorias enlazadas:") < text.index(target)
