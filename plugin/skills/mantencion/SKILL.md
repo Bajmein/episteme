@@ -27,7 +27,7 @@ Antes de proponer algo sobre una memoria, léela: `read(notes=[...])` con todas 
 | `expired` | Activas con `valid_until` ya pasado | Si ya no aplica: `revise(action="archive")`. Si sigue valiendo con cambios: `remember` de la versión nueva con `supersedes=<ruta>` |
 | `similar` | Grupos de memorias que dicen casi lo mismo | Unificar (ver el paso 3) |
 | `contradictions` | Dos decisiones que comparten archivo y se parecen | Ver el paso 4 |
-| `flagged` | Marcadas como desactualizadas | Corregir con `revise(action="edit")` si es un dato puntual, reemplazar con `remember(supersedes=…)` si cambió el fondo, o archivar |
+| `flagged` | Marcadas como desactualizadas | Corregir con `revise(action="edit")` si es un dato puntual, reemplazar con `remember(supersedes=…)` si cambió el fondo, o archivar. Después de corregirla: `revise(action="set", fields={"flagged": null})`, o seguirá saliendo |
 | `stale` | Más de 90 días y nunca marcadas como útiles | Preguntar si siguen valiendo. Si sí: `revise(action="feedback", value="helpful")`. Si no: archivar |
 | `cut_titles` | El título quedó cortado y la primera línea del cuerpo lo repite | `revise(action="edit")` para quitar la repetición del cuerpo |
 | `invalid_frontmatter` | El frontmatter no cumple el esquema | `revise(action="set", fields={…})` con el campo corregido |

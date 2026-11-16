@@ -90,6 +90,24 @@ async def test_surface_not_repeated_across_files(vault: Path) -> None:
         assert "Nota compartida" in other and "ya mostradas" not in other
 
 
+async def test_surface_limit_counts_only_unshown_memories(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        await c.ok("remember", type="lesson", title="Primera nota", body="p" * 50, files=[OTHER])
+        await c.ok("remember", type="lesson", title="Segunda nota", body="s" * 50, files=[OTHER])
+        a = {"hook_event": "PostToolUse", "session": "lim", "limit": 1}
+
+        first = hook_text(await c.ok("surface", file=OTHER, **a))
+        second = hook_text(await c.ok("surface", file=OTHER, **a))
+
+        titles = {"Primera nota", "Segunda nota"}
+        got_first = {t for t in titles if t in first}
+        got_second = {t for t in titles if t in second}
+        assert len(got_first) == 1 and len(got_second) == 1
+        assert got_first | got_second == titles
+        assert "(+1 ya mostradas)" in second
+        assert hook_text(await c.ok("surface", file=OTHER, **a)) == ""
+
+
 async def test_recall_skips_what_welcome_delivered(vault: Path) -> None:
     async with mcp_client(vault, today="2026-10-22") as c:
         made = await c.ok(

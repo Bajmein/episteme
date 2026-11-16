@@ -137,6 +137,17 @@ async def test_review_orphans_carry_candidates_linkable_first(vault: Path) -> No
     assert order.index(a) < order.index(lone) and order.index(b) < order.index(lone)
 
 
+async def test_flagged_clears_with_set_null(vault: Path) -> None:
+    note = "memory/fabrik/lessons/2026-10-14-omega-rss-limit.md"
+    async with mcp_client(vault) as c:
+        await c.ok("revise", note=note, action="feedback", value="outdated")
+        assert note in (await c.ok("review", project="fabrik"))["flagged"]
+
+        await c.ok("revise", note=note, action="set", fields={"flagged": None})
+
+        assert note not in (await c.ok("review", project="fabrik"))["flagged"]
+
+
 async def test_task_context(vault: Path) -> None:
     async with mcp_client(vault) as c:
         res = await c.ok("context", mode="task", task="cambiar serena_guard y el hook de cd")
