@@ -21,7 +21,7 @@ from episteme.memory.secrets import find_secrets
 from episteme.memory.surfacing import constraints, surface
 from episteme.memory.task import task_context
 from episteme.memory.welcoming import welcome
-from episteme.memory.writing import memory_slug, remember
+from episteme.memory.writing import memory_slug, remember, shared_reason
 
 __all__ = [
     "DUPLICATE",
@@ -41,6 +41,7 @@ __all__ = [
     "remember",
     "review",
     "revise",
+    "shared_reason",
     "similarity",
     "surface",
     "task_context",

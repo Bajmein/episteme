@@ -89,12 +89,14 @@ Para decidir si vale la pena un módulo de búsqueda semántica, el script compa
 
 ```bash
 ollama pull bge-m3
-uv run scripts/measure_semantic.py --vault ~/.episteme [--zone memory] [--url http://localhost:11434] [--model bge-m3] [--queries-file q.txt] [--days 30] [--top-k 5] [--min-score 0.5] [--strong-score 0.65] [--examples 15]
+uv run scripts/measure_semantic.py --vault ~/.episteme [--zone memory] [--url http://localhost:11434] [--model bge-m3] [--queries-file q.txt] [--days 30] [--top-k 5] [--min-score 0.5] [--strong-score 0.65] [--examples 15] [--link-score 0.7]
 ```
 
 Requisitos: Ollama en marcha (`ollama serve`) y el modelo descargado. La URL solo puede ser `http` en `localhost`, `127.0.0.1` o `::1`; no hay dependencias nuevas. Las consultas salen de `--queries-file` (una por línea) y de las consultas de `search` y las tareas de `context` de los últimos `--days` días del registro de actividad. En CPU, calcular los vectores de unas 500 memorias tarda unos 10 minutos (bge-m3, medido el 15-11-2026).
 
 El informe trae: por consulta, las memorias que daría `search` con sus valores por defecto (las notas con todas las palabras útiles o, si ninguna las tiene, las que tienen alguna, ordenadas por cuántas tienen, hasta 20; es una aproximación, sin BM25) frente a los `--top-k` vecinos sobre `--min-score`, con los nuevos y, entre ellos, los claros (desde `--strong-score`); los pares de memorias muy parecidos en significado que la similitud por tokens no detecta, con cuántos llegan a 0,9; la latencia de la primera llamada y la mediana de las siguientes, y el tiempo de calcular todos los vectores; y un resumen con cuántas consultas ganan algo y cuántas ganan algún vecino claro.
+
+Trae además las huérfanas (memorias activas sin enlaces, sin sesiones ni recordatorios, como en `review`) con hasta 3 memorias de su proyecto o de `_shared` con coseno de `--link-score` o más. De cada candidata dice si `review` ya la ofrece (comparten un archivo o 2 tags) o no, y el resumen cuenta cuántas huérfanas ganan alguna candidata que `review` no da. Sin índice, un enlace se resuelve por ruta exacta o por un nombre único en el vault. Para medir solo esto, sin consultas: `--days 0` y sin `--queries-file`.
 
 Criterio: construir el módulo solo si hay aciertos nuevos claros en español (vecinos nuevos que de verdad responden a la consulta, no ruido). Con bge-m3, los puntajes entre 0,5 y 0,65 traen sobre todo memorias sin relación, y entre los pares de 0,8 a 0,9 hay temas distintos: mira los claros.
 

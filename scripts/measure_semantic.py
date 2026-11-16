@@ -2,7 +2,7 @@
 
     uv run scripts/measure_semantic.py --vault <vault> [--zone memory] [--url <url>] \
         [--model bge-m3] [--queries-file <file>] [--days 30] [--top-k 5] [--min-score 0.5] \
-        [--strong-score 0.65] [--examples 15]
+        [--strong-score 0.65] [--examples 15] [--link-score 0.7]
 
 Read-only: walks the vault with ``Vault.iter_notes`` and ``parse``; it never opens or creates
 the index and writes nothing in the vault. The queries come from ``--queries-file`` (one per
@@ -14,6 +14,12 @@ The keyword side imitates ``search`` with its defaults: notes holding every usef
 the query or, when none does, notes holding any of them, ranked by how many they hold, cut
 at ``SEARCH_LIMIT``. It ranks by matched words, not BM25, so it is an approximation.
 Neighbours at ``--strong-score`` or more count as clear hits; the rest are reported apart.
+
+It also lists the orphans (active memories with no links in or out, sessions and reminders
+left out) with the memories of their project or ``_shared`` at ``--link-score`` or more, and
+says which of those ``review`` already offers (a shared file or 2+ shared tags). Without an
+index a link resolves by exact path or by a base name unique in the vault. ``--days 0``
+without ``--queries-file`` skips the queries and leaves only the pairs and the orphans.
 """
 
 from __future__ import annotations
@@ -34,8 +40,8 @@ from urllib.parse import urlsplit
 
 from episteme.errors import INVALID_ARGUMENT, NOT_FOUND, EpistemeError
 from episteme.index import STOPWORDS_ES
-from episteme.markdown import parse, tokens
-from episteme.memory import dedup_tokens, similarity
+from episteme.markdown import frontmatter_tags, parse, tokens
+from episteme.memory import dedup_tokens, shared_reason, similarity
 from episteme.vault import INDEX_DIR, MEMORY, Vault
 
 if TYPE_CHECKING:
@@ -66,6 +72,13 @@ PAIR_MIN_SCORE = 0.8
 PAIR_MAX_TOKEN_SIM = 0.3
 PAIR_STRONG_SCORE = 0.9
 PAIRS_SHOWN = 10
+# Orphans: like review, active memories that are not sessions or reminders, each with up to
+# this many candidates of its project or _shared at --link-score or more.
+DEFAULT_LINK_SCORE = 0.7
+ORPHAN_CANDIDATES = 3
+ORPHAN_BANDS = (0.75, 0.85)
+NOT_LINKABLE_TYPES = ("session", "reminder")
+SHARED = "_shared"
 
 
 def _check_url(url: str) -> str:
@@ -126,10 +139,48 @@ def _useful(text: str) -> set[str]:
     return {t for t in tokens(text, min_len=2) if t not in STOPWORDS_ES}
 
 
-def _load_notes(vault: Vault, zone: str) -> dict[str, tuple[str, set[str], set[str]]]:
-    """Path -> (text to embed, useful tokens, dedup tokens)."""
-    notes: dict[str, tuple[str, set[str], set[str]]] = {}
+@dataclass(frozen=True)
+class _Note:
+    """What the measurement needs of one note of the zone."""
+
+    text: str  # what is embedded
+    useful: set[str]
+    dedup: set[str]
+    title: str
+    project: str
+    linkable: bool  # active and not a session or a reminder, like review's orphans
+    files: set[str]
+    tags: set[str]
+    targets: list[str]  # raw link targets, body and frontmatter
+
+
+def _str_set(value: object) -> set[str]:
+    return {str(v) for v in value} if isinstance(value, list) else set()
+
+
+def _note(rel: str, text: str) -> _Note:
+    note = parse(text, rel)
+    fm = note.frontmatter
+    full = note.title + "\n" + note.search_text
+    return _Note(
+        text=full[:MAX_NOTE_CHARS],
+        useful=_useful(full),
+        dedup=dedup_tokens(note.title, note.search_text),
+        title=note.title,
+        project=str(fm.get("project") or ""),
+        linkable=fm.get("status") == "active" and fm.get("type") not in NOT_LINKABLE_TYPES,
+        files=_str_set(fm.get("files")),
+        tags=set(frontmatter_tags(fm)),
+        targets=[link.target for link in note.links if link.target],
+    )
+
+
+def _load_notes(vault: Vault, zone: str) -> tuple[dict[str, _Note], list[str]]:
+    """The notes of the zone by path, and every note path of the vault."""
+    notes: dict[str, _Note] = {}
+    paths: list[str] = []
     for rel, _stat in vault.iter_notes():
+        paths.append(rel)
         if not (rel == zone or rel.startswith(zone + "/")):
             continue
         try:
@@ -137,11 +188,8 @@ def _load_notes(vault: Vault, zone: str) -> dict[str, tuple[str, set[str], set[s
         except (OSError, UnicodeDecodeError) as e:
             print(f"skipping {rel}: {e}", file=sys.stderr)
             continue
-        note = parse(text, rel)
-        full = note.title + "\n" + note.search_text
-        dedup = dedup_tokens(note.title, note.search_text)
-        notes[rel] = (full[:MAX_NOTE_CHARS], _useful(full), dedup)
-    return notes
+        notes[rel] = _note(rel, text)
+    return notes, paths
 
 
 def load_activity_queries(vault_root: Path, days: int, now: datetime | None = None) -> list[str]:
@@ -202,15 +250,15 @@ def _embed_all(embed: Embed, texts: list[str]) -> list[list[float]]:
     return vectors
 
 
-def _keyword_hits(query: str, notes: dict[str, tuple[str, set[str], set[str]]]) -> list[str]:
+def _keyword_hits(query: str, notes: dict[str, _Note]) -> list[str]:
     """What search would return: every word, else any word ranked by how many match."""
     want = _useful(query)
     if not want:
         return []
-    every = sorted(rel for rel, (_t, toks, _d) in notes.items() if want <= toks)
+    every = sorted(rel for rel, n in notes.items() if want <= n.useful)
     if every:
         return every[:SEARCH_LIMIT]
-    counted = ((len(want & toks), rel) for rel, (_t, toks, _d) in notes.items())
+    counted = ((len(want & n.useful), rel) for rel, n in notes.items())
     ranked = sorted((-n, rel) for n, rel in counted if n)
     return [rel for _n, rel in ranked[:SEARCH_LIMIT]]
 
@@ -223,6 +271,7 @@ class Options:
     top_k: int = DEFAULT_TOP_K
     min_score: float = DEFAULT_MIN_SCORE
     strong_score: float = DEFAULT_STRONG_SCORE
+    link_score: float = DEFAULT_LINK_SCORE
 
 
 @dataclass(frozen=True)
@@ -231,6 +280,7 @@ class _Corpus:
 
     rels: list[str]
     vectors: list[list[float]]
+    notes: dict[str, _Note]
 
 
 def _neighbours(qvec: list[float], corpus: _Corpus, opts: Options) -> list[tuple[str, float]]:
@@ -254,16 +304,93 @@ def _missed_pairs(
     return sorted(pairs, key=lambda p: -p[2])
 
 
-def _load_zone(vault_root: Path, zone: str | None) -> dict[str, tuple[str, set[str], set[str]]]:
+def _resolver(paths: list[str]) -> Callable[[str], str | None]:
+    """Link target -> note path without an index: exact path, or a base name unique in the vault."""
+    exact = set(paths)
+    by_base: dict[str, list[str]] = {}
+    for p in paths:
+        by_base.setdefault(Path(p).stem, []).append(p)
+
+    def resolve(target: str) -> str | None:
+        t = target.replace("\\", "/").strip().strip("/")
+        for candidate in (t, t + ".md"):
+            if t and candidate in exact:
+                return candidate
+        base = t.removesuffix(".md")
+        found = by_base.get(base, []) if base and "/" not in base else []
+        return found[0] if len(found) == 1 else None
+
+    return resolve
+
+
+def _linked(notes: dict[str, _Note], paths: list[str]) -> set[str]:
+    """Notes of the zone with a link out to another note, or a link in from the zone."""
+    resolve = _resolver(paths)
+    linked: set[str] = set()
+    for rel, n in notes.items():
+        targets = {dst for t in n.targets if (dst := resolve(t)) and dst != rel}
+        if targets:
+            linked.add(rel)
+            linked |= targets
+    return linked
+
+
+def _semantic_candidates(i: int, pool: list[int], corpus: _Corpus, floor: float) -> list[dict]:
+    """Up to ORPHAN_CANDIDATES memories of the orphan's project or _shared, closest first."""
+    me = corpus.notes[corpus.rels[i]]
+    scored = []
+    for j in pool:
+        other = corpus.notes[corpus.rels[j]]
+        if j == i or other.project not in (me.project, SHARED):
+            continue
+        score = _dot(corpus.vectors[i], corpus.vectors[j])
+        if score >= floor:
+            scored.append((-score, corpus.rels[j], other))
+    return [
+        {
+            "path": rel,
+            "title": other.title,
+            "score": -neg,
+            "tokens": similarity(me.dedup, other.dedup),
+            # Set when review already offers it: a shared file or 2+ shared tags.
+            "reason": shared_reason(me.files, me.tags, other.files, other.tags),
+        }
+        for neg, rel, other in sorted(scored, key=lambda s: s[:2])[:ORPHAN_CANDIDATES]
+    ]
+
+
+def _orphans(corpus: _Corpus, paths: list[str], floor: float) -> list[dict]:
+    """Linkable memories with no links, each with its semantic candidates, best first."""
+    notes = corpus.notes
+    linked = _linked(notes, paths)
+    pool = [i for i, rel in enumerate(corpus.rels) if notes[rel].linkable]
+    orphans = [
+        {
+            "path": corpus.rels[i],
+            "title": notes[corpus.rels[i]].title,
+            "project": notes[corpus.rels[i]].project,
+            "candidates": _semantic_candidates(i, pool, corpus, floor),
+        }
+        for i in pool
+        if corpus.rels[i] not in linked
+    ]
+    return sorted(orphans, key=lambda o: (-_best(o), o["path"]))
+
+
+def _best(orphan: dict) -> float:
+    return orphan["candidates"][0]["score"] if orphan["candidates"] else 0.0
+
+
+def _load_zone(vault_root: Path, zone: str | None) -> tuple[dict[str, _Note], list[str]]:
     vault = Vault(Path(vault_root))
     prefix = _zone_prefix(vault, zone)
-    notes = _load_notes(vault, prefix)
+    notes, paths = _load_notes(vault, prefix)
     if not notes:
         raise EpistemeError(
             INVALID_ARGUMENT,
             f"no notes found under zone {prefix!r}. Pass --zone with a folder of the vault.",
         )
-    return notes
+    return notes, paths
 
 
 def _query_rows(
@@ -299,12 +426,12 @@ def measure(
     opts: Options = Options(),
 ) -> dict:
     """Keyword hits vs semantic neighbours per query, missed pairs and latencies."""
-    notes = _load_zone(vault_root, opts.zone)
+    notes, paths = _load_zone(vault_root, opts.zone)
     unique = list(dict.fromkeys(q for q in (queries or []) if q.strip()))
     timed = _Timed(embed)
     rels = list(notes)
     start = time.perf_counter()
-    corpus = _Corpus(rels, _embed_all(timed, [notes[r][0] for r in rels]))
+    corpus = _Corpus(rels, _embed_all(timed, [notes[r].text for r in rels]), notes)
     corpus_s = time.perf_counter() - start
     n_corpus = len(timed.latencies)
     qvectors = _embed_all(timed, unique) if unique else []
@@ -312,7 +439,9 @@ def measure(
     return {
         "docs": len(notes),
         "rows": _query_rows(queried, notes, corpus, opts),
-        "pairs": _missed_pairs(rels, corpus.vectors, [notes[r][2] for r in rels]),
+        "pairs": _missed_pairs(rels, corpus.vectors, [notes[r].dedup for r in rels]),
+        "orphans": _orphans(corpus, paths, opts.link_score),
+        "link_score": opts.link_score,
         "corpus_s": corpus_s,
         "top_k": opts.top_k,
         "min_score": opts.min_score,
@@ -345,6 +474,48 @@ def _render_pairs(pairs: list[tuple[str, str, float, float]]) -> list[str]:
     return out
 
 
+def _band_counts(orphans: list[dict], floor: float) -> str:
+    """How many orphans have their best candidate in each cosine band."""
+    edges = [floor, *[b for b in ORPHAN_BANDS if b > floor]]
+    parts = []
+    for k, low in enumerate(edges):
+        high = edges[k + 1] if k + 1 < len(edges) else None
+        n = sum(1 for o in orphans if _best(o) >= low and (high is None or _best(o) < high))
+        parts.append(f"{low:.2f} o más: {n}" if high is None else f"{low:.2f} a {high:.2f}: {n}")
+    return " · ".join(parts)
+
+
+def _render_orphan(orphan: dict) -> list[str]:
+    out = [f"- [{orphan['project']}] {orphan['title']} ({orphan['path']})"]
+    for c in orphan["candidates"]:
+        offered = f"review: {c['reason']}" if c["reason"] else "review no la ofrece"
+        out.append(f"    - {c['score']:.2f} · tokens {c['tokens']:.2f} · {c['title']} "
+                   f"({c['path']}) · {offered}")
+    return out
+
+
+def _render_orphans(orphans: list[dict], floor: float, examples: int) -> list[str]:
+    found = [o for o in orphans if o["candidates"]]
+    fresh = [o for o in found if any(c["reason"] is None for c in o["candidates"])]
+    out = [
+        "",
+        "## Huérfanas y candidatas por significado",
+        "",
+        f"Memorias activas sin enlaces (sin sesiones ni recordatorios) y hasta "
+        f"{ORPHAN_CANDIDATES} memorias de su proyecto o de {SHARED} con coseno de {floor} o más.",
+        "",
+        f"- Huérfanas: {len(orphans)}",
+        f"- Con alguna candidata: {len(found)}",
+        f"- Con alguna candidata que review no ofrece: {len(fresh)}",
+    ]
+    if found:
+        out.append(f"- Mejor candidata por tramo de coseno: {_band_counts(found, floor)}")
+    out.append("")
+    for o in found[:examples]:
+        out += _render_orphan(o)
+    return out
+
+
 def render(result: dict, examples: int) -> str:
     rows = result["rows"]
     gaining = sum(1 for r in rows if r["new"])
@@ -370,6 +541,7 @@ def render(result: dict, examples: int) -> str:
     ]
     out += _render_queries(rows, examples)
     out += _render_pairs(result["pairs"])
+    out += _render_orphans(result["orphans"], result["link_score"], examples)
     out += [
         "",
         "## Latencia",
@@ -399,6 +571,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
     ap.add_argument("--strong-score", type=float, default=DEFAULT_STRONG_SCORE)
     ap.add_argument("--examples", type=int, default=DEFAULT_EXAMPLES)
+    ap.add_argument("--link-score", type=float, default=DEFAULT_LINK_SCORE,
+                    help="minimum cosine of a candidate to link an orphan")
     args = ap.parse_args(argv)
     if _bad_numbers(args):
         print(
@@ -414,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.queries_file:
             queries += args.queries_file.read_text(encoding="utf-8").splitlines()
         queries += load_activity_queries(args.vault, args.days)
-        opts = Options(args.zone, args.top_k, args.min_score, args.strong_score)
+        opts = Options(args.zone, args.top_k, args.min_score, args.strong_score, args.link_score)
         result = measure(args.vault, embed, queries, opts)
     except EpistemeError as e:
         print(e, file=sys.stderr)
