@@ -171,13 +171,18 @@ def _read(pid: int, name: str) -> tuple:
 def test_reads_after_a_search_are_matched_against_the_graph(tmp_path: Path) -> None:
     m = _script()
     root = _vault(tmp_path)
+    (root / "memory" / "p" / "z.md").write_text(_note("p", "active", "", "suelta"), "utf-8")
     rows = [
-        _read(1, "c"),  # before any search: ignored
+        _read(1, "a"),  # before any search: not counted
+        (1, "context", {"mode": "task"}, ["memory/p/e.md"]),
+        (1, "search", {"query": "delta"}, ["memory/p/c.md"]),
         (1, "search", {"query": "alfa"}, ["memory/p/a.md"]),
         _read(1, "a"),  # returned by the search
         _read(1, "b"),  # a links to b
         _read(1, "f"),  # only f links to a
-        _read(1, "e"),  # neither
+        _read(1, "c"),  # returned by the search before
+        _read(1, "e"),  # delivered by context
+        _read(1, "z"),  # nothing in the log explains it
         _read(2, "b"),  # another process, no search
     ]
     _activity_db(root, rows)
@@ -185,8 +190,10 @@ def test_reads_after_a_search_are_matched_against_the_graph(tmp_path: Path) -> N
     r = m.measure(root)
 
     activity = r["activity"]
-    assert activity["searches"] == 1
-    assert dict(activity["reads"]) == {"returned": 1, "forward": 1, "backlink": 1, "other": 1}
+    assert activity["searches"] == 2
+    assert dict(activity["reads"]) == {
+        "returned": 1, "forward": 1, "backlink": 1, "earlier": 1, "delivered": 1, "other": 1,
+    }  # fmt: skip
     assert ("backlink", "memory/p/f.md") in activity["examples"]
     assert "solo por backlink: 1" in m.render(r, 3)
 

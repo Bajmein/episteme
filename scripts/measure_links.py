@@ -13,7 +13,7 @@ It also reports what every wikilink (body and frontmatter) adds when walked both
 ``related`` pairs split by origin (both ends migrated from OMEGA, or not), a baseline (the
 vocabulary overlap of every pair of memories of the same project) and, when the vault has
 an activity log, how many memories read after a ``search`` were not in its results but
-were linked to one of them.
+were linked to one of them, came from an earlier search, or had already been delivered.
 
 Without an index a link target resolves by exact path (with or without ``.md``) or by a
 base name that is unique in the vault; anything else counts as unresolved.
@@ -52,9 +52,10 @@ OMEGA, NATIVE = "omega", "nativo"
 BASELINE_MAX_PAIRS = 200_000
 DEFAULT_DAYS = 30
 RETURNED, FORWARD, BACKLINK, OTHER = "returned", "forward", "backlink", "other"
+EARLIER, DELIVERED = "earlier", "delivered"
 _ACTIVITY_SQL = (
     "select tool, args, paths, pid from calls"
-    " where at >= ? and ok = 1 and tool in ('search', 'read') order by at, id"
+    " where at >= ? and ok = 1 order by at, id"
 )
 
 Edge = tuple[str, str | None, str]  # (source, resolved target or None, kind)
@@ -299,7 +300,7 @@ def _read_paths(args: dict, paths: list[str]) -> list[str]:
 
 
 def _activity_rows(vault_root: Path, days: int) -> list[tuple] | None:
-    """The ``search`` and ``read`` calls of the last ``days`` days; None without a log."""
+    """The successful calls of the last ``days`` days, in order; None without a log."""
     db = vault_root / INDEX_DIR / "activity.db"
     if days <= 0 or not db.is_file():
         return None
@@ -314,36 +315,63 @@ def _activity_rows(vault_root: Path, days: int) -> list[tuple] | None:
         raise EpistemeError(NOT_FOUND, f"cannot read {db}: {e}. Pass --days 0 to skip it.") from e
 
 
-def _how_reached(path: str, results: set[str], out: dict[str, set[str]]) -> str:
-    """How a memory read after a search relates to what the search returned."""
-    if path in results:
+@dataclass
+class _Process:
+    """What one server process has shown so far; mutated only by ``_replay``."""
+
+    searched: bool = False
+    results: set[str] = field(default_factory=set)  # of the last search
+    counted: set[str] = field(default_factory=set)  # reads already classified for it
+    earlier: set[str] = field(default_factory=set)  # results of the searches before
+    seen: set[str] = field(default_factory=set)  # paths in any other tool result
+
+
+def _how_reached(path: str, proc: _Process, out: dict[str, set[str]]) -> str:
+    """How a memory read after a search relates to what the process had already shown."""
+    if path in proc.results:
         return RETURNED
-    if any(path in out.get(r, ()) for r in results):
+    if any(path in out.get(r, ()) for r in proc.results):
         return FORWARD
-    return BACKLINK if out.get(path, set()) & results else OTHER
+    if out.get(path, set()) & proc.results:
+        return BACKLINK
+    if path in proc.earlier:
+        return EARLIER
+    return DELIVERED if path in proc.seen else OTHER
+
+
+def _next_search(proc: _Process, found: list[str]) -> None:
+    proc.earlier |= proc.results
+    proc.results, proc.counted, proc.searched = set(found), set(), True
+
+
+def _fresh_reads(proc: _Process, opened: list[str], zone: str) -> list[str]:
+    """Zone memories this read opens for the first time since the last search."""
+    if not proc.searched:
+        return []
+    fresh = [p for p in opened if _in_zone(p, zone) and p not in proc.counted]
+    proc.counted.update(fresh)
+    return fresh
 
 
 def _replay(rows: list[tuple], out: dict[str, set[str]], zone: str) -> dict:
     """Classify each memory read after a search of the same process, once per search."""
     reads: Counter[str] = Counter()
     examples: list[tuple[str, str]] = []
-    pending: dict[int | None, tuple[set[str], set[str]]] = {}  # pid -> (results, counted)
+    procs: dict[int | None, _Process] = defaultdict(_Process)
     searches = 0
     for tool, args, paths, pid in rows:
+        proc = procs[pid]
         found = [_norm(p) for p in _json(paths, [])]
         if tool == "search":
             searches += 1
-            pending[pid] = (set(found), set())
+            _next_search(proc, found)
             continue
-        if pid not in pending:
-            continue
-        results, counted = pending[pid]
-        opened = dict.fromkeys(_read_paths(_json(args, {}), found))
-        fresh = [p for p in opened if _in_zone(p, zone) and p not in counted]
-        counted.update(fresh)
-        reached = [(_how_reached(p, results, out), p) for p in fresh]
-        reads.update(how for how, _p in reached)
-        examples += [r for r in reached if r[0] in (FORWARD, BACKLINK)]
+        if tool == "read":
+            fresh = _fresh_reads(proc, _read_paths(_json(args, {}), found), zone)
+            reached = [(_how_reached(p, proc, out), p) for p in fresh]
+            reads.update(how for how, _p in reached)
+            examples += [r for r in reached if r[0] in (FORWARD, BACKLINK)]
+        proc.seen.update(found)
     return {"searches": searches, "reads": reads, "examples": examples}
 
 
@@ -460,7 +488,11 @@ def _render_activity(r: dict, examples: int) -> list[str]:
         f"- Estaban en el resultado: {reads[RETURNED]} ({_pct(reads[RETURNED], total)})",
         f"- No estaban, pero eran vecinas de un resultado: {near} ({_pct(near, total)}); "
         f"un resultado las enlaza: {reads[FORWARD]}, solo por backlink: {reads[BACKLINK]}",
-        f"- Ni resultado ni vecinas: {reads[OTHER]} ({_pct(reads[OTHER], total)})",
+        f"- Venían de una búsqueda anterior del mismo proceso: {reads[EARLIER]} "
+        f"({_pct(reads[EARLIER], total)})",
+        f"- Ya las había mostrado otro tool o un hook (context, surface, otra lectura…): "
+        f"{reads[DELIVERED]} ({_pct(reads[DELIVERED], total)})",
+        f"- Sin origen en el registro: {reads[OTHER]} ({_pct(reads[OTHER], total)})",
     ]
     shown = list(dict.fromkeys(a["examples"]))[:examples]
     return [*out, "", *[f"- {how}: {path}" for how, path in shown]] if shown else out
