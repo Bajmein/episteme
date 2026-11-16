@@ -5,9 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
@@ -19,11 +23,7 @@ jobs:
       - run: uv run deptry .
 
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, linux]
     env:
       PYTHONUTF8: "1"   # los tests leen fixtures UTF-8 con read_text() sin encoding
     steps:
