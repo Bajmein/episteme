@@ -5,22 +5,30 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       python-dependencies:
         patterns:
           - "*"
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
     commit-message:
       prefix: "chore(deps)"
 
-  # GitHub Actions used by the CI workflow.
+  # GitHub Actions used by the CI workflows.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns:
           - "*"
+    labels:
+      - "dependencies"
     commit-message:
       prefix: "chore(ci)"

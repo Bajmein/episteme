@@ -4,8 +4,16 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- Archivos de comunidad: `SECURITY.md`, `.github/CONTRIBUTING.md`, plantillas de issue y de PR, `CODEOWNERS`, `.gitmessage`, `copilot-instructions.md`, `.gitattributes` y `.editorconfig`.
+- Workflows `stale` y `dependency-review`, y `zizmor` en el job `lint` del CI.
+
 ### Cambiado
 
+- Los workflows fijan las acciones por SHA, declaran `permissions` mínimos y desvían los PR de forks y de Dependabot a `ubuntu-latest`.
+- El CI de Windows vuelve a correr en `main` y en los PR que tocan código, tests o dependencias.
+- Dependabot espera 7 días antes de proponer una versión recién publicada.
 - El vault de prueba (`tests/fixtures/vault/docs/claude-code/` y `docs/llms.txt`) ya no copia documentación de terceros: son 45 notas propias, breves y sintéticas, con la misma ruta y los mismos nombres. Solo afecta a los tests.
 
 ## [0.12.0] - 2026-11-16

@@ -1,0 +1,49 @@
+name: Error
+description: Algo no funciona como debería
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        No pegues notas del vault, memorias ni credenciales. Si es una vulnerabilidad, no uses este formulario: usa «Report a vulnerability» en la pestaña Security.
+  - type: textarea
+    id: que-paso
+    attributes:
+      label: Qué pasó
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué se esperaba
+    validations:
+      required: true
+  - type: textarea
+    id: reproducir
+    attributes:
+      label: Cómo reproducirlo
+      description: Pasos mínimos, con el tool y los argumentos si se sabe.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión de episteme (tag)
+      placeholder: v0.12.0
+    validations:
+      required: true
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema operativo
+      placeholder: Linux, macOS o Windows
+    validations:
+      required: true
+  - type: input
+    id: claude-code
+    attributes:
+      label: Versión de Claude Code
+  - type: input
+    id: uv
+    attributes:
+      label: Versión de uv
