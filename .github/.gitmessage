@@ -1,0 +1,12 @@
+
+
+# tipo(alcance): resumen en inglés, imperativo, sin punto final, máximo 72 caracteres
+#
+# Tipos: feat, fix, perf, refactor, docs, test, ci, build, chore
+# Alcances en uso: scripts, memory, index, search, checkpoint, tools, review,
+#   hooks, context, server, skill, setup, readme, release, deps
+#
+# Cuerpo (opcional, en inglés): qué cambia y por qué, no cómo.
+# Referencias al final: "Closes #N" o "Part of #N".
+#
+# Se activa en cada clon con: git config commit.template .github/.gitmessage
