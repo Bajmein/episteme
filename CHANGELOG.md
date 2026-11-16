@@ -8,6 +8,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - `remember` avisa con `keywords_hint` cuando una memoria se guarda sin `keywords`.
 - `remember` avisa con `links_hint` cuando una memoria se guarda sin enlaces.
+- `scripts/measure_index.py`: mide cuánto tarda el indexado completo, el incremental y la comprobación sin cambios, sobre una copia del vault.
 - `scripts/measure_semantic.py`: compara la búsqueda por palabras con los vecinos semánticos de un modelo de Ollama.
 - `scripts/measure_links.py`: mide cuántas memorias están enlazadas por `related` y qué aportarían sus vecinas.
 - `scripts/measure_links.py` mide además todos los wikilinks en ambos sentidos (qué alcanzan los backlinks), separa los enlaces migrados de OMEGA de los nativos, da una línea base con los pares del mismo proyecto y, con el registro de actividad (`--days`), cuenta las memorias leídas tras un `search` que no estaban en el resultado pero eran vecinas de uno.
