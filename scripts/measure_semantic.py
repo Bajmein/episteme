@@ -2,13 +2,18 @@
 
     uv run scripts/measure_semantic.py --vault <vault> [--zone memory] [--url <url>] \
         [--model bge-m3] [--queries-file <file>] [--days 30] [--top-k 5] [--min-score 0.5] \
-        [--examples 15]
+        [--strong-score 0.65] [--examples 15]
 
 Read-only: walks the vault with ``Vault.iter_notes`` and ``parse``; it never opens or creates
 the index and writes nothing in the vault. The queries come from ``--queries-file`` (one per
 line) plus the ``search`` queries and ``context`` tasks of the last ``--days`` days in
 ``<vault>/.index/activity.db`` (opened with ``mode=ro``). Vectors come from Ollama's
 ``POST /api/embed`` on localhost; the provider is injectable (``measure(..., embed=...)``).
+
+The keyword side imitates ``search`` with its defaults: notes holding every useful word of
+the query or, when none does, notes holding any of them, ranked by how many they hold, cut
+at ``SEARCH_LIMIT``. It ranks by matched words, not BM25, so it is an approximation.
+Neighbours at ``--strong-score`` or more count as clear hits; the rest are reported apart.
 """
 
 from __future__ import annotations
@@ -43,11 +48,14 @@ DEFAULT_MODEL = "bge-m3"
 DEFAULT_DAYS = 30
 DEFAULT_TOP_K = 5
 DEFAULT_MIN_SCORE = 0.5
+DEFAULT_STRONG_SCORE = 0.65
 DEFAULT_EXAMPLES = 15
 BATCH_SIZE = 32
 MAX_NOTE_CHARS = 2000
 REQUEST_TIMEOUT_S = 120
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+# search's default limit.
+SEARCH_LIMIT = 20
 
 
 # No proxies (ignores http_proxy): the request never leaves localhost. urllib does not
@@ -56,6 +64,7 @@ _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 # Pairs this close in meaning but under this token similarity are "missed" duplicates.
 PAIR_MIN_SCORE = 0.8
 PAIR_MAX_TOKEN_SIM = 0.3
+PAIR_STRONG_SCORE = 0.9
 PAIRS_SHOWN = 10
 
 
@@ -194,10 +203,16 @@ def _embed_all(embed: Embed, texts: list[str]) -> list[list[float]]:
 
 
 def _keyword_hits(query: str, notes: dict[str, tuple[str, set[str], set[str]]]) -> list[str]:
+    """What search would return: every word, else any word ranked by how many match."""
     want = _useful(query)
     if not want:
         return []
-    return [rel for rel, (_t, toks, _d) in notes.items() if want <= toks]
+    every = sorted(rel for rel, (_t, toks, _d) in notes.items() if want <= toks)
+    if every:
+        return every[:SEARCH_LIMIT]
+    counted = ((len(want & toks), rel) for rel, (_t, toks, _d) in notes.items())
+    ranked = sorted((-n, rel) for n, rel in counted if n)
+    return [rel for _n, rel in ranked[:SEARCH_LIMIT]]
 
 
 @dataclass(frozen=True)
@@ -207,6 +222,7 @@ class Options:
     zone: str | None = None
     top_k: int = DEFAULT_TOP_K
     min_score: float = DEFAULT_MIN_SCORE
+    strong_score: float = DEFAULT_STRONG_SCORE
 
 
 @dataclass(frozen=True)
@@ -257,11 +273,13 @@ def _query_rows(
     for query, qvec in queries:
         keyword = _keyword_hits(query, notes)
         near = _neighbours(qvec, corpus, opts)
+        new = [(r, s) for r, s in near if r not in keyword]
         rows.append({
             "query": query,
             "keyword": keyword,
             "semantic": near,
-            "new": [(r, s) for r, s in near if r not in keyword],
+            "new": new,
+            "strong": [(r, s) for r, s in new if s >= opts.strong_score],
         })
     return rows
 
@@ -298,6 +316,7 @@ def measure(
         "corpus_s": corpus_s,
         "top_k": opts.top_k,
         "min_score": opts.min_score,
+        "strong_score": opts.strong_score,
         **_latencies(timed.latencies, n_corpus),
     }
 
@@ -306,10 +325,10 @@ def _render_queries(rows: list[dict], examples: int) -> list[str]:
     out = ["", "## Por consulta", ""]
     if not rows:
         return [*out, "- (sin consultas: usa `--queries-file` o el registro de actividad)"]
-    ranked = sorted(rows, key=lambda r: (-len(r["new"]), r["query"]))
+    ranked = sorted(rows, key=lambda r: (-len(r["strong"]), -len(r["new"]), r["query"]))
     for r in ranked[:examples]:
         out.append(f"- «{r['query']}»: palabras {len(r['keyword'])}, vecinos {len(r['semantic'])}, "
-                   f"nuevos {len(r['new'])}")
+                   f"nuevos {len(r['new'])}, claros {len(r['strong'])}")
         out += [f"    - {rel} ({score:.2f})" for rel, score in r["new"]]
     return out
 
@@ -318,8 +337,9 @@ def _render_pairs(pairs: list[tuple[str, str, float, float]]) -> list[str]:
     out = ["", "## Pares parecidos que los tokens no detectan", ""]
     if not pairs:
         return [*out, "- (ninguno)"]
+    strong = sum(1 for p in pairs if p[2] >= PAIR_STRONG_SCORE)
     out.append(f"{len(pairs)} pares con coseno de {PAIR_MIN_SCORE} o más y similitud por tokens "
-               f"bajo {PAIR_MAX_TOKEN_SIM}.")
+               f"bajo {PAIR_MAX_TOKEN_SIM}; de ellos, {strong} con {PAIR_STRONG_SCORE} o más.")
     out.append("")
     out += [f"- {a} / {b}: coseno {s:.2f}, tokens {t:.2f}" for a, b, s, t in pairs[:PAIRS_SHOWN]]
     return out
@@ -328,17 +348,25 @@ def _render_pairs(pairs: list[tuple[str, str, float, float]]) -> list[str]:
 def render(result: dict, examples: int) -> str:
     rows = result["rows"]
     gaining = sum(1 for r in rows if r["new"])
+    clear = sum(1 for r in rows if r["strong"])
+    n_new = sum(len(r["new"]) for r in rows)
+    n_strong = sum(len(r["strong"]) for r in rows)
+    strong = result["strong_score"]
     out = [
         "# Medición de embeddings",
         "",
         f"- Memorias: {result['docs']}",
         f"- Consultas: {len(rows)}",
-        f"- Vecinos: top {result['top_k']} con puntaje de {result['min_score']} o más",
+        f"- Vecinos: top {result['top_k']} con puntaje de {result['min_score']} o más; "
+        f"claros desde {strong}",
+        f"- Palabras: lo que daría search (todas las palabras o, si ninguna nota las tiene, "
+        f"alguna), hasta {SEARCH_LIMIT}",
         "",
         "## Resumen",
         "",
         f"- Consultas que ganan algo sobre la búsqueda por palabras: {gaining} de {len(rows)}",
-        f"- Vecinos nuevos en total: {sum(len(r['new']) for r in rows)}",
+        f"- Consultas con algún vecino nuevo claro (desde {strong}): {clear} de {len(rows)}",
+        f"- Vecinos nuevos: {n_new} ({n_strong} claros, {n_new - n_strong} bajo {strong})",
     ]
     out += _render_queries(rows, examples)
     out += _render_pairs(result["pairs"])
@@ -369,6 +397,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--days", type=int, default=DEFAULT_DAYS)
     ap.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     ap.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
+    ap.add_argument("--strong-score", type=float, default=DEFAULT_STRONG_SCORE)
     ap.add_argument("--examples", type=int, default=DEFAULT_EXAMPLES)
     args = ap.parse_args(argv)
     if _bad_numbers(args):
@@ -385,7 +414,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.queries_file:
             queries += args.queries_file.read_text(encoding="utf-8").splitlines()
         queries += load_activity_queries(args.vault, args.days)
-        result = measure(args.vault, embed, queries, Options(args.zone, args.top_k, args.min_score))
+        opts = Options(args.zone, args.top_k, args.min_score, args.strong_score)
+        result = measure(args.vault, embed, queries, opts)
     except EpistemeError as e:
         print(e, file=sys.stderr)
         return 1
