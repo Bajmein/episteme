@@ -10,6 +10,8 @@ import pytest
 import yaml
 from conftest import mcp_client
 
+from episteme.session import DEPRECATED
+
 pytestmark = pytest.mark.anyio
 
 GUARD = ".claude/hooks/serena_guard.py"
@@ -117,6 +119,7 @@ async def test_case11_checkpoint_save_and_restore(vault: Path, project_dir: Path
             "saved": True,
             "path": "memory/fabrik/sessions/checkpoint-001-demo.md",
             "task_title": "001 · demo",
+            "deprecated": DEPRECATED,
         }
         text = (vault / saved["path"]).read_text()
         fm = yaml.safe_load(text.split("---\n")[1])
@@ -141,7 +144,7 @@ async def test_case11_checkpoint_save_and_restore(vault: Path, project_dir: Path
         state = project_dir / ".fabrik/core/001-demo/estado.md"
         state.write_text(state.read_text().replace("estado: activo", "estado: cerrado"))
         res = await c.ok("checkpoint", action="save", project_dir=str(project_dir))
-        assert res == {"saved": False, "path": None, "task_title": None}
+        assert res == {"saved": False, "path": None, "task_title": None, "deprecated": DEPRECATED}
 
 
 async def test_restore_ignores_expired(vault: Path, project_dir: Path) -> None:

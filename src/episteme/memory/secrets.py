@@ -108,11 +108,21 @@ def find_secrets(text: str) -> str | None:
 
 
 REDACTED = "[credencial omitida]"
-# The whole PEM block (up to its END line, or the base64 lines after the header), not only the
-# header SECRET_PATTERNS detects.
+# The whole PEM block, not only the header SECRET_PATTERNS detects: up to its END line across
+# base64 tokens and RFC 1421 headers, or, without one, up to the first line that is neither (so
+# a truncated key never swallows the text up to the END line of a later key). Tokens may be
+# split by newlines, spaces, quote marks ("> ") or an escaped "\n" (a key inside JSON).
+_PEM_NL = r"(?:\r?\n|(?:\\r)?\\n)"
+# Possessive quantifiers: a header line or a run of separators is taken whole, never split, so a
+# long text without an END line cannot make the search backtrack.
+_PEM_HEADER = r"(?:Proc-Type|DEK-Info|Comment):[^\r\n\\]*+"
+_PEM_TOKEN = rf"(?:[A-Za-z0-9+/=]++|{_PEM_HEADER})"
+_PEM_SEP = r"(?:\s|(?:\\r)?\\n|>)++"
+_PEM_LINE = rf"[ \t>]*+(?:[A-Za-z0-9+/=]++|{_PEM_HEADER})[ \t]*+(?=\r?\n|\\|\"|\Z)"
 _PEM_BLOCK = re.compile(
     r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"
-    r"(?:[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----|(?:\r?\n[A-Za-z0-9+/=]+)*)"
+    rf"(?:(?:{_PEM_SEP}{_PEM_TOKEN})*?{_PEM_SEP}-----END [A-Z0-9 ]*PRIVATE KEY-----"
+    rf"|[ \t]*(?:{_PEM_NL}{_PEM_LINE})*)"
 )
 
 

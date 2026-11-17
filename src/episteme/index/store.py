@@ -302,9 +302,15 @@ class Index:
     def memories(self, where: str = "1", params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         """Memory rows. ``where`` is a literal SQL fragment from this package; values go in
         ``params``, never into ``where``."""
+        return self.rows_in_mode(MEMORY, where, params)
+
+    def rows_in_mode(
+        self, mode: str, where: str = "1", params: tuple[Any, ...] = ()
+    ) -> list[sqlite3.Row]:
+        """Rows of the notes in zones of ``mode``; ``where`` as in ``memories``."""
         return self.conn.execute(
             _sql("select * from notes where mode = ? and ({where}) order by path", where=where),
-            (MEMORY, *params),
+            (mode, *params),
         ).fetchall()
 
     def outgoing(self, rel: str) -> list[sqlite3.Row]:

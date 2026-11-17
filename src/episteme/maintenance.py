@@ -182,6 +182,29 @@ def _archive_line(engine: Engine, store: Store, every_days: int) -> str:
     return _archived_line(paths)
 
 
+def _sessions_line(engine: Engine, store: Store, every_days: int) -> str:
+    """Archive the session states unsaved for ``[session] archive_days`` if due; notice line."""
+    from episteme import session
+
+    if not session.has_active(engine):  # nothing to rotate: no claim, no maintenance.db
+        return ""
+    previous = store.claim("archive_sessions", every_days)
+    if previous is None:
+        return ""
+    try:
+        paths = session.rotate(engine, engine.vault.config.session.archive_days)
+    except Exception:
+        store.restore("archive_sessions", previous)
+        return ""
+    if not paths:
+        return ""
+    store.log("archive_sessions", paths)
+    return (
+        f"episteme · mantención: {len(paths)} estados de sesión archivados "
+        f"(más de {engine.vault.config.session.archive_days} días sin guardar)."
+    )
+
+
 def _notify_line(engine: Engine, store: Store, project: str, every_days: int) -> str:
     """Build the review notice if due; return it (``""`` if none)."""
     from episteme import prompting
@@ -202,6 +225,7 @@ def run(engine: Engine, store: Store, project: str) -> str:
     lines: list[str] = []
     if cfg.archive_expired:
         lines.append(_archive_line(engine, store, cfg.every_days))
+    lines.append(_sessions_line(engine, store, cfg.every_days))
     if cfg.notify:
         lines.append(_notify_line(engine, store, project, cfg.every_days))
     return "\n".join(line for line in lines if line)

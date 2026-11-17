@@ -167,7 +167,7 @@ Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. 
 
 Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes. episteme no revisa el vault en segundo plano: la revisión corre cuando alguien la pide.
 
-## Las 12 herramientas
+## Las 13 herramientas
 
 | Herramienta | Para qué sirve | Escribe |
 | :-- | :-- | :-: |
@@ -180,7 +180,8 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `remember` | Guardar una memoria nueva; avisa si le faltan palabras clave o enlaces | ● |
 | `revise` | Corregir, reemplazar o archivar una nota | ● |
 | `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
-| `checkpoint` | Guardar y recuperar el estado del trabajo | ● |
+| `session` | Guardar y retomar el estado de la sesión (objetivo, lo hecho, el siguiente paso), con una plantilla | ● |
+| `checkpoint` | Obsoleto: guardar y recuperar el `estado.md` del proyecto (usa `session`) | ● |
 | `docs_status` | Ver las suites de documentación y qué páginas tienen | |
 | `docs_write` | Guardar una página de documentación descargada (lo usa `/episteme:docs`) | ● |
 
@@ -216,7 +217,8 @@ El detalle técnico vive en [`docs/`](docs/):
 | :-- | :-- |
 | [Instalación](docs/instalacion.md) | Pasos a mano en Linux, macOS y Windows, y el plugin con las skills |
 | [Configuración](docs/configuracion.md) | Argumentos del servidor, variables, `episteme.toml`, zonas y registro de actividad |
-| [Tools y memorias](docs/tools.md) | Las 12 herramientas con sus parámetros, el esquema de las memorias y los errores |
+| [Tools y memorias](docs/tools.md) | Las 13 herramientas con sus parámetros, el esquema de las memorias y los errores |
+| [Estado de la sesión](docs/sesion.md) | La nota viva de cada hilo de trabajo en `sesiones/`, su plantilla y cuándo se archiva |
 | [Suites de documentación](docs/documentacion.md) | La documentación de terceros en `docs/` del vault y cómo se mantiene al día con `/episteme:docs` |
 | [Hooks](docs/hooks.md) | El bloque para `settings.json`, los permisos recomendados y cómo comprobar que funcionan |
 | [Mantención](docs/mantencion.md) | Avisos, archivado de memorias vencidas, backup y el ciclo de revisión |

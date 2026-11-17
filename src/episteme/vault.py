@@ -22,13 +22,19 @@ READ_ONLY = "read-only"
 READ_WRITE = "read-write"
 MEMORY = "memory"
 DOCS = "docs"
-MODES = (READ_ONLY, READ_WRITE, MEMORY, DOCS)
+SESSION = "session"
+MODES = (READ_ONLY, READ_WRITE, MEMORY, DOCS, SESSION)
 # Zones that only their own tool writes: mode -> that tool. revise refuses them.
-TOOL_MODES: dict[str, str] = {DOCS: "docs_write"}
+TOOL_MODES: dict[str, str] = {DOCS: "docs_write", SESSION: "session"}
+# The session zone load_config adds when episteme.toml declares none.
+SESSION_ZONE = "sesiones"
 CONFIG_FILE = "episteme.toml"
 INDEX_DIR = ".index"
 DEFAULT_EVERY_DAYS = 1
 DEFAULT_BACKUP_KEEP = 14
+DEFAULT_ARCHIVE_DAYS = 7
+DEFAULT_NUDGE_EVERY = 12
+SESSION_KEYS = ("extract", "block_manual_compact", "archive_days", "nudge_every")
 
 
 @dataclass
@@ -59,12 +65,21 @@ class Backup:
     keep: int = DEFAULT_BACKUP_KEEP
 
 
+@dataclass(frozen=True)
+class Session:
+    extract: bool = True
+    block_manual_compact: bool = True
+    archive_days: int = DEFAULT_ARCHIVE_DAYS
+    nudge_every: int = DEFAULT_NUDGE_EVERY
+
+
 @dataclass
 class Config:
     zones: list[Zone] = field(default_factory=list)
     state_glob: str | None = None
     maintenance: Maintenance = field(default_factory=Maintenance)
     backup: Backup = field(default_factory=Backup)
+    session: Session = field(default_factory=Session)
 
 
 def _table(data: dict, name: str, allowed: tuple[str, ...]) -> dict:
@@ -105,6 +120,16 @@ def _load_maintenance(data: dict) -> Maintenance:
         every_days=_int_min1(table, "maintenance", "every_days", DEFAULT_EVERY_DAYS),
         notify=_flag(table, "maintenance", "notify", True),
         archive_expired=_flag(table, "maintenance", "archive_expired", False),
+    )
+
+
+def _load_session(data: dict) -> Session:
+    table = _table(data, "session", SESSION_KEYS)
+    return Session(
+        extract=_flag(table, "session", "extract", True),
+        block_manual_compact=_flag(table, "session", "block_manual_compact", True),
+        archive_days=_int_min1(table, "session", "archive_days", DEFAULT_ARCHIVE_DAYS),
+        nudge_every=_int_min1(table, "session", "nudge_every", DEFAULT_NUDGE_EVERY),
     )
 
 
@@ -167,7 +192,19 @@ def _load_zones(data: dict) -> list[Zone]:
             raise StartupError(f'zone "{name}" is declared twice in episteme.toml.')
         seen.add(name)
         zones.append(Zone(name, _zone_mode(name, value)))
-    return zones
+    return _with_session_zone(zones)
+
+
+def _with_session_zone(zones: list[Zone]) -> list[Zone]:
+    """``zones`` plus the implicit ``sesiones`` zone when none has mode ``session``."""
+    if any(z.mode == SESSION for z in zones):
+        return zones
+    if any(z.path == SESSION_ZONE for z in zones):
+        raise StartupError(
+            f'zone "{SESSION_ZONE}" must have mode "{SESSION}" (the session state lives there). '
+            f'Set its mode to "{SESSION}" or declare another zone with that mode.'
+        )
+    return [*zones, Zone(SESSION_ZONE, SESSION)]
 
 
 def _load_state_glob(data: dict) -> str | None:
@@ -190,7 +227,11 @@ def load_config(root: Path) -> Config:
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise StartupError(f"cannot read {path}: {exc}. Fix the file and restart.") from exc
     return Config(
-        _load_zones(data), _load_state_glob(data), _load_maintenance(data), _load_backup(data, root)
+        _load_zones(data),
+        _load_state_glob(data),
+        _load_maintenance(data),
+        _load_backup(data, root),
+        _load_session(data),
     )
 
 
@@ -379,6 +420,11 @@ class Vault:
     @property
     def docs_zones(self) -> list[Zone]:
         return [z for z in self.config.zones if z.mode == DOCS]
+
+    @property
+    def session_zone(self) -> Zone:
+        """The zone of the session state; load_config always leaves one."""
+        return next(z for z in self.config.zones if z.mode == SESSION)
 
     # -- writes ------------------------------------------------------------
 

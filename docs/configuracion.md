@@ -7,7 +7,7 @@
 | Argumento | Qué hace |
 | --- | --- |
 | `--vault <ruta absoluta>` | Opcional (o la variable `EPISTEME_VAULT`; manda el argumento). Por defecto, `~/.episteme`, que se crea si falta. Una ruta explícita que no es absoluta, no existe o no tiene `episteme.toml` impide arrancar: el servidor sale con código ≠ 0 sin crear nada |
-| `--project <nombre>` | Opcional. Proyecto por defecto de `remember`, `context`, `surface`, `constraints`, `checkpoint` y `review` |
+| `--project <nombre>` | Opcional. Proyecto por defecto de `remember`, `context`, `surface`, `constraints`, `session`, `checkpoint` y `review` |
 
 Variables:
 
@@ -40,7 +40,16 @@ mode = "read-write"    # revise puede editar; no hay tools para crear ni borrar
 [zones."docs/mise"]
 mode = "docs"          # suite de documentación: solo docs_write escribe (ver documentacion.md)
 
-[checkpoint]
+[zones."sesiones"]
+mode = "session"       # estado de la sesión: solo el tool session escribe; se añade si no se declara
+
+[session]                     # opcional; estos son los valores por defecto
+extract = true                # orden de extracción tras compact/clear
+block_manual_compact = true   # bloquea una vez un /compact manual con el estado desactualizado
+archive_days = 7              # días sin guardar antes de archivar el estado
+nudge_every = 12              # mensajes sin guardar antes del aviso
+
+[checkpoint]                  # obsoleto: se elimina en la próxima versión (usa session)
 state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir; opcional
 
 [maintenance]            # opcional; estos son los valores por defecto
@@ -53,9 +62,11 @@ dir = '/ruta/absoluta/fuera/del/vault'   # entre comillas simples, también en W
 keep = 14                # copias que se conservan
 ```
 
-- `[maintenance]` y `[backup]` rechazan claves desconocidas. `every_days` y `keep` son enteros >= 1; `notify` y `archive_expired`, booleanos; `[backup]` exige un `dir` absoluto fuera del vault.
-- `mode` es `read-only`, `read-write`, `memory` o `docs`. Un valor distinto o una zona repetida impiden arrancar.
+- `[maintenance]`, `[backup]` y `[session]` rechazan claves desconocidas. `every_days`, `keep`, `archive_days` y `nudge_every` son enteros >= 1; `notify`, `archive_expired`, `extract` y `block_manual_compact`, booleanos; `[backup]` exige un `dir` absoluto fuera del vault.
+- `mode` es `read-only`, `read-write`, `memory`, `docs` o `session`. Un valor distinto o una zona repetida impiden arrancar.
 - Una zona `docs` es una suite de documentación de terceros: solo la cambia `docs_write` (lo usa la skill `/episteme:docs`); `revise` responde `read_only_zone`, `review` la trata como de solo lectura y el backup no la incluye, porque las páginas se pueden volver a bajar. Ver [Suites de documentación](documentacion.md).
+- Una zona `session` guarda el estado de la sesión: solo la cambia el tool `session`; `revise` y `remember` responden `read_only_zone` y `review` la trata como de solo lectura. Si `episteme.toml` no declara ninguna, se añade `sesiones` con ese modo (declarar `sesiones` con otro modo impide arrancar). A diferencia de `docs`, entra en el backup. Ver [Estado de la sesión](sesion.md).
+- `[checkpoint] state_glob` está obsoleto: con él, el servidor avisa por stderr al arrancar y las respuestas de `checkpoint` traen `deprecated`. Se elimina en la próxima versión.
 - Lo que no está en ninguna zona es de solo lectura. Si dos zonas se anidan, manda la más específica.
 - Se ignoran `.obsidian/`, `.index/`, `.git/`, toda carpeta que empiece por `.` y los archivos que no son `.md`.
 - Toda ruta se confina al vault: se rechazan `..`, las rutas absolutas y los symlinks que salen (`outside_vault`).
