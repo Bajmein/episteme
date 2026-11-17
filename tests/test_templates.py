@@ -54,6 +54,7 @@ def test_missing_sections_lists_the_absent_ones_in_template_order() -> None:
         "##   situación  ",
         "## Situación (del lunes)",
         "## Situación: despliegue",
+        "## ¿Situación?",
     ],
 )
 def test_missing_sections_ignores_case_accents_and_extra_text(heading: str) -> None:
@@ -74,9 +75,10 @@ def test_missing_sections_accepts_the_name_without_its_parenthesised_note() -> N
         "# Situación\n\n### Qué pasó\n\n#### Lección",
         "Situación, qué pasó y lección en un solo párrafo.",
         "## Situaciones\n\n## Qué pasó\n\n## Lección",
+        "```md\n## Situación\n```\n\n## Qué pasó\n\n## Lección",
     ],
 )
-def test_missing_sections_needs_a_level_two_heading_with_the_whole_word(body: str) -> None:
+def test_missing_sections_needs_a_whole_level_two_heading_outside_code(body: str) -> None:
     assert "Situación" in missing_sections("lesson", body)
 
 

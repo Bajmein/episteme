@@ -9,6 +9,7 @@ from episteme.markdown import fold
 
 TEMPLATE_HINT_MIN_CHARS = 300
 _HEADING = re.compile(r"^##[ \t]+(.+?)[ \t#]*$", re.MULTILINE)
+_FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
 _EMPTY = "Una sección sin contenido lleva «Nada.»; no se quita."
 
 
@@ -100,8 +101,14 @@ def _section_key(name: str) -> str:
     return fold(name.split("(", 1)[0]).strip()
 
 
+def _heading_key(heading: str) -> str:
+    """The folded heading without leading punctuation: ``¿Qué pasó?`` -> ``que paso?``."""
+    folded = fold(heading).strip()
+    return folded[next((i for i, c in enumerate(folded) if c.isalnum()), len(folded)) :]
+
+
 def _heading_matches(heading: str, key: str) -> bool:
-    """True when a folded heading is the section name, maybe followed by extra text."""
+    """True when a heading key is the section name, maybe followed by extra text."""
     if not heading.startswith(key):
         return False
     rest = heading[len(key) :]
@@ -111,17 +118,20 @@ def _heading_matches(heading: str, key: str) -> bool:
 def missing_sections(type: str, body: str) -> list[str]:
     """Template sections of ``type`` with no ``## <section>`` line in ``body``, in order.
 
-    Case and accents are ignored, and text after the name is accepted (``## Hecho`` counts for
-    ``Hecho (con evidencia)``). Types without sections, or unknown, miss nothing.
+    Case, accents and leading punctuation are ignored, text after the name is accepted
+    (``## Hecho`` counts for ``Hecho (con evidencia)``) and headings inside fenced code blocks
+    do not count. Types without sections, or unknown, miss nothing.
     """
     template = TEMPLATES.get(type)
     if template is None:
         return []
-    headings = [fold(m.group(1)).strip() for m in _HEADING.finditer(body)]
+    text = _FENCE.sub("", body)
+    headings = [_heading_key(m.group(1)) for m in _HEADING.finditer(text)]
+    keys = {name: _section_key(name) for name in template.sections}
     return [
         name
-        for name in template.sections
-        if not any(_heading_matches(h, _section_key(name)) for h in headings)
+        for name, key in keys.items()
+        if not any(_heading_matches(h, key) for h in headings)
     ]
 
 

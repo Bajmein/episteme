@@ -109,6 +109,23 @@ def test_redact_secrets_replaces_only_the_value(text: str, expected: str) -> Non
     assert redact_secrets(text) == expected
 
 
+@pytest.mark.parametrize(
+    "tail,rest",
+    [("\n-----END RSA PRIVATE KEY----- y sigue", " y sigue"), ("\n\ny sigue", "\n\ny sigue")],
+    ids=["end-line", "no-end-line"],
+)
+def test_redact_secrets_drops_the_whole_private_key(tail: str, rest: str) -> None:
+    key = "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEvQIBADANBgkq\nhkiG9w0BAQEFAASC=" + tail
+
+    assert redact_secrets(f"antes {key}") == f"antes {REDACTED}{rest}"
+
+
+def test_redact_secrets_keeps_the_rest_of_the_text_as_is() -> None:
+    text = "ﬁle x² 👨\u200d👩 con ghp_" + "a" * 36
+
+    assert redact_secrets(text) == f"ﬁle x² 👨\u200d👩 con {REDACTED}"
+
+
 def test_redact_secrets_is_idempotent_and_catches_hidden_keys() -> None:
     text = "token gh\u200bp_" + "b" * 36 + " y https://u:" + "c" * 6 + "1@h/x"
 
