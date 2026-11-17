@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.13.2] - 2026-11-16
+
 ### Seguridad
 
 - `checkpoint` (save) rechaza con `invalid` los patrones de `files` que casan con todo (`*`, `**`, `**/*`, `*.*`) copiados del `estado.md`, igual que `remember` y `revise`.
@@ -268,7 +270,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.13.1...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.13.2...HEAD
+[0.13.2]: https://github.com/Bajmein/episteme/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/Bajmein/episteme/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/Bajmein/episteme/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Bajmein/episteme/compare/v0.11.0...v0.12.0

@@ -1,6 +1,6 @@
 {
   "name": "episteme",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "Skills de episteme: conectar un proyecto, pausar y retomar una tarea, mantención de memorias y recordatorios.",
   "author": { "name": "Bajmein" },
   "license": "MIT",
