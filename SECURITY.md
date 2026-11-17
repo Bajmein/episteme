@@ -23,4 +23,4 @@ episteme es un servidor local que habla por stdio y no usa la red. El vault y su
 
 ## Runner propio del CI
 
-El CI de Linux corre en un runner propio. Los PR de forks (y los de Dependabot, si se activan sus actualizaciones de seguridad) se desvían a `ubuntu-latest`, ningún job del runner propio usa secretos ni publica artefactos, y los workflows de colaboradores externos exigen aprobación manual: no se aprueba la ejecución de un PR que toca `.github/` sin leerlo entero.
+El CI de Linux corre en un runner propio. Los PR de forks (y los de las actualizaciones de seguridad de Dependabot) se desvían a `ubuntu-latest`, ningún job del runner propio usa secretos ni publica artefactos, y los workflows de colaboradores externos exigen aprobación manual: no se aprueba la ejecución de un PR que toca `.github/` sin leerlo entero.
