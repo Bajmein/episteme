@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES, mcp_client
 
-from episteme.memory import find_secrets
+from episteme.memory import REDACTED, find_secrets, redact_secrets
 
 SCRIPT = Path(__file__).parents[1] / "scripts/migrate_omega.py"
 EXPORT = FIXTURES / "omega-export/omega-memories"
@@ -81,6 +81,58 @@ def test_find_secrets_detects(name: str, value: str) -> None:
 @pytest.mark.parametrize("text", HARMLESS)
 def test_find_secrets_ignores_mentions(text: str) -> None:
     assert find_secrets(text) is None
+
+
+@pytest.mark.parametrize("name,value", SECRETS)
+def test_redact_secrets_leaves_nothing_find_secrets_sees(name: str, value: str) -> None:
+    redacted = redact_secrets(f"clave: {value} fin")
+
+    assert REDACTED in redacted
+    assert redacted.startswith("clave: ")
+    assert find_secrets(redacted) is None
+
+
+@pytest.mark.parametrize("text", HARMLESS)
+def test_redact_secrets_keeps_text_without_credentials(text: str) -> None:
+    assert redact_secrets(text) == text
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("postgres://admin:" + "s3cr3tvalue@db.local/x", f"postgres://admin:{REDACTED}@db.local/x"),
+        ("DB_PASSWORD" + "=" + "hunter2hunter2 y sigue", f"DB_PASSWORD={REDACTED} y sigue"),
+        ("usa ghp_" + "a" * 36 + " y nada mas", f"usa {REDACTED} y nada mas"),
+    ],
+)
+def test_redact_secrets_replaces_only_the_value(text: str, expected: str) -> None:
+    assert redact_secrets(text) == expected
+
+
+@pytest.mark.parametrize(
+    "tail,rest",
+    [("\n-----END RSA PRIVATE KEY----- y sigue", " y sigue"), ("\n\ny sigue", "\n\ny sigue")],
+    ids=["end-line", "no-end-line"],
+)
+def test_redact_secrets_drops_the_whole_private_key(tail: str, rest: str) -> None:
+    key = "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEvQIBADANBgkq\nhkiG9w0BAQEFAASC=" + tail
+
+    assert redact_secrets(f"antes {key}") == f"antes {REDACTED}{rest}"
+
+
+def test_redact_secrets_keeps_the_rest_of_the_text_as_is() -> None:
+    text = "ﬁle x² 👨\u200d👩 con ghp_" + "a" * 36
+
+    assert redact_secrets(text) == f"ﬁle x² 👨\u200d👩 con {REDACTED}"
+
+
+def test_redact_secrets_is_idempotent_and_catches_hidden_keys() -> None:
+    text = "token gh\u200bp_" + "b" * 36 + " y https://u:" + "c" * 6 + "1@h/x"
+
+    once = redact_secrets(text)
+
+    assert once == f"token {REDACTED} y https://u:{REDACTED}@h/x"
+    assert redact_secrets(once) == once
 
 
 @pytest.mark.anyio

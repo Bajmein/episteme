@@ -1,4 +1,4 @@
-"""Memory: schema, remember, revise, review, welcome and surface."""
+"""Memory: schema, templates, remember, revise, review, welcome and surface."""
 
 from __future__ import annotations
 
@@ -18,16 +18,20 @@ from episteme.memory.schema import (
     validate,
     wikilink,
 )
-from episteme.memory.secrets import find_secrets
+from episteme.memory.secrets import REDACTED, find_secrets, redact_secrets
 from episteme.memory.surfacing import constraints, surface
 from episteme.memory.task import task_context
+from episteme.memory.templates import TEMPLATES, Template, missing_sections, template_hint
 from episteme.memory.welcoming import welcome
 from episteme.memory.writing import memory_slug, remember, shared_reason
 
 __all__ = [
     "DUPLICATE",
+    "REDACTED",
     "STOPWORDS_EN",
+    "TEMPLATES",
     "NoteFile",
+    "Template",
     "archive_expired",
     "check_files",
     "constraints",
@@ -38,8 +42,10 @@ __all__ = [
     "find_secrets",
     "kind_for",
     "memory_slug",
+    "missing_sections",
     "ordered",
     "project_relative",
+    "redact_secrets",
     "remember",
     "review",
     "revise",
@@ -47,6 +53,7 @@ __all__ = [
     "similarity",
     "surface",
     "task_context",
+    "template_hint",
     "validate",
     "welcome",
     "wikilink",

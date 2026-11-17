@@ -80,9 +80,13 @@ def _looks_like_value(value: str) -> bool:
     return any(c.isdigit() for c in value) and not set(value) & set("()[]{}<>")
 
 
+def _is_real(value: str, strict: bool) -> bool:
+    """True for a value that is not a placeholder (and, if ``strict``, looks like a value)."""
+    return not _is_placeholder(value) and (_looks_like_value(value) or not strict)
+
+
 def _real_passwords(pattern: re.Pattern[str], text: str, strict: bool = False) -> list[str]:
-    found = [m.group(1) for m in pattern.finditer(text)]
-    return [v for v in found if not _is_placeholder(v) and (_looks_like_value(v) or not strict)]
+    return [v for m in pattern.finditer(text) if _is_real(v := m.group(1), strict)]
 
 
 def _credential_hits(text: str) -> list[tuple[str, str]]:
@@ -101,6 +105,49 @@ def find_secrets(text: str) -> str | None:
     """
     hits = _credential_hits(text)
     return hits[0][0] if hits else None
+
+
+REDACTED = "[credencial omitida]"
+# The whole PEM block (up to its END line, or the base64 lines after the header), not only the
+# header SECRET_PATTERNS detects.
+_PEM_BLOCK = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"
+    r"(?:[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----|(?:\r?\n[A-Za-z0-9+/=]+)*)"
+)
+
+
+def _redact_values(pattern: re.Pattern[str], text: str, strict: bool) -> str:
+    """Replace group 1 of each real (non-placeholder) match, keeping the text around it."""
+
+    def replace(m: re.Match[str]) -> str:
+        if not _is_real(m.group(1), strict):
+            return m.group(0)
+        start, end = m.start(1) - m.start(), m.end(1) - m.start()
+        return m.group(0)[:start] + REDACTED + m.group(0)[end:]
+
+    return pattern.sub(replace, text)
+
+
+def redact_secrets(text: str) -> str:
+    """``text`` with every credential ``find_secrets`` sees replaced by ``REDACTED``.
+
+    For generated text that must not be lost (a compaction summary): it never refuses. A
+    private key goes whole, up to its END line. The rest of the text is kept as is, unless a
+    key is hidden with zero-width or full-width characters: then the result is the NFKC form
+    the patterns match on.
+    """
+    redacted = _redact_all(text)
+    if _credential_hits(redacted):
+        redacted = _redact_all(_normalize(redacted))
+    return redacted
+
+
+def _redact_all(text: str) -> str:
+    text = _PEM_BLOCK.sub(REDACTED, text)
+    for _, pattern in SECRET_PATTERNS:
+        text = pattern.sub(REDACTED, text)
+    text = _redact_values(_ASSIGNED_SECRET, text, strict=True)
+    return _redact_values(_URL_CREDENTIALS, text, strict=False)
 
 
 def has_new_secrets(new: str, old: str) -> bool:
