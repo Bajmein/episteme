@@ -274,6 +274,7 @@ def due_docs(root: Path, state: dict, now: date) -> list[Status]:
     return found
 
 
+# @CodeScene(disable:"Complex Method")
 def notify(payload: dict) -> None:
     if payload.get("source") in SKIPPED_SOURCES:
         return
@@ -301,6 +302,7 @@ def notify(payload: dict) -> None:
     )
 
 
+# @CodeScene(disable:"Complex Conditional")
 def snooze(args: list[str]) -> None:
     if len(args) != 2 or args[0] not in DOCS or not args[1].isdigit():
         print(f"{USAGE} (documentos: {', '.join(DOCS)})")

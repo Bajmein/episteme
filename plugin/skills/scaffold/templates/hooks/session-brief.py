@@ -188,6 +188,7 @@ def module_map(base: str) -> list[str]:
     return [*lines, ""]
 
 
+# @CodeScene(disable:"Complex Method")
 def rule_paths(path: Path) -> list[str]:
     """The `paths:` globs of a rule's frontmatter (simple YAML list, no parser needed)."""
     try:

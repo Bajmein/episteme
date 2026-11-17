@@ -99,16 +99,24 @@ def emit(event: str, text: str) -> None:
     print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}))
 
 
+def is_targeted_read(tool_input: dict) -> bool:
+    """A Read with offset or limit: a few lines, fine without Serena."""
+    return tool_input.get("offset") is not None or tool_input.get("limit") is not None
+
+
+def writes_existing(tool_input: dict) -> bool:
+    """A Write over an existing file (creating a new module with Write is fine)."""
+    return Path(tool_input.get("file_path") or "").exists()
+
+
 def hint_for(tool: str, tool_input: dict) -> tuple[str, str] | None:
     """(kind, hint) for a Read/Edit/Write of an existing Python file, or None."""
     if tool == "Read":
-        if tool_input.get("offset") is not None or tool_input.get("limit") is not None:
-            return None  # a targeted read of a few lines is fine
-        return "read", READ_HINT
+        return None if is_targeted_read(tool_input) else ("read", READ_HINT)
     if tool in ("Edit", "MultiEdit"):
         return "edit", EDIT_HINT
-    if tool == "Write" and Path(tool_input.get("file_path") or "").exists():
-        return "edit", EDIT_HINT  # creating a new module with Write is fine
+    if tool == "Write" and writes_existing(tool_input):
+        return "edit", EDIT_HINT
     return None
 
 
@@ -123,6 +131,15 @@ def pre(data: dict) -> None:
         emit("PreToolUse", hint.format(rel=rel))
 
 
+def serena_touches_python(name: str, tool_input: dict, root: Path) -> bool:
+    """A Serena editing tool that touches a Python file (multi-file tools always count)."""
+    if name not in SERENA_EDIT_TOOLS:
+        return False
+    if name in SERENA_MULTI_FILE_TOOLS:
+        return True
+    return relative(tool_input.get("relative_path") or "", root) is not None
+
+
 def touches_python(data: dict, root: Path) -> bool:
     tool = data.get("tool_name", "")
     tool_input = data.get("tool_input") or {}
@@ -130,12 +147,7 @@ def touches_python(data: dict, root: Path) -> bool:
         return relative(tool_input.get("file_path") or "", root) is not None
     if not tool.startswith(SERENA):
         return False
-    name = tool.removeprefix(SERENA)
-    if name not in SERENA_EDIT_TOOLS:
-        return False
-    if name in SERENA_MULTI_FILE_TOOLS:
-        return True
-    return relative(tool_input.get("relative_path") or "", root) is not None
+    return serena_touches_python(tool.removeprefix(SERENA), tool_input, root)
 
 
 def post(data: dict) -> None:

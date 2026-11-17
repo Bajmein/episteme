@@ -52,6 +52,7 @@ class Repo:
             self.commit(f"feat: change {n}", {"src/app.py": f"FEAT = {n}\n"}, day=day)
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def run(repo: Path, today: int, *args: str, session: str = "s1", source: str = "startup",
         env_extra: dict | None = None, hook: Path = HOOK) -> subprocess.CompletedProcess[str]:
     env = {
@@ -146,6 +147,7 @@ def test_a_new_tag_makes_the_doc_due_with_few_points(repo: Repo) -> None:
     assert "README.md sin revisar: 1 día, 11 puntos (1 commit, 1 tag)" in message
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 @pytest.mark.parametrize(
     ("days", "feats", "fixes", "due"),
     [

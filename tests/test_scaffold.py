@@ -58,6 +58,7 @@ def _git(cwd: Path, *args: str) -> None:
     )
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def _run_hook(name: str, *args: str, stdin: str = "", env: dict | None = None,
               cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
