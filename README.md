@@ -29,7 +29,7 @@
   <a href="#cómo-funciona">Cómo funciona</a> ·
   <a href="#instalación">Instalación</a> ·
   <a href="#uso-diario">Uso diario</a> ·
-  <a href="#las-10-herramientas">Herramientas</a> ·
+  <a href="#las-12-herramientas">Herramientas</a> ·
   <a href="#límites">Límites</a> ·
   <a href="#documentación">Documentación</a>
 </p>
@@ -48,6 +48,7 @@ Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una 
 | **Encuentra** | Busca en todo el vault, en español, sin distinguir mayúsculas ni tildes |
 | **Avisa a tiempo** | Antes de editar un archivo, muestra las normas que le aplican; después, lo que ya se sabe de él |
 | **Retoma** | Guarda en qué ibas antes de que la conversación se compacte y lo recupera después |
+| **Mantiene la documentación al día** | Con `/episteme:docs`, baja las páginas de la documentación de terceros guardada en el vault y actualiza solo las que cambiaron |
 | **Cuida el orden** | Detecta duplicados, memorias vencidas, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
 
 Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
@@ -107,6 +108,7 @@ El plugin trae además estas skills:
 | `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido. Con `corta` hace una ronda rápida de 3 casos; con `huerfanas`, enlaza las memorias que quedaron sueltas |
 | `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
 | `/episteme:scaffold` | Crear o revisar la base del proyecto: `README.md`, `CLAUDE.md`, `CHANGELOG.md`, las reglas para contribuir y el `.gitignore`. Con `auditar` solo revisa, sin cambiar nada. También avisa cuando el README o el `CLAUDE.md` llevan tiempo sin revisar |
+| `/episteme:docs [suite]` | Poner al día la documentación de terceros guardada en `docs/` del vault (todas las suites, o solo la que nombres, como `claude code`): baja las páginas, muestra qué cambió y lo guarda |
 
 ### Opción B · A mano
 
@@ -165,7 +167,7 @@ Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. 
 
 Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes. episteme no revisa el vault en segundo plano: la revisión corre cuando alguien la pide.
 
-## Las 10 herramientas
+## Las 12 herramientas
 
 | Herramienta | Para qué sirve | Escribe |
 | :-- | :-- | :-: |
@@ -179,6 +181,8 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `revise` | Corregir, reemplazar o archivar una nota | ● |
 | `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
 | `checkpoint` | Guardar y recuperar el estado del trabajo | ● |
+| `docs_status` | Ver las suites de documentación y qué páginas tienen | |
+| `docs_write` | Guardar una página de documentación descargada (lo usa `/episteme:docs`) | ● |
 
 Los parámetros y el comportamiento exacto de cada una están en [Tools y memorias](docs/tools.md).
 
@@ -212,7 +216,8 @@ El detalle técnico vive en [`docs/`](docs/):
 | :-- | :-- |
 | [Instalación](docs/instalacion.md) | Pasos a mano en Linux, macOS y Windows, y el plugin con las skills |
 | [Configuración](docs/configuracion.md) | Argumentos del servidor, variables, `episteme.toml`, zonas y registro de actividad |
-| [Tools y memorias](docs/tools.md) | Las 10 herramientas con sus parámetros, el esquema de las memorias y los errores |
+| [Tools y memorias](docs/tools.md) | Las 12 herramientas con sus parámetros, el esquema de las memorias y los errores |
+| [Suites de documentación](docs/documentacion.md) | La documentación de terceros en `docs/` del vault y cómo se mantiene al día con `/episteme:docs` |
 | [Hooks](docs/hooks.md) | El bloque para `settings.json`, los permisos recomendados y cómo comprobar que funcionan |
 | [Mantención](docs/mantencion.md) | Avisos, archivado de memorias vencidas, backup y el ciclo de revisión |
 | [Migración de OMEGA](docs/migracion-omega.md) | Cómo traer las memorias de OMEGA |

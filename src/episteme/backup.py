@@ -11,7 +11,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from episteme.vault import CONFIG_FILE, READ_ONLY, Vault
+from episteme.vault import CONFIG_FILE, DOCS, READ_ONLY, Vault
 
 PREFIX = "episteme-"
 SUFFIX = ".tar.gz"
@@ -20,11 +20,15 @@ SEAL_LENGTH = 12
 STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 TMP_PREFIX = ".episteme-backup-"
 TMP_GLOB = f"{TMP_PREFIX}*.tmp"
+# Docs zones hold third-party pages that /episteme:docs can download again.
+SKIPPED_MODES = (READ_ONLY, DOCS)
 
 
 def _members(vault: Vault) -> list[tuple[str, os.stat_result]]:
-    """Writable notes plus the config file, sorted by relative path."""
-    found = [(rel, st) for rel, st in vault.iter_notes() if vault.mode_for(rel) != READ_ONLY]
+    """Notes of the backed-up zones plus the config file, sorted by relative path."""
+    found = [
+        (rel, st) for rel, st in vault.iter_notes() if vault.mode_for(rel) not in SKIPPED_MODES
+    ]
     try:
         config = (vault.root / CONFIG_FILE).lstat()
     except OSError:

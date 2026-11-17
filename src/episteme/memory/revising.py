@@ -6,7 +6,7 @@ import datetime as dt
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from episteme.errors import NOT_FOUND, EpistemeError, invalid
+from episteme.errors import NOT_FOUND, READ_ONLY_ZONE, EpistemeError, invalid
 from episteme.index import as_int
 from episteme.markdown import (
     find_section,
@@ -24,13 +24,20 @@ from episteme.memory.schema import (
     wikilink,
 )
 from episteme.memory.secrets import _reject_secrets, has_new_secrets
-from episteme.vault import MEMORY
+from episteme.vault import MEMORY, TOOL_MODES
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
 
 
 FEEDBACK_VALUES = ("helpful", "unhelpful", "outdated")
+
+
+def _reject_tool_zone(rel: str, mode: str) -> None:
+    """``read_only_zone`` for a zone that only its own tool writes (``vault.TOOL_MODES``)."""
+    tool = TOOL_MODES.get(mode)
+    if tool is not None:
+        raise EpistemeError(READ_ONLY_ZONE, f"{rel} is in a {mode} zone. Use {tool}.")
 
 
 def _edit(nf: NoteFile, old: str | None, new: str | None) -> list[str]:
@@ -160,6 +167,7 @@ def revise(
         raise invalid(f"action must be one of {', '.join(ACTIONS)}, got {action!r}.")
     rel = engine.resolve_note(note)
     mode = engine.vault.check_writable(rel)
+    _reject_tool_zone(rel, mode)
     if action in MEMORY_ACTIONS and mode != MEMORY:
         raise invalid(f'action "{action}" only applies to memories, and {rel} is not one.')
     nf = NoteFile(engine, rel)

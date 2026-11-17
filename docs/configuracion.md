@@ -37,6 +37,9 @@ mode = "memory"        # escritura solo vía remember/revise, con validación de
 [zones."plans"]
 mode = "read-write"    # revise puede editar; no hay tools para crear ni borrar
 
+[zones."docs/mise"]
+mode = "docs"          # suite de documentación: solo docs_write escribe (ver documentacion.md)
+
 [checkpoint]
 state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir; opcional
 
@@ -51,7 +54,8 @@ keep = 14                # copias que se conservan
 ```
 
 - `[maintenance]` y `[backup]` rechazan claves desconocidas. `every_days` y `keep` son enteros >= 1; `notify` y `archive_expired`, booleanos; `[backup]` exige un `dir` absoluto fuera del vault.
-- `mode` es `read-only`, `read-write` o `memory`. Un valor distinto o una zona repetida impiden arrancar.
+- `mode` es `read-only`, `read-write`, `memory` o `docs`. Un valor distinto o una zona repetida impiden arrancar.
+- Una zona `docs` es una suite de documentación de terceros: solo la cambia `docs_write` (lo usa la skill `/episteme:docs`); `revise` responde `read_only_zone`, `review` la trata como de solo lectura y el backup no la incluye, porque las páginas se pueden volver a bajar. Ver [Suites de documentación](documentacion.md).
 - Lo que no está en ninguna zona es de solo lectura. Si dos zonas se anidan, manda la más específica.
 - Se ignoran `.obsidian/`, `.index/`, `.git/`, toda carpeta que empiece por `.` y los archivos que no son `.md`.
 - Toda ruta se confina al vault: se rechazan `..`, las rutas absolutas y los symlinks que salen (`outside_vault`).

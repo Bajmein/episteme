@@ -8,7 +8,8 @@
       "mcp__episteme__review",
       "mcp__episteme__context",
       "mcp__episteme__surface",
-      "mcp__episteme__constraints"
+      "mcp__episteme__constraints",
+      "mcp__episteme__docs_status"
     ],
     "deny": [
       "Read(~/.episteme/**)",

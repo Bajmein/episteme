@@ -72,6 +72,7 @@ Los mismos dos comandos sirven en PowerShell. Después, reinicia Claude Code.
 | [`/episteme:mantencion`](../plugin/skills/mantencion/SKILL.md) | Claude, cuando la bienvenida avisa de mantención pendiente o se le pide ordenar las memorias; o la persona | Recorre lo que informa `review`, propone grupo por grupo qué unificar, reemplazar o archivar, y aplica solo lo aprobado |
 | [`/episteme:reminder <texto>`](../plugin/skills/reminder/SKILL.md) | La persona | Guarda un recordatorio de prioridad 5 del proyecto: `reminder` si el texto trae fecha, `preference` si no |
 | [`/episteme:scaffold`](../plugin/skills/scaffold/SKILL.md) | La persona; o Claude, cuando el hook `doc-review` avisa | Crea o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/`, `.claude/rules/docs.md` y `.gitignore` desde plantillas, y ofrece módulos locales de desarrollo. No hace commits |
+| [`/episteme:docs [suite]`](../plugin/skills/docs/SKILL.md) | La persona, o Claude cuando se le pide poner al día la documentación | Revisa las suites de documentación de `docs/` del vault contra su fuente y escribe lo que cambió con `docs_write` (ver [Suites de documentación](documentacion.md)) |
 
 El plugin sigue a la versión del release y el servidor al tag fijado en cada proyecto: si actualizas uno, actualiza el otro (ver «Actualizar episteme» en `/episteme:setup`).
 
