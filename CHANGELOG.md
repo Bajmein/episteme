@@ -15,6 +15,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - Tool `session` y zona `sesiones/`: el estado de la sesión es una nota viva por hilo de trabajo en `sesiones/<proyecto>/`, con la plantilla de `session`. `save` lo crea o lo reescribe entero, `show` y `restore` lo devuelven (el de este proceso o el activo más reciente del mismo worktree), `template` da el esqueleto de cualquier tipo y `archive` lo archiva sin borrarlo. Rechaza credenciales como `remember`. La zona se añade sola si `episteme.toml` no la declara; solo la escribe `session` (`revise` y `remember` responden `read_only_zone`) y no sale en la bienvenida ni en las notas relacionadas de `context`. Ver `docs/sesion.md`.
 - Tabla `[session]` en `episteme.toml` (`extract`, `block_manual_compact`, `archive_days = 7`, `nudge_every = 12`). La mantención de la primera bienvenida archiva los estados con `saved_at` de más de `archive_days` días, aunque `archive_expired` esté desactivado.
 - El registro de actividad guarda también los argumentos `trigger`, `source`, `reason` y `origin`.
+- Momentos de guardado del estado: las instrucciones del servidor piden `session(action="save")` en los hitos de la tarea, la bienvenida avisa tras 12 mensajes sin guardar (`[session] nudge_every`) y `session(action="gate")` en `PreCompact` frena una vez un `/compact` manual cuando el estado lleva 5 mensajes o más sin guardarse (repetirlo compacta igual).
+- Acciones de hook de `session`: `capture` (`PostCompact`) guarda el resumen de la compactación en `## Resumen de compactación`, sin el bloque `<analysis>` y con las credenciales redactadas; `end` (`SessionEnd` con `clear`) recuerda el transcript; `restore` con `source` añade la orden de lanzar el agente `episteme:extractor`.
+- Agente `episteme:extractor` del plugin (Sonnet, esfuerzo bajo, en segundo plano): resume el transcript con `transcript_digest.py`, reescribe el estado con la plantilla y guarda como mucho 3 memorias con el tag `origen/extractor`.
+- Skill `/episteme:sesion` (`guardar`, `retomar`, `plantilla`), que reemplaza a `/episteme:pausa`.
 - Plantillas de cuerpo para cada tipo de memoria (secciones `## …`, con «Nada.» en las vacías). `remember` avisa con `template_hint` cuando un cuerpo de 300 caracteres o más no trae las secciones de su tipo (sin contar mayúsculas, tildes ni la numeración: `## 1. Situación` vale); nunca rechaza por formato. Ver «Plantillas» en `docs/tools.md`.
 
 ### Cambiado
@@ -22,6 +26,12 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `revise` responde `read_only_zone` en una zona `docs` y pide `docs_write`. `review` cuenta esas zonas como de solo lectura y el backup no las incluye.
 - Las instrucciones del servidor dicen que las suites de `docs/` cambian solo con `/episteme:docs`.
 - `search` oculta por defecto los estados de sesión archivados, como las memorias archivadas.
+- Hooks de `/episteme:setup`: `session` gate en `PreCompact`, capture en `PostCompact`, end en `SessionEnd` (`clear`) y restore en `SessionStart` (`compact|clear`) en lugar de los de `checkpoint`. `session` y el script del extractor van al `allow`. Vuelve a correr `/episteme:setup` para fusionarlos.
+- Los eventos `PostCompact` y `SessionEnd` se aceptan como `hook_event` y no devuelven nada.
+
+### Eliminado
+
+- Skill `/episteme:pausa`: usa `/episteme:sesion`. Las memorias que guardó siguen en `memory/` y caducan solas.
 
 ### Obsoleto
 

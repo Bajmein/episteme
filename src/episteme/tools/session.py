@@ -1,8 +1,8 @@
-"""The session tool: save, show, restore, template and archive the session state."""
+"""The session tool: keep the session state, and its hook actions (gate, capture, end)."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, NamedTuple
 
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
@@ -13,7 +13,7 @@ from episteme.engine import Engine
 from episteme.errors import invalid
 from episteme.tools.args import HookEvent, ProjectArg, dump
 
-ACTIONS = ("save", "show", "restore", "template", "archive")
+ACTIONS = ("save", "show", "restore", "template", "archive", "capture", "end", "gate")
 
 _ActionArg = Annotated[str, Field(description=f"One of: {', '.join(ACTIONS)}.")]
 _TitleArg = Annotated[
@@ -38,7 +38,20 @@ _OriginArg = Annotated[
     str | None, Field(description='save: "agent" (default) or "extractor"; goes to saved_by.')
 ]
 _SessionArg = Annotated[
-    str | None, Field(description="save: Claude Code session id, kept as metadata only.")
+    str | None,
+    Field(description="Claude Code session id (hooks pass ${session_id}); metadata for save."),
+]
+_SummaryArg = Annotated[
+    str | None, Field(description="capture: the compaction summary (${compact_summary}).")
+]
+_TranscriptArg = Annotated[
+    str | None,
+    Field(description="end, restore: path of the session transcript (${transcript_path})."),
+]
+_TriggerArg = Annotated[str | None, Field(description='gate: "manual" or "auto" (${trigger}).')]
+_ReasonArg = Annotated[str | None, Field(description="end: why the session ended (${reason}).")]
+_SourceArg = Annotated[
+    str | None, Field(description='restore: "compact" or "clear" (${source}) from the hook.')
 ]
 _TypeArg = Annotated[
     str | None, Field(description='template: memory type; default "session".')
@@ -48,6 +61,17 @@ _TypeArg = Annotated[
 def register(server: MCPServer, engine: Engine) -> None:
     """Register the session tool on ``server``."""
     _register_session(server, engine)
+
+
+class _Hook(NamedTuple):
+    """Arguments only the hooks pass."""
+
+    summary: str | None = None
+    transcript: str | None = None
+    trigger: str | None = None
+    source: str | None = None
+    session: str | None = None
+    event: str | None = None
 
 
 class _Args:
@@ -74,6 +98,11 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         origin: _OriginArg = None,
         session: _SessionArg = None,
         type: _TypeArg = None,
+        summary: _SummaryArg = None,
+        transcript: _TranscriptArg = None,
+        trigger: _TriggerArg = None,
+        reason: _ReasonArg = None,
+        source: _SourceArg = None,
         hook_event: HookEvent = None,
     ) -> str:
         """Keep the session state: one living note per line of work in sesiones/<project>/.
@@ -96,40 +125,75 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         archive: set status archived on note (default the current state); never deletes.
         Returns {"path", "changed"}. States more than [session] archive_days (7) days after
         their saved_at are archived by the maintenance of the first welcome.
+        Hook actions: gate (only with hook_event="PreCompact") blocks a manual /compact once
+        when the state was not saved in 5+ messages; capture (PostCompact) puts
+        summary in the "Resumen de compactación" section of the state, credentials redacted,
+        creating «Sesión <date>» if there is none; end (SessionEnd) keeps transcript for the
+        next restore after /clear (only when reason is "clear" or empty). restore with source
+        and a transcript adds "extract", the order to launch the episteme:extractor agent, when
+        [session] extract is on.
         """
         hookmode.check(hook_event)
         if action not in ACTIONS:
             raise invalid(f'action must be one of {", ".join(ACTIONS)}, got "{action}".')
         if action == "template":
             return dump(sessions.template(type))
+        if action == "end":
+            return _reply(hook_event, sessions.end(transcript, reason))
         save = sessions.SaveArgs(title, body, note, files, origin, session)
+        hook = _Hook(summary, transcript, trigger, source, session, hook_event)
         with engine.session():
-            return _run(_Args(engine, project, project_dir), action, save, hook_event)
+            return _run(_Args(engine, project, project_dir), action, save, hook)
 
 
-def _run(args: _Args, action: str, save: sessions.SaveArgs, hook_event: str | None) -> str:
-    """Run a save, show, restore or archive action. Call it inside engine.session()."""
+def _reply(hook_event: str | None, data: dict[str, Any]) -> str:
+    """JSON for the agent; for a hook, what its event shows (nothing for the silent ones)."""
+    return hookmode.render(hook_event, "") if hook_event else dump(data)
+
+
+def _run(args: _Args, action: str, save: sessions.SaveArgs, hook: _Hook) -> str:
+    """Run every action but template and end. Call it inside engine.session()."""
+    engine, project, project_dir = args.engine, args.project, args.project_dir
     match action:
         case "save":
-            return dump(sessions.save(args.engine, args.project, args.project_dir, save))
+            return dump(sessions.save(engine, project, project_dir, save))
         case "show":
-            return dump(sessions.show(args.engine, args.project, args.project_dir))
+            return dump(sessions.show(engine, project, project_dir))
         case "restore":
-            return _restore(args, hook_event)
+            return _restore(args, hook)
+        case "capture":
+            data = sessions.capture(engine, project, project_dir, hook.summary, hook.session)
+            return _reply(hook.event, data)
+        case "gate":
+            return _gate(args, hook)
         case _:
             return dump(_archive(args, save.note))
 
 
-def _restore(args: _Args, hook_event: str | None) -> str:
+def _gate(args: _Args, hook: _Hook) -> str:
+    """Run gate from the PreCompact hook: a block decision, or nothing."""
+    if hook.event != "PreCompact":
+        raise invalid(
+            'action "gate" is for the PreCompact hook. Pass hook_event="PreCompact", or save '
+            'the state with action="save".'
+        )
+    reason = sessions.gate(args.engine, args.project, args.project_dir, hook.trigger, hook.session)
+    return hookmode.render_block(reason) if reason else ""
+
+
+def _restore(args: _Args, hook: _Hook) -> str:
     """Run restore and render it for a hook or as JSON."""
-    data = sessions.restore(args.engine, args.project, args.project_dir)
-    if not hook_event:
+    data = sessions.restore(
+        args.engine, args.project, args.project_dir, hook.source, hook.transcript
+    )
+    if not hook.event:
         return dump(data)
     notice = ""
     if data["found"]:
         title = hookmode.clean_line(data["task_title"])
         notice = f"episteme · estado de sesión recuperado: «{title}»"
-    return hookmode.render(hook_event, data["content"], notice)
+    text = "\n\n".join(t for t in (data["content"], data.get("extract", "")) if t)
+    return hookmode.render(hook.event, text, notice)
 
 
 def _archive(args: _Args, note: str | None) -> dict[str, Any]:

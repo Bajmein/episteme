@@ -47,7 +47,7 @@ Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una 
 | **Recuerda** | Guarda decisiones, lecciones, errores y preferencias como notas ordenadas por proyecto |
 | **Encuentra** | Busca en todo el vault, en español, sin distinguir mayúsculas ni tildes |
 | **Avisa a tiempo** | Antes de editar un archivo, muestra las normas que le aplican; después, lo que ya se sabe de él |
-| **Retoma** | Guarda en qué ibas antes de que la conversación se compacte y lo recupera después |
+| **Retoma** | Lleva una nota viva de en qué vas, la pone al día sola después de compactar o de `/clear` y la recupera al seguir |
 | **Mantiene la documentación al día** | Con `/episteme:docs`, baja las páginas de la documentación de terceros guardada en el vault y actualiza solo las que cambiaron |
 | **Cuida el orden** | Detecta duplicados, memorias vencidas, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
 
@@ -104,7 +104,7 @@ El plugin trae además estas skills:
 
 | Skill | Para qué |
 | :-- | :-- |
-| `/episteme:pausa` | Guardar en qué estabas antes de `/clear` o de cerrar, y retomarlo después con `/episteme:pausa retomar` |
+| `/episteme:sesion` | Guardar en qué estás (`guardar`) y retomarlo después (`retomar`) |
 | `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido. Con `corta` hace una ronda rápida de 3 casos; con `huerfanas`, enlaza las memorias que quedaron sueltas |
 | `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
 | `/episteme:scaffold` | Crear o revisar la base del proyecto: `README.md`, `CLAUDE.md`, `CHANGELOG.md`, las reglas para contribuir y el `.gitignore`. Con `auditar` solo revisa, sin cambiar nada. También avisa cuando el README o el `CLAUDE.md` llevan tiempo sin revisar |
@@ -143,7 +143,7 @@ No hay comandos que aprender: se usa conversando con Claude.
 | Dices «recuerda que…» | Guarda una memoria nueva, salvo que ya exista una casi igual |
 | Preguntas «¿qué decidimos sobre…?» | Claude busca en el vault antes de responder |
 | Claude va a editar un archivo | Le muestra las normas que aplican a ese archivo |
-| La conversación se compacta o la limpias con `/clear` | Al compactar guarda el estado del trabajo; en los dos casos lo recupera al seguir |
+| La conversación se compacta o la limpias con `/clear` | Recupera el estado del trabajo y lo pone al día en segundo plano con lo que se habló. Si vas a compactar a mano sin haberlo guardado, te avisa una vez |
 
 ### Lo que pasa solo en cada sesión
 
@@ -160,7 +160,7 @@ Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. 
 | Al escribir un mensaje | hook | La primera vez entrega la bienvenida; después sugiere memorias que vienen al caso |
 | Antes de editar un archivo | hook | Muestra las normas de ese archivo. No pausa ni bloquea la edición |
 | Después de leer o editar un archivo | hook | Muestra lo que ya se sabe de él |
-| Al compactar o con `/clear` | hook | Al compactar guarda el estado del trabajo; después de compactar o de `/clear`, lo recupera |
+| Al compactar o con `/clear` | hook | Guarda el resumen de la compactación en el estado del trabajo; después lo recupera y pide al agente extractor que lo complete |
 | En la primera bienvenida, como mucho una vez por periodo | episteme | Avisa de lo pendiente de revisar y propone una ronda corta; si lo activas, archiva lo vencido y hace un backup |
 | Cuando lo necesita | Claude | Busca, lee, guarda («recuerda que…») y corrige memorias |
 | Cuando tú lo pides | tú | `/episteme:mantencion` para revisar y ordenar |
@@ -198,7 +198,7 @@ Los parámetros y el comportamiento exacto de cada una están en [Tools y memori
 | `preference` | Cómo le gusta trabajar a la persona |
 | `insight` | Un hallazgo o una conclusión |
 | `reminder` | Algo pendiente, con fecha |
-| `session` | El estado del trabajo, guardado al compactar |
+| `session` | El estado del trabajo: guardarlo, recuperarlo y lo que hacen los hooks al compactar |
 
 Cada memoria lleva una prioridad del 1 al 5: las de prioridad 5 son las normas que Claude ve al empezar cada sesión.
 

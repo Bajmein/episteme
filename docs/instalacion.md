@@ -50,7 +50,7 @@ En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por 
 
 ## El plugin
 
-El repo es también un marketplace de Claude Code con un plugin, `episteme`, que trae las skills (en [`plugin/skills/`](../plugin/skills/)). El servidor no va en el plugin: se sigue registrando en cada proyecto con `claude mcp add` y fijado a un tag.
+El repo es también un marketplace de Claude Code con un plugin, `episteme`, que trae las skills (en [`plugin/skills/`](../plugin/skills/)) y el agente `episteme:extractor` (en [`plugin/agents/`](../plugin/agents/extractor.md)), que pone al día el estado de la sesión tras `/compact` o `/clear` cuando un hook lo pide. El servidor no va en el plugin: se sigue registrando en cada proyecto con `claude mcp add` y fijado a un tag.
 
 ```bash
 claude plugin marketplace add Bajmein/episteme
@@ -68,7 +68,7 @@ Los mismos dos comandos sirven en PowerShell. Después, reinicia Claude Code.
 | Skill | Quién la usa | Qué hace |
 |---|---|---|
 | [`/episteme:setup`](../plugin/skills/setup/SKILL.md) | La persona | Conecta un proyecto: registro, hooks, permisos y `CLAUDE.md` |
-| [`/episteme:pausa`](../plugin/skills/pausa/SKILL.md) | La persona | Guarda el estado de la tarea como memoria de sesión (`sesion/pausa`, vigente 14 días) antes de `/clear` o de cerrar; `/episteme:pausa retomar` la recupera. Es para los proyectos sin `estado.md`, donde `checkpoint` no tiene tarea que guardar |
+| [`/episteme:sesion`](../plugin/skills/sesion/SKILL.md) | La persona y el agente | Guarda el estado de la sesión en `sesiones/<proyecto>/` con la plantilla (`guardar`), lo recupera (`retomar`) o muestra la plantilla de un tipo (`plantilla`). Reemplaza a `/episteme:pausa` (ver [Estado de la sesión](sesion.md)) |
 | [`/episteme:mantencion`](../plugin/skills/mantencion/SKILL.md) | Claude, cuando la bienvenida avisa de mantención pendiente o se le pide ordenar las memorias; o la persona | Recorre lo que informa `review`, propone grupo por grupo qué unificar, reemplazar o archivar, y aplica solo lo aprobado |
 | [`/episteme:reminder <texto>`](../plugin/skills/reminder/SKILL.md) | La persona | Guarda un recordatorio de prioridad 5 del proyecto: `reminder` si el texto trae fecha, `preference` si no |
 | [`/episteme:scaffold`](../plugin/skills/scaffold/SKILL.md) | La persona; o Claude, cuando el hook `doc-review` avisa | Crea o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/`, `.claude/rules/docs.md` y `.gitignore` desde plantillas, y ofrece módulos locales de desarrollo. No hace commits |

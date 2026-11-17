@@ -32,6 +32,10 @@ CURRENT_MAX = 64  # (project, worktree) pairs one process remembers
 # CURRENT_MAX; losing it on restart is fine (the newest active state is looked up instead).
 CURRENT: dict[tuple[str, str], str] = {}
 
+# The transcript of the session that the last /clear ended (SessionEnd), at most one: the next
+# SessionStart(clear) hands it to the extractor once. Per process, like CURRENT.
+LAST_TRANSCRIPT: list[str] = []
+
 
 class SaveArgs(NamedTuple):
     """What ``save`` receives from the tool."""
@@ -100,7 +104,9 @@ def _active_rows(engine: Engine, project: str | None = None) -> list[Any]:
 
 
 def _saved_at(engine: Engine, rel: str) -> str:
-    value = engine.index.props(rel).get("saved_at")
+    """When the state was last saved, or compacted when it never was (for order and rotation)."""
+    props = engine.index.props(rel)
+    value = props.get("saved_at") or props.get("compacted_at")
     return str(value) if value else ""
 
 

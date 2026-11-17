@@ -20,8 +20,9 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
   | `files` | Archivos de la tarea, si se pasan |
   | `project` | El proyecto |
   | `task_title` | El título |
-  | `saved_at` | Fecha y hora local del último guardado, a segundos |
-  | `saved_by` | `agent` o `extractor` |
+  | `saved_at` | Fecha y hora local del último guardado del agente o del extractor, a segundos |
+  | `saved_by` | `agent`, `extractor` o `compact` (lo último que lo escribió fue el hook `PostCompact`) |
+  | `compacted_at` | Fecha y hora del último resumen de compactación, si lo hubo |
   | `worktree` | La carpeta del proyecto (`project_dir`), si se pasa |
   | `session_id` | El id de la sesión de Claude Code, solo como dato |
 
@@ -31,7 +32,7 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
 
 - `search` lo encuentra mientras está activo; los archivados se ocultan, como las memorias archivadas (`status="any"` los muestra).
 - No sale en la bienvenida ni en las «Notas relacionadas» de `context(mode="task")`: lo trae `session(action="restore")`.
-- Las memorias `session` que guardaba `/episteme:pausa` no se migran: siguen en `memory/` y caducan solas.
+- Las memorias `session` que guardaba `/episteme:pausa` no se migran: siguen en `memory/` y caducan solas. La skill pasa a ser `/episteme:sesion` (guardar, retomar y plantilla).
 
 ## El tool `session`
 
@@ -42,10 +43,51 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
 | `restore` | Lo mismo, como contexto (`Estado de la sesión «…» (guardado …; compruébalo contra el repo antes de repetir pasos):`), y lo fija como estado en uso. Con `hook_event` sale en formato de hook, con el aviso `episteme · estado de sesión recuperado: «…»` |
 | `template` | El esqueleto de `type` (`session` por defecto; vale cualquier tipo de memoria) |
 | `archive` | Pone `status: archived` en `note` o en el estado en uso. No borra nada |
+| `gate` | Solo con `hook_event="PreCompact"` (si no, `invalid_argument`): decide si frena un `/compact` manual (ver «Los momentos de guardado») |
+| `capture` | Hook `PostCompact`: guarda `summary` en la sección `## Resumen de compactación` del estado en uso (la reemplaza si ya está); sin estado, crea uno titulado `Sesión <fecha>`. Un `summary` vacío o sin sustituir (`${compact_summary}`) no escribe nada |
+| `end` | Hook `SessionEnd` (`clear`): recuerda `transcript` en el proceso para el `restore` que sigue. No escribe en el vault |
+
+`restore` con `source` (`compact` o `clear`) y un transcript conocido añade `extract`, la orden de extracción (ver más abajo). En modo hook va debajo del estado.
 
 **El estado en uso** es el que este proceso guardó o recuperó para ese proyecto y esa carpeta. Si el servidor acaba de arrancar, es el estado activo más reciente (por `saved_at`) del mismo `worktree`; los que no tienen `worktree` valen para cualquiera. El `session_id` no se usa para buscarlo, porque cambia con `/clear`.
 
 Para empezar otro hilo de trabajo, archiva el estado en uso y guarda uno nuevo con su `title`.
+
+## Los momentos de guardado
+
+El estado se guarda en cuatro momentos:
+
+| Momento | Quién | Cómo |
+| --- | --- | --- |
+| Mientras se trabaja | El agente | Las instrucciones del servidor le piden `session(action="save")` cuando se acuerda un plan, acaba una fase, cambia el enfoque, antes de un paso arriesgado y cuando la persona lo pide (`/episteme:sesion`) |
+| Cada 12 mensajes sin guardar | Hook `UserPromptSubmit` | La bienvenida añade `episteme · el estado de la sesión no se actualiza desde hace N mensajes: …` (cada `[session] nudge_every` mensajes) |
+| Antes de un `/compact` manual | Hook `PreCompact` (`gate`) | Si la sesión lleva 5 mensajes o más y el estado no se guarda hace 5 o más, frena el `/compact` una vez y le dice a la persona que pida guardarlo. Repetir `/compact` compacta igual. El automático nunca se frena |
+| Después de compactar o de `/clear` | Hooks `PostCompact`, `SessionEnd` y `SessionStart` | `capture` guarda el resumen de la compactación; `restore` devuelve el estado y pide lanzar el extractor |
+
+### La extracción
+
+Tras `/compact` o `/clear`, el `restore` del `SessionStart` añade una línea como esta:
+
+```
+episteme · extracción pendiente: lanza en segundo plano el agente episteme:extractor con este encargo y sigue sin esperarlo: desde=<saved_at o "inicio"> estado=<ruta o "nuevo"> proyecto=<proyecto> transcript=<ruta>
+```
+
+El agente lanza el subagente `episteme:extractor` (del plugin, Sonnet con esfuerzo bajo), que corre `transcript_digest.py` de la skill `sesion` sobre el transcript desde `desde`, reescribe el estado con la plantilla (`origin="extractor"`) y guarda como mucho 3 memorias duraderas con el tag `origen/extractor`. El servidor no lee el transcript: lo lee el script, en la máquina de la persona.
+
+- Tras `/compact`, el transcript es el de la sesión en curso (`${transcript_path}` del `SessionStart`). Tras `/clear`, el que guardó `end` en el `SessionEnd`; se entrega una sola vez.
+- `desde` es el `saved_at` del estado: lo anterior ya está en él. `capture` no lo mueve, para que la extracción tras compactar incluya lo que se habló antes.
+- Con `[session] extract = false` no hay orden (el transcript que guardó `end` se descarta igual).
+- La ruta del transcript va al final de la orden y se acepta solo si termina en `.jsonl` y no trae comillas ni caracteres de la shell (`` ` ``, `$`, `;`, `|`, `&`, `<`, `>`): el extractor la pasa a un comando. `end` la guarda solo con `reason` vacío o `clear`.
+- Antes de guardar, el extractor vuelve a leer el estado: si la sesión principal lo guardó mientras trabajaba, parte de ese.
+- Lo que se hable mientras corre el extractor puede quedar fuera de la extracción siguiente, que empieza en el `saved_at` de su guardado; lo recoge el siguiente guardado del agente.
+
+### Límites
+
+- Sin el hook `SessionEnd` (`clear`) no hay extracción tras `/clear`: el servidor no sabe qué transcript se cerró.
+- El extractor cuesta tokens de Sonnet en cada `/compact` y `/clear`.
+- El bloqueo es solo del `/compact` manual y una vez por mensaje.
+- El extractor corre en segundo plano y no puede pedir permiso: `/episteme:setup` deja en `allow` el tool `session` y el script, pero no `remember`. Si nadie aprueba `remember`, guarda solo el estado y lo dice.
+- El contador de mensajes es del proceso: si el servidor se reinicia, el aviso y el bloqueo empiezan de cero.
 
 ## La plantilla
 
@@ -67,12 +109,13 @@ archive_days = 7              # días sin guardar antes de archivar el estado (e
 nudge_every = 12              # mensajes sin guardar antes del aviso (entero >= 1)
 ```
 
-La tabla es opcional y rechaza claves desconocidas. `extract`, `block_manual_compact` y `nudge_every` son para los hooks de sesión.
+La tabla es opcional y rechaza claves desconocidas. `extract` activa la orden de extracción, `block_manual_compact` el freno de `gate` y `nudge_every` el aviso periódico.
 
 ## Desde `estado.md` y `checkpoint`
 
 `checkpoint` y `[checkpoint] state_glob` están obsoletos y se eliminan en la próxima versión. Mientras tanto:
 
 - Con `state_glob` configurado, el servidor avisa por stderr al arrancar y las respuestas de `checkpoint` traen `deprecated`.
+- Con `state_glob`, `gate` (en `PreCompact`) sigue guardando el checkpoint del `estado.md` antes de decidir, como hacía el hook de `checkpoint`. Los hooks de `checkpoint` se quitan al volver a correr `/episteme:setup`.
 - `session(action="restore")` cae a `checkpoint` (el `estado.md` activo o el último checkpoint guardado) cuando no hay estado en `sesiones/`, y la respuesta trae `deprecated`.
 - Para migrar, guarda el estado con `session(action="save")` siguiendo la plantilla: desde ese momento `restore` trae ese y no el `estado.md`.
