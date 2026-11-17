@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/doc-review.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

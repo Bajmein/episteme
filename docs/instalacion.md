@@ -71,6 +71,7 @@ Los mismos dos comandos sirven en PowerShell. Después, reinicia Claude Code.
 | [`/episteme:pausa`](../plugin/skills/pausa/SKILL.md) | La persona | Guarda el estado de la tarea como memoria de sesión (`sesion/pausa`, vigente 14 días) antes de `/clear` o de cerrar; `/episteme:pausa retomar` la recupera. Es para los proyectos sin `estado.md`, donde `checkpoint` no tiene tarea que guardar |
 | [`/episteme:mantencion`](../plugin/skills/mantencion/SKILL.md) | Claude, cuando la bienvenida avisa de mantención pendiente o se le pide ordenar las memorias; o la persona | Recorre lo que informa `review`, propone grupo por grupo qué unificar, reemplazar o archivar, y aplica solo lo aprobado |
 | [`/episteme:reminder <texto>`](../plugin/skills/reminder/SKILL.md) | La persona | Guarda un recordatorio de prioridad 5 del proyecto: `reminder` si el texto trae fecha, `preference` si no |
+| [`/episteme:scaffold`](../plugin/skills/scaffold/SKILL.md) | La persona; o Claude, cuando el hook `doc-review` avisa | Crea o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/`, `.claude/rules/docs.md` y `.gitignore` desde plantillas, y ofrece módulos locales de desarrollo. No hace commits |
 
 El plugin sigue a la versión del release y el servidor al tag fijado en cada proyecto: si actualizas uno, actualiza el otro (ver «Actualizar episteme» en `/episteme:setup`).
 
@@ -81,6 +82,40 @@ Para desarrollar las skills desde un clone, `claude --plugin-dir plugin` en la r
 Se invoca a mano (`/episteme:setup`), desde la raíz del proyecto que se quiere conectar; Claude no la carga solo.
 
 Además de registrar el servidor, la skill fusiona en el proyecto la clave `autoMemoryEnabled: false` (con permiso de la persona): la memoria automática de Claude Code (`MEMORY.md`) compite con episteme. También hace una comprobación de solo lectura de la configuración: compara `.claude/settings.local.json`, `.claude/settings.json` y el `settings.json` de usuario con el de la skill, y lista hooks que faltan, repetidos o con `matcher`/`input` distintos, permisos que faltan y `autoMemoryEnabled`. Muestra el diff y solo fusiona si la persona lo aprueba.
+
+### `/episteme:scaffold`
+
+Deja definida la base de un proyecto. La invoca la persona (`/episteme:scaffold`) o Claude, cuando el hook `doc-review` le pide revisar un documento. Nunca hace commits y nunca escribe en el vault.
+
+- **Modo.** Sin argumentos crea lo que falta desde las plantillas y audita lo que existe: lista los hallazgos con su evidencia (`ruta:línea`), propone el diff y aplica solo lo aprobado. Un archivo existente se completa; nunca se reemplaza entero. Con `auditar` es de solo lectura.
+- **Partes.** `readme`, `claude`, `changelog`, `github` (`CONTRIBUTING.md`, `ESTILO.md`, la plantilla de PR y `.gitmessage`), `reglas` (`.claude/rules/docs.md`), `gitignore` y `modulos`. Se puede acotar a una o varias: `/episteme:scaffold auditar readme`.
+- **Convenciones por defecto.** Docs en español; código y commits en inglés, con Conventional Commits; Keep a Changelog; PR con squash. Si el repo sigue otra convención, la auditoría lo informa y pregunta.
+- **Stack.** Detecta Python con uv, Node, PHP, WordPress y las tareas de mise, y rellena los comandos (instalar, lint, tests) y los bloques de `.gitignore`. Lo que no detecta lo pregunta: nunca inventa un comando.
+- **Módulos.** Se ofrecen solo si se cumplen sus precondiciones:
+
+  | Módulo | Qué instala | Precondición |
+  |---|---|---|
+  | `reglas-python` | Reglas de estilo, pruebas y seguridad en `.claude/rules/python-*.md` | `pyproject.toml` |
+  | `serena-python` | Regla y hook para usar Serena con ty, `.serena/` y sus permisos y hooks | `uv.lock`, `ty` en el grupo `dev`, `serena` y `serena-hooks` en el `PATH` |
+  | `session-brief` | Hook de `SessionStart` con el estado del trabajo (rama, tags, CHANGELOG, PR e issues por `gh`), el mapa de módulos Python y el índice de reglas | Ninguna |
+  | `doc-review` | Hook de `SessionStart` que avisa cuando `README.md` o `CLAUDE.md` llevan tiempo y actividad sin revisar | `README.md` o `CLAUDE.md` |
+  | `claude-local` | `CLAUDE.local.md` con el índice de la config local | Se crea con cualquier otro módulo |
+
+- **Qué queda local.** La base se versiona. Los módulos son locales por defecto: sus rutas van a `.git/info/exclude`, sus hooks a `.claude/settings.local.json` y se indexan en `CLAUDE.local.md`. La skill pregunta si versionarlos. También pregunta antes de `git config commit.template .github/.gitmessage`.
+- **Registro.** Al terminar guarda en episteme una memoria `decision` del proyecto («Convenciones del proyecto: scaffold de episteme»).
+
+#### Revisión periódica (`doc-review`)
+
+`README.md` y `CLAUDE.md` llevan en la línea 1 una marca de última revisión completa, `<!-- doc-review: 2026-11-16 03ec174 -->` (fecha y sha de `HEAD`), que GitHub no muestra. Solo la escribe una revisión completa; un retoque no la mueve. Sin marca, o con un sha que ya no existe, se usa la fecha del último commit que tocó el archivo.
+
+Al empezar la sesión, el hook suma puntos por cada commit desde la marca que no toque solo `*.md`:
+
+| Documento | `feat` | `fix` | `refactor` / `perf` | `ci` / `build` / `chore` | Archivo nuevo, borrado o renombrado | Tag nuevo |
+|---|---|---|---|---|---|---|
+| `README.md` | 3 | 1 | 0 | 0 | 0 | 10 |
+| `CLAUDE.md` | 2 | 1 | 2 | 2 | 2 por archivo | 10 |
+
+Un tipo que no está en la tabla suma 1. El documento está vencido con 7 días y 15 puntos, con 30 días y 1 punto, o con un tag nuevo; con 0 puntos, nunca. Avisa una vez por sesión (no en `compact` ni en `clear`): la persona ve una línea y Claude, al cerrar la tarea en curso, revisa el documento con `/episteme:scaffold auditar <parte>`, corrige lo que contradice al repo, actualiza la marca y dice qué cambió, sin commit. Con `MODE = "propose"` en el hook, propone el diff y espera la aprobación. Para posponerlo: `python3 .claude/hooks/doc-review.py snooze README.md 7`. El estado se guarda en `.git/doc-review.json` (`git rev-parse --git-path`), fuera del repo versionado.
 
 ## Uso
 

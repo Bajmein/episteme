@@ -1,0 +1,37 @@
+# Sistema y editores
+.DS_Store
+Thumbs.db
+*.swp
+
+# Secretos
+.env
+.env.*
+!.env.example
+
+# Claude Code: lo local de cada clone
+CLAUDE.local.md
+.claude/settings.local.json
+
+# stack: python-uv
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# stack: node
+node_modules/
+dist/
+coverage/
+# Solo si hay Astro:
+.astro/
+
+# stack: php
+vendor/
+
+# stack: wordpress
+vendor/
+wp-content/uploads/

@@ -88,6 +88,8 @@ Es un único `state_glob` para todo el vault: si dos proyectos usan patrones dis
 
 Reinicia Claude Code en el proyecto. En `/mcp`, `episteme` sale conectado; el primer mensaje recibe la bienvenida de `context(mode="welcome")`. Prueba un `remember` de una decisión del proyecto y búscala con `search`.
 
+Si al proyecto le falta `README.md`, `CLAUDE.md` o `.github/CONTRIBUTING.md`, sugiere `/episteme:scaffold`, que los crea desde plantillas (y audita los que ya hay). No la invoques: la decide la persona.
+
 ### Comprobar que la configuración está al día
 
 Es de solo lectura. Compara `.claude/settings.local.json`, `.claude/settings.json` y el `settings.json` de usuario (`~/.claude/settings.json`, o el de la cuenta en uso) con `${CLAUDE_SKILL_DIR}/settings.json`, el `settings.json` de esta skill, y lista:

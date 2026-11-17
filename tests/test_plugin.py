@@ -43,10 +43,10 @@ def test_marketplace_points_to_plugin_dir_without_version() -> None:
 
 def test_skill_folders() -> None:
     folders = {p.name for p in SKILLS.iterdir() if p.is_dir()}
-    assert folders == {"setup", "pausa", "mantencion", "reminder"}
+    assert folders == {"setup", "pausa", "mantencion", "reminder", "scaffold"}
 
 
-@pytest.mark.parametrize("skill", ["setup", "pausa", "mantencion", "reminder"])
+@pytest.mark.parametrize("skill", ["setup", "pausa", "mantencion", "reminder", "scaffold"])
 def test_skill_frontmatter_name_matches_folder(skill: str) -> None:
     meta = _frontmatter(SKILLS / skill / "SKILL.md")
     assert meta["name"] == skill
