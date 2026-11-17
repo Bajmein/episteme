@@ -69,7 +69,7 @@ Claude Code puede negarse a que el agente escriba su propia configuración (en m
 
 Añade (o cambia la regla que hubiera sobre Obsidian/mcpvault por) esta línea:
 
-> Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` salen como diferidos, cárgalos con ToolSearch (`select:mcp__episteme__context,mcp__episteme__search,mcp__episteme__read,mcp__episteme__remember,mcp__episteme__revise`) antes de usarlos; si no aparecen ni diferidos, dilo antes de seguir. Las suites de `docs/` se actualizan solo con `/episteme:docs`.
+> Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` salen como diferidos, cárgalos con ToolSearch (`select:mcp__episteme__context,mcp__episteme__search,mcp__episteme__read,mcp__episteme__remember,mcp__episteme__revise`) antes de usarlos; si no aparecen ni diferidos, dilo antes de seguir.
 
 El aviso existe porque sin servidor los hooks no corren y nada lo delata. La frase de los diferidos existe porque la versión anterior se leía como «no están disponibles» cuando los tools solo estaban diferidos (Claude Code los carga bajo demanda). Si el proyecto se empaqueta como plugin, el prefijo es `mcp__plugin_<plugin>_episteme__` y hay que ajustar los nombres del `select:`.
 

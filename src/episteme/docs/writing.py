@@ -14,7 +14,7 @@ from episteme.errors import NOT_FOUND, OUTSIDE_VAULT, READ_ONLY_ZONE, EpistemeEr
 from episteme.index import NOTE_MAX_BYTES, to_json
 from episteme.markdown import compose
 from episteme.memory import find_secrets
-from episteme.vault import DOCS, Zone, today
+from episteme.vault import DOCS, Zone, is_ignored, today
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -87,13 +87,20 @@ def _by_source(engine: Engine, zone: Zone, source: str) -> str | None:
     return row["path"] if row else None
 
 
-def _inside(engine: Engine, zone: Zone, path: str) -> str:
-    """``zone/path`` once it is checked to stay in this docs zone."""
+def _joined(zone: Zone, path: str) -> str:
+    """``zone/path`` with ``./`` and doubled slashes dropped; an absolute path fails."""
     pure = PurePosixPath(path.replace("\\", "/"))
     if pure.is_absolute():
         raise EpistemeError(OUTSIDE_VAULT, f'"{path}" is absolute. Pass a path inside the suite.')
-    rel = f"{zone.path}/{pure.as_posix()}"  # PurePosixPath drops "./" and doubled slashes
+    return f"{zone.path}/{pure.as_posix()}"
+
+
+def _inside(engine: Engine, zone: Zone, path: str) -> str:
+    """``zone/path`` once it is checked to stay in this docs zone."""
+    rel = _joined(zone, path)
     real = engine.vault.rel(engine.vault.resolve(rel))
+    if is_ignored(real):
+        raise invalid(f'"{path}" is in a hidden folder the index skips. Pick another path.')
     if not real.startswith(zone.path + "/"):
         raise EpistemeError(OUTSIDE_VAULT, f'"{path}" leaves {zone.path}. Pass a path inside it.')
     engine.vault.check_writable(rel)

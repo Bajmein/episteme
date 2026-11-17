@@ -91,5 +91,8 @@ skips = ["B101"]  # assert is used to narrow types
 [tool.vulture]
 paths = ["src", "scripts", "tests", "plugin"]
 # sqlite3.Connection.row_factory is set, not read; anyio_backend and pytestmark are pytest hooks;
-# do_GET and log_message are http.server hooks (tests/test_docs_check.py).
-ignore_names = ["row_factory", "anyio_backend", "pytestmark", "do_GET", "log_message"]
+# do_GET and log_message are http.server hooks (tests/test_docs_check.py); ignore_aliases is a
+# yaml.SafeDumper hook (markdown._FrontmatterDumper).
+ignore_names = [
+    "row_factory", "anyio_backend", "pytestmark", "do_GET", "log_message", "ignore_aliases"
+]

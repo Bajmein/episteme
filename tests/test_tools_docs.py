@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -210,6 +211,53 @@ async def test_docs_write_normalises_the_path(suite: Path) -> None:
 
     assert res["path"] == f"{SUITE}/tasks/new.md"
     assert bad.startswith("invalid_schema:") and "suite" in bad
+
+
+async def test_docs_write_created_note_reads_back_valid_and_unchanged(suite: Path) -> None:
+    args = {
+        "suite": SUITE,
+        "path": "tasks/again.md",
+        "source": f"{URL}/tasks/again.md",
+        "body": "# Again\n",
+        "fields": NEW_FIELDS,
+    }
+
+    async with mcp_client(suite) as c:
+        first = await c.ok("docs_write", **args)
+        note = await c.ok("read", note=f"{SUITE}/tasks/again.md", content=False)
+        second = await c.ok("docs_write", **args)
+        status = await c.ok("docs_status", suite=SUITE, pages=True)
+
+    text = (suite / SUITE / "tasks/again.md").read_text(encoding="utf-8")
+    assert first["created"] is True and "&id" not in text and "*id" not in text
+    assert note["fm_valid"] is True
+    assert second == {**first, "created": False, "changed": False}
+    assert status["invalid"] == 1  # only draft.md from the fixture
+    assert "\ttasks/again.md\t" in status["pages"]
+
+
+@pytest.mark.parametrize("path", [".obsidian/x.md", ".h/x.md", "a/.hidden/x.md"])
+async def test_docs_write_refuses_hidden_folders(suite: Path, path: str) -> None:
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, path=path, source=f"{URL}/x.md", fields=NEW_FIELDS
+        )
+
+    assert text.startswith("invalid_argument:"), text
+    assert not (suite / SUITE / path).exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+async def test_remember_refuses_a_memory_folder_linked_into_a_docs_zone(suite: Path) -> None:
+    (suite / "memory/sym").symlink_to(suite / SUITE, target_is_directory=True)
+
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "remember", type="lesson", title="Una lección enlazada", body="x", project="sym"
+        )
+
+    assert text.startswith("read_only_zone:") and "docs zone" in text, text
+    assert not (suite / SUITE / "lessons").exists()
 
 
 async def test_docs_write_refuses_a_source_another_note_has(suite: Path) -> None:
