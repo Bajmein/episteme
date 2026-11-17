@@ -9,6 +9,14 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - Skill `/episteme:scaffold`: crea desde plantillas o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/` (`CONTRIBUTING.md`, `ESTILO.md`, plantilla de PR y `.gitmessage`), `.claude/rules/docs.md` y `.gitignore`, con los comandos del stack detectado. Con `auditar` es de solo lectura; nunca hace commits. Ofrece módulos locales: `reglas-python`, `serena-python`, `session-brief`, `doc-review` y `claude-local`.
 - Módulo `doc-review`: un hook de `SessionStart` que mide la actividad de git desde la marca `<!-- doc-review: … -->` de `README.md` y `CLAUDE.md` y pide a Claude revisarlos al cerrar la tarea cuando pasan del umbral.
 - `/episteme:setup` sugiere `/episteme:scaffold` al final si al proyecto le falta `README.md`, `CLAUDE.md` o `.github/CONTRIBUTING.md`.
+- Suites de documentación: un modo de zona nuevo, `docs`, para la documentación de terceros en `docs/` del vault. Solo la cambia el tool nuevo `docs_write`, que crea o actualiza una página y no la reescribe si el cuerpo no cambió; `docs_status` (solo lectura) lista las suites con sus conteos y, por suite, las páginas con el hash de su cuerpo. El manifiesto de cada suite va en el frontmatter de su `README.index.md` (`suite: {upstream, include, context7, synced}`). Ver `docs/documentacion.md`.
+- La skill `/episteme:docs [suite]` pone al día todas las suites o la que se nombre: filtra por la fecha de Context7, baja las páginas con su script (`docs_check.py`, en la máquina de la persona: el servidor sigue sin HTTP), muestra cuántas cambiaron, son nuevas o desaparecieron, y las escribe con `docs_write`. Las que desaparecen pasan a `status: deprecated`; nada se borra.
+- `/episteme:setup` añade `docs_status` al `allow`; `docs_write` sigue pidiendo permiso.
+
+### Cambiado
+
+- `revise` responde `read_only_zone` en una zona `docs` y pide `docs_write`. `review` cuenta esas zonas como de solo lectura y el backup no las incluye.
+- Las instrucciones del servidor dicen que las suites de `docs/` cambian solo con `/episteme:docs`.
 
 ## [0.13.2] - 2026-11-16
 

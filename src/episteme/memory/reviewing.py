@@ -13,7 +13,7 @@ from episteme.markdown import (
 from episteme.memory.schema import NoteFile, dedup_tokens, similarity, validate
 from episteme.memory.scoring import days_since
 from episteme.memory.writing import shared_reason
-from episteme.vault import MEMORY, READ_ONLY, today
+from episteme.vault import MEMORY, READ_ONLY, TOOL_MODES, today
 
 if TYPE_CHECKING:
     from datetime import date
@@ -91,8 +91,10 @@ class _Scope:
         return self._under_prefix(rel) and self._in_zone(rel)
 
     def is_read_only(self, rel: str) -> bool:
-        # Notes outside every zone are read-only too (see vault.mode_for).
-        return self.zones.get(rel, (None, READ_ONLY))[1] in (READ_ONLY, None)
+        # Notes outside every zone are read-only too (see vault.mode_for), and so are the
+        # zones that only their own tool writes (vault.TOOL_MODES): revise cannot fix them.
+        mode = self.zones.get(rel, (None, READ_ONLY))[1]
+        return mode in (READ_ONLY, None) or mode in TOOL_MODES
 
     def in_project(self, r: Any) -> bool:
         # A memory with a missing or invalid project is matched by its folder, so that

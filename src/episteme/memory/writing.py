@@ -15,6 +15,7 @@ from episteme.markdown import (
     fold,
 )
 from episteme.memory.files import _as_list, _files_of
+from episteme.memory.revising import _reject_tool_zone
 from episteme.memory.schema import (
     DUPLICATE,
     FOLDERS,
@@ -402,7 +403,8 @@ def _persist(
     dry_run: bool,
 ) -> str:
     """Write the memory, index it and save the superseded one (never on a dry run)."""
-    engine.vault.check_writable(f"{folder}/{base}.md")
+    mode = engine.vault.check_writable(f"{folder}/{base}.md")
+    _reject_tool_zone(f"{folder}/{base}.md", mode)  # a symlinked folder into a docs zone
     rel = _write_new(engine, folder, base, content, dry_run)
     if dry_run:
         return rel

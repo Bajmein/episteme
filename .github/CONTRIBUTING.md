@@ -19,7 +19,7 @@ Los mismos comandos que corre el CI, todos en verde:
 uv run ruff check
 uv run ty check
 uv run pytest
-uv run bandit -c pyproject.toml -r src scripts -q
+uv run bandit -c pyproject.toml -r src scripts plugin -q
 uv run vulture
 uv run deptry .
 uv run zizmor .github/workflows

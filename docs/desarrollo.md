@@ -8,7 +8,7 @@ uv run ruff check
 uv run pytest
 # lo que además corre el job lint del CI:
 uv run ty check
-uv run bandit -c pyproject.toml -r src scripts -q
+uv run bandit -c pyproject.toml -r src scripts plugin -q
 uv run vulture
 uv run deptry .
 uv run python -m episteme --vault "$PWD/tests/fixtures/vault" --project fabrik

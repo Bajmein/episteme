@@ -21,7 +21,10 @@ from episteme.errors import (
 READ_ONLY = "read-only"
 READ_WRITE = "read-write"
 MEMORY = "memory"
-MODES = (READ_ONLY, READ_WRITE, MEMORY)
+DOCS = "docs"
+MODES = (READ_ONLY, READ_WRITE, MEMORY, DOCS)
+# Zones that only their own tool writes: mode -> that tool. revise refuses them.
+TOOL_MODES: dict[str, str] = {DOCS: "docs_write"}
 CONFIG_FILE = "episteme.toml"
 INDEX_DIR = ".index"
 DEFAULT_EVERY_DAYS = 1
@@ -372,6 +375,10 @@ class Vault:
     @property
     def memory_zone(self) -> Zone | None:
         return next((z for z in self.config.zones if z.mode == MEMORY), None)
+
+    @property
+    def docs_zones(self) -> list[Zone]:
+        return [z for z in self.config.zones if z.mode == DOCS]
 
     # -- writes ------------------------------------------------------------
 

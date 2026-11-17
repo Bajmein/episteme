@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import runpy
 import tomllib
 from pathlib import Path
 
@@ -43,10 +44,12 @@ def test_marketplace_points_to_plugin_dir_without_version() -> None:
 
 def test_skill_folders() -> None:
     folders = {p.name for p in SKILLS.iterdir() if p.is_dir()}
-    assert folders == {"setup", "pausa", "mantencion", "reminder", "scaffold"}
+    assert folders == {"setup", "pausa", "mantencion", "reminder", "scaffold", "docs"}
 
 
-@pytest.mark.parametrize("skill", ["setup", "pausa", "mantencion", "reminder", "scaffold"])
+@pytest.mark.parametrize(
+    "skill", ["setup", "pausa", "mantencion", "reminder", "scaffold", "docs"]
+)
 def test_skill_frontmatter_name_matches_folder(skill: str) -> None:
     meta = _frontmatter(SKILLS / skill / "SKILL.md")
     assert meta["name"] == skill
@@ -57,3 +60,19 @@ def test_skill_frontmatter_name_matches_folder(skill: str) -> None:
 def test_setup_settings_has_hooks() -> None:
     settings = _json(SKILLS / "setup" / "settings.json")
     assert "hooks" in settings
+
+
+def test_docs_check_body_hash_matches_episteme() -> None:
+    from episteme.docs import body_hash
+
+    script = runpy.run_path(str(SKILLS / "docs" / "scripts" / "docs_check.py"))
+
+    for text in ("# A\r\n\r\nb\r\n", "\n\n# A\n", "> ## Documentation Index\n"):
+        assert script["body_hash"](text) == body_hash(text)
+
+
+def test_setup_allows_docs_status_but_not_docs_write() -> None:
+    allow = _json(SKILLS / "setup" / "settings.json")["permissions"]["allow"]
+
+    assert "mcp__episteme__docs_status" in allow
+    assert "mcp__episteme__docs_write" not in allow

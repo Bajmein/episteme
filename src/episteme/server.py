@@ -16,7 +16,7 @@ from episteme import maintenance, prompting
 from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError
-from episteme.tools import hooks, memories, reading
+from episteme.tools import docs, hooks, memories, reading
 
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.
@@ -25,7 +25,7 @@ episteme is the project memory and documentation vault. Use only these tools; ne
 - Before deciding something that may already have been decided, call search, then read the best hit.
 - Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact from another source because the vault did not have it; or the user says "remember". Name the files, tools, commands and people involved in the body: that is what is searched later. Save project knowledge with remember, not in Claude Code's auto memory (MEMORY.md).
 - When a memory is wrong or replaced, call revise (action="supersede" or "archive"), never remember a contradiction next to it.
-- Notes under read-only zones (docs/claude-code) cannot be changed. Errors say what failed and what to do."""  # noqa: E501
+- Notes under read-only zones (docs/claude-code) cannot be changed. docs/ suites change only via /episteme:docs. Errors say what failed and what to do."""  # noqa: E501
 
 
 def _validation_message(exc: ValidationError) -> str:
@@ -43,6 +43,14 @@ def _created(text: str) -> bool:
     """Whether a ``remember`` result wrote a note (a blocked duplicate has created: false)."""
     try:
         return json.loads(text).get("created") is True
+    except (ValueError, AttributeError):
+        return False
+
+
+def _changed(text: str) -> bool:
+    """Whether a ``docs_write`` result wrote the note (changed: false wrote nothing)."""
+    try:
+        return json.loads(text).get("changed") is True
     except (ValueError, AttributeError):
         return False
 
@@ -70,6 +78,13 @@ def _error_text(exc: ToolError) -> str | None:
 def _result_text(result: Any) -> str:
     """The concatenated text blocks of a tool result."""
     return "".join(getattr(b, "text", "") for b in getattr(result, "content", None) or [])
+
+
+def _track_docs_write(name: str, text: str) -> None:
+    """A ``docs_write`` that changed a note joins the trail; it is not a memory write."""
+    if name == "docs_write" and _changed(text):
+        for path in _result_paths(text):
+            prompting.track(path, "written")
 
 
 def _track_result(name: str, arguments: dict[str, Any], text: str) -> None:
@@ -103,6 +118,7 @@ class EpistemeServer(MCPServer):
             return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)
         text = _result_text(result)
         _track_result(name, arguments, text)
+        _track_docs_write(name, text)
         self._log(name, arguments, text, start, True)
         return result
 
@@ -121,4 +137,5 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     reading.register(server, engine)
     memories.register(server, engine)
     hooks.register(server, engine, store)
+    docs.register(server, engine)
     return server

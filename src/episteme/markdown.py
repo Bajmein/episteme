@@ -115,6 +115,11 @@ def load_frontmatter(raw: str | None) -> tuple[dict[str, Any], bool, str | None]
 class _FrontmatterDumper(yaml.SafeDumper):
     """One key per line; lists inline (``tags: [a, b]``), as Obsidian writes them."""
 
+    def ignore_aliases(self, data: Any) -> bool:
+        # A value shared by two keys (created and updated set to the same date) would be
+        # written as &id001 / *id001, and load_frontmatter refuses aliases.
+        return True
+
 
 _FrontmatterDumper.add_representer(
     list,
