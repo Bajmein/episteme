@@ -74,6 +74,7 @@ def test_body_hash_matches_the_server(check: ModuleType) -> None:
     assert check.HASH_LEN == HASH_LEN
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def test_diff_classifies_pages(
     check: ModuleType, base: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:

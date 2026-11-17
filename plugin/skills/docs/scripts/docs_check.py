@@ -48,6 +48,7 @@ def body_hash(body: str) -> str:
 class _HttpOnlyRedirects(urllib.request.HTTPRedirectHandler):
     """Follow redirects only to http(s) URLs."""
 
+    # @CodeScene(disable:"Excess Number of Function Arguments")
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
         if urllib.parse.urlsplit(newurl).scheme not in SCHEMES:
             raise urllib.error.HTTPError(newurl, code, "redirect to a non-http URL", headers, fp)
@@ -175,18 +176,26 @@ def upstream_urls(
 
     An index that cannot be read goes to ``report["errors"]``, so the suite is not marked synced.
     """
+    skip = known | set(upstream)
     found: dict[str, None] = {}
     for index in upstream:
-        result = fetch(index)
-        if result.text is None:
-            report["errors"].append({"source": index, "error": result.error})
-        for url in URL_RE.findall(result.text or ""):
-            url = url.rstrip(".,;:")
-            if url in known or url in upstream:
-                continue
-            if not include or any(url.startswith(p) for p in include):
+        for url in _listed(index, report):
+            if url not in skip and _included(url, include):
                 found[url] = None
     return list(found)
+
+
+def _listed(index: str, report: dict) -> list[str]:
+    """The URLs in one ``llms.txt``; an index that cannot be read is reported as an error."""
+    result = fetch(index)
+    if result.text is None:
+        report["errors"].append({"source": index, "error": result.error})
+        return []
+    return [url.rstrip(".,;:") for url in URL_RE.findall(result.text)]
+
+
+def _included(url: str, include: list[str]) -> bool:
+    return not include or any(url.startswith(p) for p in include)
 
 
 def _classify(page: Page, result: Fetched, out: Path, report: dict) -> None:

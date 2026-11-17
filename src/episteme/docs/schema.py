@@ -109,8 +109,12 @@ def _url_list_error(suite: dict[str, Any], key: str) -> str | None:
     return f"suite.{key} must be a list of http(s) URLs"
 
 
+def _is_context7_id(value: Any) -> bool:
+    return isinstance(value, str) and CONTEXT7_RE.fullmatch(value) is not None
+
+
 def _context7_error(value: Any) -> str | None:
-    if value is None or (isinstance(value, str) and CONTEXT7_RE.fullmatch(value)):
+    if value is None or _is_context7_id(value):
         return None
     return "suite.context7 must be a Context7 ID such as /astral-sh/uv, or null"
 

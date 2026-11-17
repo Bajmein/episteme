@@ -34,10 +34,10 @@ def _strings(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
     if isinstance(value, dict):
-        return [s for k, v in value.items() for s in (*_strings(k), *_strings(v))]
-    if isinstance(value, list | tuple):
-        return [s for item in value for s in _strings(item)]
-    return []
+        value = [*value.keys(), *value.values()]
+    if not isinstance(value, list | tuple):
+        return []
+    return [s for item in value for s in _strings(item)]
 
 
 def _check_secrets(fields: dict[str, Any]) -> None:
@@ -50,14 +50,30 @@ def _check_secrets(fields: dict[str, Any]) -> None:
             )
 
 
-def _check_arguments(path: str | None, source: str | None, body: str | None) -> None:
+def _bad_source(source: str | None) -> bool:
+    return source is not None and not is_url(source)
+
+
+def _bad_path(path: str | None) -> bool:
+    return path is not None and not path.lower().endswith(".md")
+
+
+def _too_big(body: str | None) -> bool:
+    return body is not None and len(body.encode("utf-8")) > NOTE_MAX_BYTES
+
+
+def _check_target(path: str | None, source: str | None) -> None:
     if path is None and source is None:
         raise invalid("docs_write needs source or path. Pass the page URL or its path.")
-    if source is not None and not is_url(source):
+    if _bad_source(source):
         raise invalid(f"source {source!r} is not an http(s) URL. Pass the page URL.")
-    if path is not None and not path.lower().endswith(".md"):
+    if _bad_path(path):
         raise invalid(f"path {path!r} must end in .md. Pass a path relative to the suite.")
-    if body is not None and len(body.encode("utf-8")) > NOTE_MAX_BYTES:
+
+
+def _check_arguments(path: str | None, source: str | None, body: str | None) -> None:
+    _check_target(path, source)
+    if _too_big(body):
         limit = NOTE_MAX_BYTES // 1024 // 1024
         raise invalid(f"body is over the {limit} MB limit; episteme would not index it. Skip it.")
 
@@ -98,23 +114,35 @@ def _load(engine: Engine, rel: str) -> Target:
     return Target(rel, note.frontmatter if note.fm_valid else {}, note.body)
 
 
+def _found_by_source(engine: Engine, found: str, rel: str | None, source: str | None) -> Target:
+    """The note that already has ``source``; ``path``, if given, must name the same note."""
+    if rel is not None and rel != found:
+        raise invalid(f"{source} is already {found}, not {rel}. Drop path or fix it.")
+    return _load(engine, found)
+
+
+def _other_source(target: Target, source: str | None) -> Any:
+    """The source the note at ``path`` already has when the call brings a different one."""
+    if source is None or not target.fm:
+        return None
+    return target.fm.get("source")
+
+
 def _find(engine: Engine, zone: Zone, path: str | None, source: str | None) -> Target:
     """The note named by ``source`` (else ``path``); a missing one is new at ``path``."""
     found = _by_source(engine, zone, source) if source else None
     rel = _inside(engine, zone, path) if path is not None else None
     if found is not None:
-        if rel is not None and rel != found:
-            raise invalid(f"{source} is already {found}, not {rel}. Drop path or fix it.")
-        return _load(engine, found)
+        return _found_by_source(engine, found, rel, source)
     if rel is None:
         raise EpistemeError(
             NOT_FOUND, f"no note with source {source} in {zone.path}. Pass path to create it."
         )
     target = _load(engine, rel)
-    if source is not None and target.fm and target.fm.get("source"):
+    other = _other_source(target, source)
+    if other:
         raise invalid(
-            f"{rel} exists with source {target.fm.get('source')}. "
-            "Pass that source, or another path for the new page."
+            f"{rel} exists with source {other}. Pass that source, or another path for the new page."
         )
     return target
 
@@ -144,14 +172,21 @@ def _merge(old: dict[str, Any], fields: dict[str, Any], source: str | None) -> d
     return fm
 
 
+def _new_source(target: Target, fm: dict[str, Any]) -> str | None:
+    """The source of ``fm`` when it is a string the note did not have before."""
+    source = fm.get("source")
+    if not isinstance(source, str):
+        return None
+    return None if (target.fm or {}).get("source") == source else source
+
+
 def _check_unique_source(engine: Engine, zone: Zone, target: Target, fm: dict[str, Any]) -> None:
     """``invalid_argument`` when a new or changed source already belongs to another note."""
-    source = fm.get("source")
-    if not isinstance(source, str) or (target.fm or {}).get("source") == source:
+    source = _new_source(target, fm)
+    if source is None:
         return
-    rel = target.rel
     other = _by_source(engine, zone, source)
-    if other is not None and other != rel:
+    if other not in (None, target.rel):
         raise invalid(f"source {source} is already used by {other}. Update that note instead.")
 
 
@@ -164,6 +199,7 @@ def _stamp(fm: dict[str, Any], fields: dict[str, Any], created: bool, day: dt.da
         fm["updated"] = day
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def docs_write(
     engine: Engine,
     suite: str,
@@ -178,23 +214,53 @@ def docs_write(
     _check_arguments(path, source, body)
     _check_secrets(fields)
     target = _find(engine, zone, path, source)
+    change = _change(target, fields, source, body)
+    result = {"path": target.rel, "created": False, "changed": False, "hash": change.hash}
+    if not change.changed:
+        return result
+    fm = _finish(change, fields)
+    validate(fm, target.rel, target.rel == manifest_path(zone))
+    _check_unique_source(engine, zone, target, fm)
+    _save(engine, target.rel, compose(fm, change.body), change.created)
+    return {**result, "created": change.created, "changed": True}
+
+
+@dataclass(frozen=True)
+class Change:
+    """What docs_write would leave in the note: frontmatter, body and whether it differs."""
+
+    fm: dict[str, Any]
+    body: str
+    created: bool
+    changed: bool
+
+    @property
+    def hash(self) -> str:
+        return body_hash(self.body)
+
+
+def _new_body(old: str, body: str | None) -> str:
+    """``body`` when its hash differs from the current one, else the current body."""
+    if body is None or body_hash(body) == body_hash(old):
+        return old
+    return body
+
+
+def _change(target: Target, fields: dict[str, Any], source: str | None, body: str | None) -> Change:
     created = target.fm is None
     old_fm = target.fm or {}
     old_body = target.body or ""
-    new_body = old_body if body is None else body
+    new_body = _new_body(old_body, body)
     fm = _merge(old_fm, fields, source)
-    body_changed = created or body_hash(new_body) != body_hash(old_body)
-    fields_changed = fm != old_fm
-    digest = body_hash(new_body)
-    if not (body_changed or fields_changed):
-        return {"path": target.rel, "created": False, "changed": False, "hash": digest}
-    _stamp(fm, fields, created, today())
-    if created:
-        fm = ordered(fm)
-    validate(fm, target.rel, target.rel == manifest_path(zone))
-    _check_unique_source(engine, zone, target, fm)
-    _save(engine, target.rel, compose(fm, new_body if body_changed else old_body), created)
-    return {"path": target.rel, "created": created, "changed": True, "hash": digest}
+    changed = created or fm != old_fm or new_body != old_body
+    return Change(fm, new_body, created, changed)
+
+
+def _finish(change: Change, fields: dict[str, Any]) -> dict[str, Any]:
+    """The frontmatter to write: dates stamped, and the key order of a new note."""
+    fm = dict(change.fm)
+    _stamp(fm, fields, change.created, today())
+    return ordered(fm) if change.created else fm
 
 
 def _save(engine: Engine, rel: str, text: str, created: bool) -> None:

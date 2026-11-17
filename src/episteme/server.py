@@ -80,6 +80,13 @@ def _result_text(result: Any) -> str:
     return "".join(getattr(b, "text", "") for b in getattr(result, "content", None) or [])
 
 
+def _track_docs_write(name: str, text: str) -> None:
+    """A ``docs_write`` that changed a note joins the trail; it is not a memory write."""
+    if name == "docs_write" and _changed(text):
+        for path in _result_paths(text):
+            prompting.track(path, "written")
+
+
 def _track_result(name: str, arguments: dict[str, Any], text: str) -> None:
     """Count writes and track the notes written or read by a successful tool call."""
     if name in ("remember", "revise") and "hook_event" not in arguments:
@@ -87,9 +94,6 @@ def _track_result(name: str, arguments: dict[str, Any], text: str) -> None:
             prompting.WRITES += 1
             for path in _result_paths(text):
                 prompting.track(path, "written")
-    elif name == "docs_write" and _changed(text):
-        for path in _result_paths(text):
-            prompting.track(path, "written")
     elif name == "read":
         for path in _result_paths(text):
             prompting.track(path, "read")
@@ -114,6 +118,7 @@ class EpistemeServer(MCPServer):
             return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)
         text = _result_text(result)
         _track_result(name, arguments, text)
+        _track_docs_write(name, text)
         self._log(name, arguments, text, start, True)
         return result
 

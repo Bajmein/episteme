@@ -315,6 +315,7 @@ def test_docs_write_enters_the_trail_but_not_the_write_count(
     text = json.dumps({"path": "docs/mise/a.md", "created": False, "changed": changed})
 
     server._track_result("docs_write", {"suite": "mise"}, text)
+    server._track_docs_write("docs_write", text)
 
     assert trail == prompting.TRAIL and prompting.WRITES == 0
 
