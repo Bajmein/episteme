@@ -80,9 +80,13 @@ def _looks_like_value(value: str) -> bool:
     return any(c.isdigit() for c in value) and not set(value) & set("()[]{}<>")
 
 
+def _is_real(value: str, strict: bool) -> bool:
+    """True for a value that is not a placeholder (and, if ``strict``, looks like a value)."""
+    return not _is_placeholder(value) and (_looks_like_value(value) or not strict)
+
+
 def _real_passwords(pattern: re.Pattern[str], text: str, strict: bool = False) -> list[str]:
-    found = [m.group(1) for m in pattern.finditer(text)]
-    return [v for v in found if not _is_placeholder(v) and (_looks_like_value(v) or not strict)]
+    return [v for m in pattern.finditer(text) if _is_real(v := m.group(1), strict)]
 
 
 def _credential_hits(text: str) -> list[tuple[str, str]]:
@@ -101,6 +105,37 @@ def find_secrets(text: str) -> str | None:
     """
     hits = _credential_hits(text)
     return hits[0][0] if hits else None
+
+
+REDACTED = "[credencial omitida]"
+
+
+def _redact_values(pattern: re.Pattern[str], text: str, strict: bool) -> str:
+    """Replace group 1 of each real (non-placeholder) match, keeping the text around it."""
+
+    def replace(m: re.Match[str]) -> str:
+        if not _is_real(m.group(1), strict):
+            return m.group(0)
+        start, end = m.start(1) - m.start(), m.end(1) - m.start()
+        return m.group(0)[:start] + REDACTED + m.group(0)[end:]
+
+    return pattern.sub(replace, text)
+
+
+def redact_secrets(text: str) -> str:
+    """``text`` with every credential ``find_secrets`` sees replaced by ``REDACTED``.
+
+    For generated text that must not be lost (a compaction summary): it never refuses. Text
+    without credentials comes back unchanged; otherwise it is the NFKC form the patterns match
+    on, so a key hidden with zero-width or full-width characters is caught too.
+    """
+    if not _credential_hits(text):
+        return text
+    text = _normalize(text)
+    for _, pattern in SECRET_PATTERNS:
+        text = pattern.sub(REDACTED, text)
+    text = _redact_values(_ASSIGNED_SECRET, text, strict=True)
+    return _redact_values(_URL_CREDENTIALS, text, strict=False)
 
 
 def has_new_secrets(new: str, old: str) -> bool:

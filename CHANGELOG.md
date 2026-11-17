@@ -12,6 +12,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - Suites de documentación: un modo de zona nuevo, `docs`, para la documentación de terceros en `docs/` del vault. Solo la cambia el tool nuevo `docs_write`, que crea o actualiza una página y no la reescribe si el cuerpo no cambió; `docs_status` (solo lectura) lista las suites con sus conteos y, por suite, las páginas con el hash de su cuerpo. El manifiesto de cada suite va en el frontmatter de su `README.index.md` (`suite: {upstream, include, context7, synced}`). Ver `docs/documentacion.md`.
 - La skill `/episteme:docs [suite]` pone al día todas las suites o la que se nombre: filtra por la fecha de Context7, baja las páginas con su script (`docs_check.py`, en la máquina de la persona: el servidor sigue sin HTTP), muestra cuántas cambiaron, son nuevas o desaparecieron, y las escribe con `docs_write`. Las que desaparecen pasan a `status: deprecated`; nada se borra.
 - `/episteme:setup` añade `docs_status` al `allow`; `docs_write` sigue pidiendo permiso.
+- Plantillas de cuerpo para cada tipo de memoria (secciones `## …`, con «Nada.» en las vacías). `remember` avisa con `template_hint` cuando un cuerpo de 300 caracteres o más no trae las secciones de su tipo; nunca rechaza por formato. Ver «Plantillas» en `docs/tools.md`.
 
 ### Cambiado
 

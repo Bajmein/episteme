@@ -36,6 +36,7 @@ from episteme.memory.schema import (
     wikilink,
 )
 from episteme.memory.secrets import _reject_secrets
+from episteme.memory.templates import template_hint
 from episteme.vault import MEMORY, today
 
 if TYPE_CHECKING:
@@ -321,6 +322,17 @@ def _needs_links_hint(fm: dict[str, Any], body: str) -> bool:
     return not fm.get("related") and not fm.get("supersedes") and "[[" not in body
 
 
+def _body_hints(fm: dict[str, Any], text_body: str) -> dict[str, str]:
+    """Hints about the body: no links at all, or sections of the type's template missing."""
+    hints: dict[str, str] = {}
+    if _needs_links_hint(fm, text_body):
+        hints["links_hint"] = LINKS_HINT
+    template = template_hint(fm["type"], text_body)
+    if template:
+        hints["template_hint"] = template
+    return hints
+
+
 def _extras(engine: Engine, project: str, fm: dict[str, Any], skip: set[str]) -> dict[str, Any]:
     """Hints for the caller: tags no other note has and memories worth linking."""
     extras: dict[str, Any] = {}
@@ -474,8 +486,7 @@ def remember(
     if blocking is not None and not force:
         return _duplicate_reply(similar, blocking)
     extras = _extras(engine, project, fm, _skip_paths(engine, related, links))
-    if _needs_links_hint(fm, text_body):
-        extras["links_hint"] = LINKS_HINT
+    extras.update(_body_hints(fm, text_body))
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"
