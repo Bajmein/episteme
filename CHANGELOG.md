@@ -4,6 +4,12 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- Skill `/episteme:scaffold`: crea desde plantillas o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/` (`CONTRIBUTING.md`, `ESTILO.md`, plantilla de PR y `.gitmessage`), `.claude/rules/docs.md` y `.gitignore`, con los comandos del stack detectado. Con `auditar` es de solo lectura; nunca hace commits. Ofrece módulos locales: `reglas-python`, `serena-python`, `session-brief`, `doc-review` y `claude-local`.
+- Módulo `doc-review`: un hook de `SessionStart` que mide la actividad de git desde la marca `<!-- doc-review: … -->` de `README.md` y `CLAUDE.md` y pide a Claude revisarlos al cerrar la tarea cuando pasan del umbral.
+- `/episteme:setup` sugiere `/episteme:scaffold` al final si al proyecto le falta `README.md`, `CLAUDE.md` o `.github/CONTRIBUTING.md`.
+
 ## [0.13.2] - 2026-11-16
 
 ### Seguridad

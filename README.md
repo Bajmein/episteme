@@ -106,6 +106,7 @@ El plugin trae además estas skills:
 | `/episteme:pausa` | Guardar en qué estabas antes de `/clear` o de cerrar, y retomarlo después con `/episteme:pausa retomar` |
 | `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido. Con `corta` hace una ronda rápida de 3 casos; con `huerfanas`, enlaza las memorias que quedaron sueltas |
 | `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
+| `/episteme:scaffold` | Crear o revisar la base del proyecto: `README.md`, `CLAUDE.md`, `CHANGELOG.md`, las reglas para contribuir y el `.gitignore`. Con `auditar` solo revisa, sin cambiar nada. También avisa cuando el README o el `CLAUDE.md` llevan tiempo sin revisar |
 
 ### Opción B · A mano
 

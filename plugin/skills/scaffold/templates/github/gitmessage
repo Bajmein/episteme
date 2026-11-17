@@ -1,0 +1,12 @@
+
+# tipo(alcance): resumen en inglés, imperativo, sin punto final, máximo 72 caracteres
+#
+# Tipos: feat, fix, perf, refactor, docs, test, ci, build, chore
+# El alcance es opcional: el módulo o el área que cambia.
+#
+# Cuerpo (opcional, en inglés): qué cambia y por qué, no cómo. Nombra los
+# identificadores literales (funciones, archivos) para git log --grep y -S.
+# Referencias al final: "Closes #N" o "Part of #N".
+# Si el commit lo hace Claude, el trailer Co-Authored-By va en la última línea.
+#
+# Se activa en cada clon con: git config commit.template .github/.gitmessage

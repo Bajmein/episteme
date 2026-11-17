@@ -1,0 +1,28 @@
+# Serena project for {{proyecto}} (module serena-python of /episteme:scaffold).
+# Only the keys that differ from Serena's defaults; `serena project health-check .` validates it.
+project_name: "{{proyecto}}"
+language_servers: ["python_ty"]
+encoding: "utf-8"
+language_backend: "LSP"
+ignore_all_files_in_gitignore: true
+ls_specific_settings:
+  python_ty:
+    # The ty of the dev group, the same as `uv run ty check` (see ty-lsp.sh).
+    ls_path: ".serena/ty-lsp.sh"
+ls_workspace_folders: ["."]
+ignored_paths:
+- ".claude/worktrees/**"
+read_only: false
+included_optional_tools:
+- "restart_language_server"
+- "get_diagnostics_for_symbol"
+- "delete_lines"
+- "replace_lines"
+- "insert_at_line"
+# Project memory lives in episteme, not in Serena.
+added_modes:
+- "no-memories"
+initial_prompt: "You are working on {{proyecto}}: {{frase}}. Read the root `CLAUDE.md` before
+  editing; the per-module invariants are in `.claude/rules/`. Serena's memory tools are
+  disabled: project memory goes through the `mcp__episteme__*` tools. The language server is
+  the same ty as `uv run ty check`."
