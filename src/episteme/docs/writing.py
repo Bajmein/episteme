@@ -58,7 +58,8 @@ def _check_arguments(path: str | None, source: str | None, body: str | None) -> 
     if path is not None and not path.lower().endswith(".md"):
         raise invalid(f"path {path!r} must end in .md. Pass a path relative to the suite.")
     if body is not None and len(body.encode("utf-8")) > NOTE_MAX_BYTES:
-        raise invalid("body is over the 2 MB limit; episteme would not index it. Skip the page.")
+        limit = NOTE_MAX_BYTES // 1024 // 1024
+        raise invalid(f"body is over the {limit} MB limit; episteme would not index it. Skip it.")
 
 
 def _by_source(engine: Engine, zone: Zone, source: str) -> str | None:
@@ -72,10 +73,10 @@ def _by_source(engine: Engine, zone: Zone, source: str) -> str | None:
 
 def _inside(engine: Engine, zone: Zone, path: str) -> str:
     """``zone/path`` once it is checked to stay in this docs zone."""
-    inner = path.replace("\\", "/")
-    if PurePosixPath(inner).is_absolute():
+    pure = PurePosixPath(path.replace("\\", "/"))
+    if pure.is_absolute():
         raise EpistemeError(OUTSIDE_VAULT, f'"{path}" is absolute. Pass a path inside the suite.')
-    rel = f"{zone.path}/{inner}"
+    rel = f"{zone.path}/{pure.as_posix()}"  # PurePosixPath drops "./" and doubled slashes
     real = engine.vault.rel(engine.vault.resolve(rel))
     if not real.startswith(zone.path + "/"):
         raise EpistemeError(OUTSIDE_VAULT, f'"{path}" leaves {zone.path}. Pass a path inside it.')
@@ -143,10 +144,12 @@ def _merge(old: dict[str, Any], fields: dict[str, Any], source: str | None) -> d
     return fm
 
 
-def _check_unique_source(engine: Engine, zone: Zone, rel: str, fm: dict[str, Any]) -> None:
+def _check_unique_source(engine: Engine, zone: Zone, target: Target, fm: dict[str, Any]) -> None:
+    """``invalid_argument`` when a new or changed source already belongs to another note."""
     source = fm.get("source")
-    if not isinstance(source, str):
+    if not isinstance(source, str) or (target.fm or {}).get("source") == source:
         return
+    rel = target.rel
     other = _by_source(engine, zone, source)
     if other is not None and other != rel:
         raise invalid(f"source {source} is already used by {other}. Update that note instead.")
@@ -189,7 +192,7 @@ def docs_write(
     if created:
         fm = ordered(fm)
     validate(fm, target.rel, target.rel == manifest_path(zone))
-    _check_unique_source(engine, zone, target.rel, fm)
+    _check_unique_source(engine, zone, target, fm)
     _save(engine, target.rel, compose(fm, new_body if body_changed else old_body), created)
     return {"path": target.rel, "created": created, "changed": True, "hash": digest}
 

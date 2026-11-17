@@ -195,6 +195,23 @@ async def test_docs_write_rejects_bad_creations(suite: Path, args: dict, code: s
     assert not (suite / SUITE / "x.md").exists()
 
 
+async def test_docs_write_normalises_the_path(suite: Path) -> None:
+    async with mcp_client(suite) as c:
+        res = await c.ok(
+            "docs_write",
+            suite=SUITE,
+            path=".//tasks/./new.md",
+            source=f"{URL}/tasks/new.md",
+            fields=NEW_FIELDS,
+        )
+        bad = await c.error(
+            "docs_write", suite=SUITE, path="./README.index.md", fields={"suite": {}}
+        )
+
+    assert res["path"] == f"{SUITE}/tasks/new.md"
+    assert bad.startswith("invalid_schema:") and "suite" in bad
+
+
 async def test_docs_write_refuses_a_source_another_note_has(suite: Path) -> None:
     async with mcp_client(suite) as c:
         text = await c.error(

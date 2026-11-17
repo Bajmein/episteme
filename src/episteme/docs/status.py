@@ -6,15 +6,12 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from episteme.docs.hashing import body_hash, split_note
-from episteme.docs.schema import MANIFEST, is_url, manifest_errors, note_errors
+from episteme.docs.schema import MANIFEST, SUITE_KEYS, is_url, manifest_errors, note_errors
 from episteme.errors import AMBIGUOUS, NOT_FOUND, READ_ONLY_ZONE, EpistemeError, invalid
 from episteme.vault import Vault, Zone
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
-
-SUITE_FIELDS = ("upstream", "include", "context7", "synced")
-
 
 def find_zone(vault: Vault, suite: str) -> Zone:
     """The docs zone named by its path (``docs/mise``) or its last segment (``mise``)."""
@@ -70,17 +67,17 @@ def _manifest_fields(fm: dict[str, Any] | None) -> dict[str, Any]:
     suite = fm.get("suite") if fm else None
     if not isinstance(suite, dict):
         suite = {}
-    return {key: suite.get(key) for key in SUITE_FIELDS}
+    return {key: suite.get(key) for key in SUITE_KEYS}
 
 
-def _summary(engine: Engine, zone: Zone) -> dict[str, Any]:
-    notes = suite_notes(engine, zone)
+def _summary(zone: Zone, notes: dict[str, dict[str, Any] | None]) -> dict[str, Any]:
+    notes = dict(notes)
     manifest = notes.pop(manifest_path(zone), None)
     pages = [fm for fm in notes.values() if fm is not None]
     return {
         "suite": zone.path,
         "notes": len(notes),
-        "with_source": sum(1 for fm in pages if fm.get("source")),
+        "with_source": sum(1 for fm in pages if is_url(fm.get("source"))),
         "deprecated": sum(1 for fm in pages if fm.get("status") == "deprecated"),
         "invalid": sum(1 for fm in notes.values() if _is_invalid(fm)),
         "manifest_valid": manifest is not None and not manifest_errors(manifest),
@@ -99,9 +96,9 @@ def _page_line(engine: Engine, zone: Zone, rel: str, fm: dict[str, Any]) -> str 
     return f"{fm['source']}\t{digest}\t{inner}\t{fm.get('status', '')}"
 
 
-def _pages(engine: Engine, zone: Zone) -> str:
+def _pages(engine: Engine, zone: Zone, notes: dict[str, dict[str, Any] | None]) -> str:
     lines = []
-    for rel, fm in suite_notes(engine, zone).items():
+    for rel, fm in notes.items():
         if fm and is_url(fm.get("source")):
             line = _page_line(engine, zone, rel, fm)
             if line is not None:
@@ -114,9 +111,11 @@ def docs_status(engine: Engine, suite: str | None = None, pages: bool = False) -
     if suite is None:
         if pages:
             raise invalid("pages needs a suite. Pass suite, e.g. docs_status(suite=\"mise\").")
-        return {"suites": [_summary(engine, z) for z in engine.vault.docs_zones]}
+        zones = engine.vault.docs_zones
+        return {"suites": [_summary(z, suite_notes(engine, z)) for z in zones]}
     zone = find_zone(engine.vault, suite)
-    result = _summary(engine, zone)
+    notes = suite_notes(engine, zone)
+    result = _summary(zone, notes)
     if pages:
-        result["pages"] = _pages(engine, zone)
+        result["pages"] = _pages(engine, zone, notes)
     return result

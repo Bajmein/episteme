@@ -125,6 +125,21 @@ def test_suggested_path_drops_the_include_prefix(
     assert check.suggested_path(url, ["https://d.io/", "https://d.io/uv/"]) == expected
 
 
+def test_suggested_path_without_a_matching_prefix_drops_the_host(check: ModuleType) -> None:
+    assert check.suggested_path("https://d.io//guide/x/index.md", []) == "guide/x.md"
+
+
+def test_diff_reports_an_unreadable_upstream_index(
+    check: ModuleType, base: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(check, "RETRY_DELAY", 0)
+
+    report = check.diff([], tmp_path / "out", [f"{base}/docs/broken.md"], [])
+
+    assert report["errors"] == [{"source": f"{base}/docs/broken.md", "error": "HTTP 500"}]
+    assert report["new"] == []
+
+
 def test_fetch_refuses_other_schemes(check: ModuleType) -> None:
     result = check.fetch("file:///etc/passwd")
 

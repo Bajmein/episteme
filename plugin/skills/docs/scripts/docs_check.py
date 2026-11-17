@@ -158,19 +158,28 @@ def _save(out: Path, result: Fetched) -> str:
 
 def suggested_path(url: str, include: Iterable[str]) -> str:
     """The URL without its include prefix, with ``/index.md`` turned into ``.md``."""
-    clean = urllib.parse.urlsplit(url)._replace(query="", fragment="").geturl()
-    prefix = max((p for p in include if clean.startswith(p)), key=len, default="")
-    rest = clean.removeprefix(prefix).strip("/") or "index.md"
+    parts = urllib.parse.urlsplit(url)
+    clean = parts._replace(query="", fragment="").geturl()
+    prefix = max((p for p in include if clean.startswith(p)), key=len, default=None)
+    rest = clean.removeprefix(prefix) if prefix else parts.path  # no prefix: drop the host
+    rest = "/".join(p for p in rest.split("/") if p) or "index.md"
     if rest.endswith("/index.md"):
         rest = rest.removesuffix("/index.md") + ".md"
     return rest if rest.lower().endswith(".md") else rest + ".md"
 
 
-def upstream_urls(upstream: Iterable[str], include: list[str], known: set[str]) -> list[str]:
-    """URLs listed in the ``llms.txt`` indexes, under ``include`` and not in the suite yet."""
+def upstream_urls(
+    upstream: Iterable[str], include: list[str], known: set[str], report: dict
+) -> list[str]:
+    """URLs listed in the ``llms.txt`` indexes, under ``include`` and not in the suite yet.
+
+    An index that cannot be read goes to ``report["errors"]``, so the suite is not marked synced.
+    """
     found: dict[str, None] = {}
     for index in upstream:
         result = fetch(index)
+        if result.text is None:
+            report["errors"].append({"source": index, "error": result.error})
         for url in URL_RE.findall(result.text or ""):
             url = url.rstrip(".,;:")
             if url in known or url in upstream:
@@ -215,7 +224,7 @@ def diff(pages: list[Page], out: Path, upstream: list[str], include: list[str]) 
     """Download the suite pages and the new ones in its upstream indexes; classify them."""
     out.mkdir(parents=True, exist_ok=True)
     report: dict = {"changed": [], "unchanged": 0, "gone": [], "new": [], "errors": []}
-    new = upstream_urls(upstream, include, {p.source for p in pages})
+    new = upstream_urls(upstream, include, {p.source for p in pages}, report)
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for page, result in zip(pages, pool.map(fetch, [p.source for p in pages]), strict=True):
             _classify(page, result, out, report)
