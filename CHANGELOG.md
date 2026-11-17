@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Seguridad
+
+- `checkpoint` (save) rechaza con `invalid` los patrones de `files` que casan con todo (`*`, `**`, `**/*`, `*.*`) copiados del `estado.md`, igual que `remember` y `revise`.
+
 ## [0.13.1] - 2026-11-16
 
 ### Cambiado

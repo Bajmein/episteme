@@ -19,7 +19,7 @@ from episteme.markdown import (
     section_text,
     slugify,
 )
-from episteme.memory import NoteFile, find_secrets, ordered, validate
+from episteme.memory import NoteFile, check_files, find_secrets, ordered, validate
 from episteme.vault import today
 
 if TYPE_CHECKING:
@@ -213,6 +213,7 @@ def save(engine: Engine, project_dir: str | None, project: str | None) -> dict[s
     if project_dir:  # without it the base is the server's cwd, which says nothing of the session
         meta["worktree"] = _project_dir(project_dir).as_posix()
     meta.update({key: fm[key] for key in COPIED_KEYS if key in fm and key not in meta})
+    check_files(meta.get("files"))
     _reject_secrets_in(meta, body)
     validate(meta)
     rel = f"{zone.path}/{project}/sessions/checkpoint-{slugify(title)}.md"

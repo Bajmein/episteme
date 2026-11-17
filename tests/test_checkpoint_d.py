@@ -119,3 +119,30 @@ async def test_restore_notice_has_no_control_characters(vault: Path, project_dir
     notice = json.loads(hook[1])["systemMessage"]
     assert "\x1b]0;" not in notice and "\x07" not in notice and "\x1b[2J" not in notice
     assert "pwn" not in notice and "«001  demo»" in notice
+
+
+def _state_with_files(project_dir: Path, files: str) -> None:
+    state = project_dir / ".fabrik" / "core" / "001-demo" / "estado.md"
+    text = state.read_text(encoding="utf-8")
+    patched = text.replace("etapa: build\n", f"etapa: build\nfiles: [{files}]\n", 1)
+    state.write_text(patched, encoding="utf-8")
+
+
+async def test_save_rejects_a_files_entry_that_matches_everything(
+    vault: Path, project_dir: Path
+) -> None:
+    _state_with_files(project_dir, '"**"')
+
+    async with mcp_client(vault) as c:
+        msg = await c.error("checkpoint", action="save", project_dir=str(project_dir))
+
+    assert msg.startswith("invalid") and "matches every file" in msg
+
+
+async def test_save_keeps_a_narrow_files_pattern(vault: Path, project_dir: Path) -> None:
+    _state_with_files(project_dir, '"src/**/*.py"')
+
+    async with mcp_client(vault) as c:
+        saved = await c.ok("checkpoint", action="save", project_dir=str(project_dir))
+
+    assert saved["saved"] is True
