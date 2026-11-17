@@ -104,9 +104,34 @@ def _saved_at(engine: Engine, rel: str) -> str:
     return str(value) if value else ""
 
 
+def _in_session_zone(engine: Engine, rel: str) -> bool:
+    """True when ``rel`` and the path it really resolves to are in a session zone.
+
+    A symlink in ``sesiones/`` that points at a memory or a docs note is not a state.
+    """
+    try:
+        return engine.vault.check_writable(rel) == SESSION
+    except EpistemeError:
+        return False
+
+
+def _require_session_zone(engine: Engine, rel: str) -> None:
+    """Refuse to write ``rel`` unless its real path is in a session zone."""
+    if not _in_session_zone(engine, rel):
+        raise invalid(
+            f"{rel} does not resolve to a note in a session zone. Remove the link or pass "
+            "the path of a session state."
+        )
+
+
 def _is_active_state(engine: Engine, rel: str) -> bool:
     row = engine.index.note(rel)
-    return row is not None and row["mode"] == SESSION and row["status"] == ACTIVE
+    return (
+        row is not None
+        and row["mode"] == SESSION
+        and row["status"] == ACTIVE
+        and _in_session_zone(engine, rel)
+    )
 
 
 def current(engine: Engine, project: str, project_dir: str | None) -> str | None:
@@ -119,7 +144,7 @@ def current(engine: Engine, project: str, project_dir: str | None) -> str | None
     rows = [
         r
         for r in _active_rows(engine, project)
-        if not here or _same_worktree(engine, r, here)
+        if (not here or _same_worktree(engine, r, here)) and _in_session_zone(engine, r["path"])
     ]
     if not rows:
         return None
@@ -150,6 +175,7 @@ def _read(engine: Engine, rel: str) -> tuple[dict[str, Any], str]:
 
 
 def _write(engine: Engine, rel: str, meta: dict[str, Any], body: str) -> None:
+    _require_session_zone(engine, rel)
     engine.vault.write_atomic(rel, compose(meta, body))
     engine.index.reindex(rel)
 
@@ -248,6 +274,7 @@ def _store(engine: Engine, rel: str | None, fresh: dict[str, Any], text: str) ->
     if rel is None:
         rel = _create(engine, fresh["project"], fresh["task_title"], text)
     else:
+        _require_session_zone(engine, rel)
         engine.vault.write_atomic(rel, text)
     engine.index.reindex(rel)
     return rel
@@ -334,7 +361,11 @@ def has_active(engine: Engine) -> bool:
 def rotate(engine: Engine, archive_days: int) -> list[str]:
     """Archive the active states whose ``saved_at`` is more than ``archive_days`` days old."""
     cutoff = today() - dt.timedelta(days=archive_days)
-    stale = [r["path"] for r in _active_rows(engine) if _saved_before(engine, r["path"], cutoff)]
+    stale = [
+        r["path"]
+        for r in _active_rows(engine)
+        if _in_session_zone(engine, r["path"]) and _saved_before(engine, r["path"], cutoff)
+    ]
     return [rel for rel in stale if archive(engine, rel)]
 
 

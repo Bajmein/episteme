@@ -294,3 +294,26 @@ def test_bad_session_config_stops_startup(vault: Path, extra: str, needle: str) 
 
     with pytest.raises(StartupError, match=needle):
         load_config(vault)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+async def test_a_link_from_the_session_zone_to_a_memory_is_never_a_state(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-01") as c:
+        memory = await c.ok(
+            "remember", type="session", title="Pausa enlazada", body="Cuerpo de la pausa."
+        )
+    before = (vault / memory["path"]).read_text(encoding="utf-8")
+    link = vault / "sesiones/fabrik/zz-link.md"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(vault / memory["path"])
+
+    async with mcp_client(vault, today="2026-10-09") as c:
+        await c.ok("context", mode="welcome", session="s1")
+        shown = await c.ok("session", action="show")
+        saved = await c.ok("session", action="save", title="Nuevo", body=BODY)
+        archived = await c.error("session", action="archive", note="sesiones/fabrik/zz-link.md")
+
+    assert shown["found"] is False
+    assert saved["created"] is True and saved["path"] != "sesiones/fabrik/zz-link.md"
+    assert "session zone" in archived
+    assert (vault / memory["path"]).read_text(encoding="utf-8") == before

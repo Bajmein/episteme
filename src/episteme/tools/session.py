@@ -83,7 +83,8 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         worktree (project_dir).
         save: create or rewrite the whole state. Target: note, else the current state, else a
         new one (needs title); to start another line of work, archive the current state
-        first. body replaces the body (a leading "# title" line is dropped);
+        first. A note that was archived becomes active again. body replaces the body (a
+        leading "# title" line is dropped);
         a credential in title, body, files or session is refused (invalid_argument). Returns
         {"path", "created", "missing_sections"} plus "template_hint" when a long body lacks
         template sections; it never refuses for format.
