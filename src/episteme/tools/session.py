@@ -84,7 +84,7 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         save: create or rewrite the whole state. Target: note, else the current state, else a
         new one (needs title); to start another line of work, archive the current state
         first. body replaces the body (a leading "# title" line is dropped);
-        a credential in title, body or files is refused (invalid_argument). Returns
+        a credential in title, body, files or session is refused (invalid_argument). Returns
         {"path", "created", "missing_sections"} plus "template_hint" when a long body lacks
         template sections; it never refuses for format.
         show: {"found", "path", "task_title", "saved_at", "content"}. Never writes.
@@ -101,18 +101,22 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
             raise invalid(f'action must be one of {", ".join(ACTIONS)}, got "{action}".')
         if action == "template":
             return dump(sessions.template(type))
+        save = sessions.SaveArgs(title, body, note, files, origin, session)
         with engine.session():
-            args = _Args(engine, project, project_dir)
-            if action == "save":
-                save = sessions.SaveArgs(title, body, note, files, origin, session)
-                return dump(sessions.save(engine, args.project, project_dir, save))
-            if action == "show":
-                return dump(sessions.show(engine, args.project, project_dir))
-            if action == "restore":
-                return _restore(args, hook_event)
-            if action == "archive":
-                return dump(_archive(args, note))
-        raise invalid(f'action must be one of {", ".join(ACTIONS)}, got "{action}".')
+            return _run(_Args(engine, project, project_dir), action, save, hook_event)
+
+
+def _run(args: _Args, action: str, save: sessions.SaveArgs, hook_event: str | None) -> str:
+    """Run a save, show, restore or archive action. Call it inside engine.session()."""
+    match action:
+        case "save":
+            return dump(sessions.save(args.engine, args.project, args.project_dir, save))
+        case "show":
+            return dump(sessions.show(args.engine, args.project, args.project_dir))
+        case "restore":
+            return _restore(args, hook_event)
+        case _:
+            return dump(_archive(args, save.note))
 
 
 def _restore(args: _Args, hook_event: str | None) -> str:
