@@ -91,6 +91,20 @@ def test_notice_is_a_coloured_system_message_on_session_start(
     assert json.loads(hookmode.render("SessionStart", "", "plano"))["systemMessage"] == "plano"
 
 
+@pytest.mark.parametrize("event", ["PreCompact", "PostCompact", "SessionEnd"])
+def test_silent_events_render_nothing(event: str) -> None:
+    hookmode.check(event)
+
+    assert hookmode.render(event, "ctx", "aviso") == ""
+
+
+def test_render_block_is_a_decision_with_a_clean_reason() -> None:
+    out = json.loads(hookmode.render_block("no se guarda\x1b[31m\ndesde hace 5"))
+
+    assert set(out) == {"decision", "reason"} and out["decision"] == "block"
+    assert "\x1b" not in out["reason"] and "\n" not in out["reason"]
+
+
 def test_notice_drops_control_characters_from_note_data(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NO_COLOR", "1")
     hostile = "tarea\x1b]0;pwn\x07\x1b[2J\x9b31m\nsegunda\x00línea"

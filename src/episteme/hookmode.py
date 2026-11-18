@@ -1,4 +1,5 @@
-"""Output format per ``hook_event``: a hookSpecificOutput JSON object, or nothing for PreCompact."""
+"""Output format per ``hook_event``: a hookSpecificOutput JSON object, or nothing for the
+silent events (PreCompact, PostCompact, SessionEnd)."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from episteme.errors import invalid
 from episteme.markdown import clip_at_newline
 
 CONTEXT_EVENTS = ("UserPromptSubmit", "SessionStart", "PreToolUse", "PostToolUse")
-SILENT_EVENTS = ("PreCompact",)
+SILENT_EVENTS = ("PreCompact", "PostCompact", "SessionEnd")
 EVENTS = CONTEXT_EVENTS + SILENT_EVENTS
 NOTICE_EVENTS = ("SessionStart",)
 NOTICE_STYLE = "\x1b[1;32m"
@@ -63,6 +64,16 @@ def paint(text: str) -> str:
     if os.environ.get("NO_COLOR"):
         return text
     return f"{NOTICE_STYLE}{text}{NOTICE_RESET}"
+
+
+def render_block(reason: str) -> str:
+    """The one output with ``decision``: block a manual ``/compact`` once, saying why.
+
+    Only ``session(action="gate")`` uses it, on ``PreCompact``; Claude Code shows the reason
+    to the person.
+    """
+    out = {"decision": "block", "reason": clean_line(reason, NOTICE_MAX)}
+    return json.dumps(out, ensure_ascii=False)
 
 
 def render(event: str, text: str, notice: str = "") -> str:

@@ -26,6 +26,7 @@ episteme is the project memory and documentation vault. Use only these tools; ne
 - Before deciding something that may already have been decided, call search, then read the best hit.
 - Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact from another source because the vault did not have it; or the user says "remember". Name the files, tools, commands and people involved in the body: that is what is searched later. Save project knowledge with remember, not in Claude Code's auto memory (MEMORY.md).
 - When a memory is wrong or replaced, call revise (action="supersede" or "archive"), never remember a contradiction next to it.
+- Keep the session state current with session(action="save"), following its template: when a plan is agreed, a phase ends, the approach changes, before a risky step, and when the user asks. If a hook asks you to launch the episteme:extractor agent, launch it in the background.
 - Notes under read-only zones (docs/claude-code) cannot be changed. docs/ suites change only via /episteme:docs. Errors say what failed and what to do."""  # noqa: E501
 
 
@@ -89,8 +90,11 @@ def _track_docs_write(name: str, text: str) -> None:
 
 
 def _track_session_save(name: str, arguments: dict[str, Any], text: str) -> None:
-    """A ``session`` save joins the trail as written; it is not a memory write."""
+    """A ``session`` save joins the trail as written and counts in ``STATE_SAVES`` when the
+    agent made it; it is not a memory write."""
     if name == "session" and arguments.get("action") == "save":
+        if "hook_event" not in arguments:
+            prompting.STATE_SAVES += 1
         for path in _result_paths(text):
             prompting.track(path, "written")
 

@@ -9,7 +9,9 @@
       "mcp__episteme__context",
       "mcp__episteme__surface",
       "mcp__episteme__constraints",
-      "mcp__episteme__docs_status"
+      "mcp__episteme__docs_status",
+      "mcp__episteme__session",
+      "Bash(uv run --no-project --python 3.14 python -I <SESION_SCRIPT> *)"
     ],
     "deny": [
       "Read(~/.episteme/**)",
@@ -79,10 +81,48 @@
           {
             "type": "mcp_tool",
             "server": "episteme",
-            "tool": "checkpoint",
+            "tool": "session",
             "input": {
-              "action": "save",
+              "action": "gate",
+              "trigger": "${trigger}",
+              "session": "${session_id}",
               "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "session",
+            "input": {
+              "action": "capture",
+              "summary": "${compact_summary}",
+              "session": "${session_id}",
+              "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "session",
+            "input": {
+              "action": "end",
+              "transcript": "${transcript_path}",
+              "reason": "${reason}",
               "hook_event": "${hook_event_name}"
             }
           }
@@ -96,9 +136,12 @@
           {
             "type": "mcp_tool",
             "server": "episteme",
-            "tool": "checkpoint",
+            "tool": "session",
             "input": {
               "action": "restore",
+              "source": "${source}",
+              "transcript": "${transcript_path}",
+              "session": "${session_id}",
               "project_dir": "${cwd}",
               "hook_event": "${hook_event_name}"
             }

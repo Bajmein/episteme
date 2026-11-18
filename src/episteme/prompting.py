@@ -31,6 +31,11 @@ RECALL_MIN_HIT_TERMS = 2  # terms a memory must hold, unless the message has few
 RECALL_FEW_TERMS = 3
 
 WRITES: int = 0  # memories written in this process by agent calls (remember, revise); see server
+STATE_SAVES: int = 0  # session states saved in this process by agent calls; see server
+
+NUDGE_STATE_EVERY = 12  # messages without saving the session state before the nudge
+GATE_MIN_PROMPTS = 5  # messages a session needs before a manual /compact can be blocked
+GATE_STALE = 5  # messages since the last state save that make the state stale for the gate
 
 
 @dataclass
@@ -41,6 +46,10 @@ class SessionState:
     baseline: int | None = None
     delivered: set[str] = field(default_factory=set)
     surfaced: set[str] = field(default_factory=set)
+    state_baseline: int | None = None
+    state_saved_at: int = 0
+    state_nudged_at: int = 0
+    gate_blocked_at: int | None = None
 
 
 _SESSIONS: dict[str, SessionState] = {}
@@ -334,3 +343,26 @@ def nudge(st: SessionState) -> str:
             "una decisión, se acordó un plan o la persona corrigió algo, guárdalo con remember."
         )
     return ""
+
+
+def sync_state_saves(st: SessionState) -> None:
+    """Mark the state as saved now when ``STATE_SAVES`` moved since the session last looked.
+
+    Agent calls carry no session id, so a save is seen through the process counter, like
+    ``WRITES`` with ``baseline``.
+    """
+    if st.state_baseline != STATE_SAVES:
+        st.state_baseline = STATE_SAVES
+        st.state_saved_at = st.prompts
+
+
+def state_nudge(st: SessionState, every: int = NUDGE_STATE_EVERY) -> str:
+    """A reminder to update the session state after ``every`` messages without saving it."""
+    stale = st.prompts - st.state_saved_at
+    if stale < every or st.prompts - st.state_nudged_at < every:
+        return ""
+    st.state_nudged_at = st.prompts
+    return (
+        f"episteme · el estado de la sesión no se actualiza desde hace {stale} mensajes: si hubo "
+        'avances, actualízalo con session(action="save") siguiendo la plantilla.'
+    )

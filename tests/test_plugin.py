@@ -44,11 +44,11 @@ def test_marketplace_points_to_plugin_dir_without_version() -> None:
 
 def test_skill_folders() -> None:
     folders = {p.name for p in SKILLS.iterdir() if p.is_dir()}
-    assert folders == {"setup", "pausa", "mantencion", "reminder", "scaffold", "docs"}
+    assert folders == {"setup", "sesion", "mantencion", "reminder", "scaffold", "docs"}
 
 
 @pytest.mark.parametrize(
-    "skill", ["setup", "pausa", "mantencion", "reminder", "scaffold", "docs"]
+    "skill", ["setup", "sesion", "mantencion", "reminder", "scaffold", "docs"]
 )
 def test_skill_frontmatter_name_matches_folder(skill: str) -> None:
     meta = _frontmatter(SKILLS / skill / "SKILL.md")
@@ -76,3 +76,53 @@ def test_setup_allows_docs_status_but_not_docs_write() -> None:
 
     assert "mcp__episteme__docs_status" in allow
     assert "mcp__episteme__docs_write" not in allow
+
+
+def test_extractor_agent_frontmatter() -> None:
+    meta = _frontmatter(PLUGIN / "agents" / "extractor.md")
+
+    assert meta["name"] == "extractor" and meta["model"] == "sonnet"
+    assert meta["effort"] == "low" and meta["background"] is True
+    assert "mcp__episteme__session" in meta["tools"]
+    assert "transcript_digest.py" in (PLUGIN / "agents" / "extractor.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def _hook(settings: dict, event: str) -> list[dict]:
+    return [h for entry in settings["hooks"][event] for h in entry["hooks"]]
+
+
+def test_setup_hooks_drive_the_session_state_without_checkpoint() -> None:
+    settings = _json(SKILLS / "setup" / "settings.json")
+
+    [gate] = _hook(settings, "PreCompact")
+    [capture] = _hook(settings, "PostCompact")
+    [end] = _hook(settings, "SessionEnd")
+    restore, welcome = _hook(settings, "SessionStart")
+    assert gate["input"]["action"] == "gate" and gate["input"]["trigger"] == "${trigger}"
+    assert capture["input"]["summary"] == "${compact_summary}"
+    assert end["input"]["transcript"] == "${transcript_path}"
+    assert settings["hooks"]["SessionEnd"][0]["matcher"] == "clear"
+    assert restore["input"]["action"] == "restore" and restore["input"]["source"] == "${source}"
+    assert welcome["tool"] == "context"
+    tools = {h["tool"] for event in settings["hooks"] for h in _hook(settings, event)}
+    assert "checkpoint" not in tools
+
+
+def test_setup_allows_session_and_only_the_digest_script() -> None:
+    allow = _json(SKILLS / "setup" / "settings.json")["permissions"]["allow"]
+    bash = [rule for rule in allow if rule.startswith("Bash(")]
+
+    assert "mcp__episteme__session" in allow and "mcp__episteme__remember" not in allow
+    assert bash == ["Bash(uv run --no-project --python 3.14 python -I <SESION_SCRIPT> *)"]
+    before_path = bash[0].split("<SESION_SCRIPT>")[0]
+    assert "*" not in before_path
+
+
+def test_setup_writes_the_absolute_script_path_and_asks_to_rerun_it() -> None:
+    text = (SKILLS / "setup" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "<SESION_SCRIPT>" in text
+    assert "${CLAUDE_SKILL_DIR}/../sesion/scripts/transcript_digest.py" in text
+    assert "volver a correr `/episteme:setup`" in text

@@ -3,15 +3,22 @@ template."""
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from episteme import checkpoint
 from episteme.errors import invalid
 from episteme.memory import TEMPLATES
 from episteme.session import store
+from episteme.session.capture import take_transcript
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
+
+# The saved_at that session writes (store.now()); anything else, e.g. edited by hand, never
+# reaches the extractor's command line.
+_SAVED_AT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+SINCE_ALL = "inicio"
 
 DEPRECATED = (
     "checkpoint and [checkpoint] state_glob are deprecated and will be removed in the next "
@@ -34,12 +41,21 @@ def _fallback(engine: Engine, project: str, project_dir: str | None) -> dict[str
     return {**data, "saved_at": None, "deprecated": DEPRECATED}
 
 
-def restore(engine: Engine, project: str, project_dir: str | None) -> dict[str, Any]:
-    """The state in use as context, made current; else the checkpoint (deprecated), if any.
+def extraction_order(project: str, transcript: str, state: dict[str, Any]) -> str:
+    """The line that asks the agent to launch the extractor on ``transcript``."""
+    managed = state.get("source") == "session"
+    saved = str(state.get("saved_at") or "") if managed else ""
+    since = saved if _SAVED_AT.fullmatch(saved) else SINCE_ALL
+    target = state["path"] if managed else "nuevo"
+    return (
+        "episteme · extracción pendiente: lanza en segundo plano el agente episteme:extractor "
+        f"con este encargo y sigue sin esperarlo: desde={since} estado={target} "
+        f"proyecto={project} transcript={transcript}"
+    )
 
-    Returns {"found", "path", "task_title", "saved_at", "content", "source"}; source is
-    "session", "state" or "checkpoint" (the last two add "deprecated"), or None.
-    """
+
+def _state(engine: Engine, project: str, project_dir: str | None) -> dict[str, Any]:
+    """The state in use as context, made current; else the checkpoint (deprecated), if any."""
     data = store.show(engine, project, project_dir)
     if data["found"]:
         store.mark_current(engine, project, project_dir, data["path"])
@@ -48,6 +64,28 @@ def restore(engine: Engine, project: str, project_dir: str | None) -> dict[str, 
     if engine.vault.config.state_glob:
         return _fallback(engine, project, project_dir)
     return {**data, "source": None}
+
+
+# @CodeScene(disable:"Excess Number of Function Arguments")
+def restore(
+    engine: Engine,
+    project: str,
+    project_dir: str | None,
+    source: str | None = None,
+    transcript: str | None = None,
+) -> dict[str, Any]:
+    """The state in use as context, made current; else the checkpoint (deprecated), if any.
+
+    Returns {"found", "path", "task_title", "saved_at", "content", "source"}; source is
+    "session", "state" or "checkpoint" (the last two add "deprecated"), or None. After a
+    compact or clear (``source``) with ``[session] extract`` and a known transcript, it adds
+    "extract": the order to launch the extractor.
+    """
+    data = _state(engine, project, project_dir)
+    path = take_transcript(source, transcript)
+    if path is None or not engine.vault.config.session.extract:
+        return data
+    return {**data, "extract": extraction_order(project, path, data)}
 
 
 def template(type: str | None) -> dict[str, Any]:

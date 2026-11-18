@@ -7,7 +7,7 @@
       "name": "episteme",
       "source": "./plugin",
       "license": "MIT",
-      "description": "Skills de episteme: conectar un proyecto, pausar y retomar una tarea, mantención de memorias, recordatorios y scaffolding (README, CLAUDE.md, CHANGELOG, .github y reglas)."
+      "description": "Skills y agente de episteme: conectar un proyecto, guardar y retomar el estado de la sesión (con un extractor tras /compact o /clear), mantención de memorias, recordatorios y scaffolding (README, CLAUDE.md, CHANGELOG, .github y reglas)."
     }
   ]
 }

@@ -314,6 +314,7 @@ def _turn(call: _Call, project: str) -> _Turn:
         st.baseline = prompting.WRITES
     if not resend:
         st.prompts += 1
+    prompting.sync_state_saves(st)
     welcomed = fresh or resend
     if welcomed:
         st.reminded_at = st.prompts
@@ -341,6 +342,8 @@ def _welcome(call: _Call, prompt: str | None, source: str | None) -> str:
         out.add(*prompting.recall(engine, prompt, project, st, out.paths()))
     if not welcomed:
         out.blocks.append(prompting.nudge(st))
+        every = engine.vault.config.session.nudge_every
+        out.blocks.append(prompting.state_nudge(st, every))
     notice = _trail_block(engine, st, out, source) if resend else ""
     text = "\n\n".join(b for b in out.blocks if b)
     if hook_event:
