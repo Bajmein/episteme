@@ -87,6 +87,8 @@ El agente lanza el subagente `episteme:extractor` (del plugin, Sonnet con esfuer
 - El extractor cuesta tokens de Sonnet en cada `/compact` y `/clear`.
 - El bloqueo es solo del `/compact` manual y una vez por mensaje.
 - El extractor corre en segundo plano y no puede pedir permiso: `/episteme:setup` deja en `allow` el tool `session` y el script, pero no `remember`. Si nadie aprueba `remember`, guarda solo el estado y lo dice.
+- El permiso del script lleva su ruta absoluta en la caché del plugin, que cambia con cada versión: **tras actualizar el plugin, vuelve a correr `/episteme:setup`**. Si no, el extractor no puede correr el script y lo dice en su respuesta.
+- `desde` solo lleva un `saved_at` con el formato que escribe `session` (`AAAA-MM-DDTHH:MM:SS`); si alguien lo editó a mano con otra cosa, la orden dice `desde=inicio`.
 - El contador de mensajes es del proceso: si el servidor se reinicia, el aviso y el bloqueo empiezan de cero.
 
 ## La plantilla

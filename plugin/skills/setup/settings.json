@@ -11,7 +11,7 @@
       "mcp__episteme__constraints",
       "mcp__episteme__docs_status",
       "mcp__episteme__session",
-      "Bash(uv run --no-project --python 3.14 python -I */skills/sesion/scripts/transcript_digest.py *)"
+      "Bash(uv run --no-project --python 3.14 python -I <SESION_SCRIPT> *)"
     ],
     "deny": [
       "Read(~/.episteme/**)",

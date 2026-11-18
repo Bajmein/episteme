@@ -115,7 +115,14 @@ def test_setup_allows_session_and_only_the_digest_script() -> None:
     bash = [rule for rule in allow if rule.startswith("Bash(")]
 
     assert "mcp__episteme__session" in allow and "mcp__episteme__remember" not in allow
-    assert bash == [
-        "Bash(uv run --no-project --python 3.14 python -I "
-        "*/skills/sesion/scripts/transcript_digest.py *)"
-    ]
+    assert bash == ["Bash(uv run --no-project --python 3.14 python -I <SESION_SCRIPT> *)"]
+    before_path = bash[0].split("<SESION_SCRIPT>")[0]
+    assert "*" not in before_path
+
+
+def test_setup_writes_the_absolute_script_path_and_asks_to_rerun_it() -> None:
+    text = (SKILLS / "setup" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "<SESION_SCRIPT>" in text
+    assert "${CLAUDE_SKILL_DIR}/../sesion/scripts/transcript_digest.py" in text
+    assert "volver a correr `/episteme:setup`" in text

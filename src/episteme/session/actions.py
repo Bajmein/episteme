@@ -3,6 +3,7 @@ template."""
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from episteme import checkpoint
@@ -13,6 +14,11 @@ from episteme.session.capture import take_transcript
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
+
+# The saved_at that session writes (store.now()); anything else, e.g. edited by hand, never
+# reaches the extractor's command line.
+_SAVED_AT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+SINCE_ALL = "inicio"
 
 DEPRECATED = (
     "checkpoint and [checkpoint] state_glob are deprecated and will be removed in the next "
@@ -38,7 +44,8 @@ def _fallback(engine: Engine, project: str, project_dir: str | None) -> dict[str
 def extraction_order(project: str, transcript: str, state: dict[str, Any]) -> str:
     """The line that asks the agent to launch the extractor on ``transcript``."""
     managed = state.get("source") == "session"
-    since = (state.get("saved_at") if managed else None) or "inicio"
+    saved = str(state.get("saved_at") or "") if managed else ""
+    since = saved if _SAVED_AT.fullmatch(saved) else SINCE_ALL
     target = state["path"] if managed else "nuevo"
     return (
         "episteme · extracción pendiente: lanza en segundo plano el agente episteme:extractor "
@@ -59,6 +66,7 @@ def _state(engine: Engine, project: str, project_dir: str | None) -> dict[str, A
     return {**data, "source": None}
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def restore(
     engine: Engine,
     project: str,

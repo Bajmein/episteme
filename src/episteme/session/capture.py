@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from episteme import hookmode
 from episteme.markdown import compose
 from episteme.memory import redact_secrets
 from episteme.session import store
@@ -116,7 +117,9 @@ def transcript_path(transcript: str | None) -> str | None:
 
 
 def _is_safe_path(raw: str) -> bool:
-    fits = raw.endswith(".jsonl") and len(raw) <= PATH_MAX
+    """A ``.jsonl`` that ``clean_line`` leaves as is (no control, bidi or line-separator
+    characters) and with no shell metacharacters."""
+    fits = raw.endswith(".jsonl") and hookmode.clean_line(raw, PATH_MAX) == raw
     return fits and _UNSAFE_PATH.search(raw) is None
 
 

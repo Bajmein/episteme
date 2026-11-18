@@ -177,8 +177,17 @@ def checked_path(raw: str) -> Path | None:
 
 
 def _is_transcript(real: Path) -> bool:
-    under_projects = "projects" in real.parent.parts
-    return real.suffix == ".jsonl" and under_projects and real.is_file()
+    return real.suffix == ".jsonl" and _under_claude_projects(real) and real.is_file()
+
+
+def _under_claude_projects(real: Path) -> bool:
+    """True when some ancestor is ``projects`` inside a ``.claude*`` folder (the config dir)."""
+    parts = real.parent.parts
+    return any(
+        part == "projects" and parts[i - 1].startswith(".claude")
+        for i, part in enumerate(parts)
+        if i > 0
+    )
 
 
 def _since(value: str) -> dt.datetime | None:
@@ -196,9 +205,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--since", default=SINCE_ALL)
     parser.add_argument("--max-chars", type=int, default=DEFAULT_MAX_CHARS)
     args = parser.parse_args(argv)
+    # -I ignores PYTHONIOENCODING, and a Windows console may be cp1252: never fail on a "→".
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(encoding="utf-8", errors="replace")
     path = checked_path(args.transcript)
     if path is None:
-        print("transcript must be a .jsonl file under a projects folder", file=sys.stderr)
+        print("transcript must be a .jsonl file under a .claude*/projects folder", file=sys.stderr)
         return 2
     items, first, last = digest(path, _since(args.since))
     if not items:
