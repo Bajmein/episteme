@@ -64,6 +64,7 @@ def session_id(value: str | None) -> str | None:
     return value if _SESSION_ID.fullmatch(value) else None
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def _new_state(
     engine: Engine, project: str, project_dir: str | None, section: str, sid: str | None
 ) -> str:
@@ -77,6 +78,7 @@ def _new_state(
     return store._store(engine, None, fresh, compose(meta, f"# {title}\n\n{section}"))
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def capture(
     engine: Engine,
     project: str,

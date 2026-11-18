@@ -94,6 +94,7 @@ def test_digest_clips_long_messages(digest: dict[str, Any]) -> None:
     ("since", "first"),
     [("2026-11-18T10:00:30+00:00", "Sigue con los tests"), ("inicio", "Arregla el bug")],
 )
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def test_digest_window_since(
     tmp_path: Path,
     digest: dict[str, Any],

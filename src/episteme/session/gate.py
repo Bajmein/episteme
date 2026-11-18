@@ -25,6 +25,7 @@ def _can_block(engine: Engine, trigger: str | None) -> bool:
     return trigger == "manual" and engine.vault.config.session.block_manual_compact
 
 
+# @CodeScene(disable:"Excess Number of Function Arguments")
 def gate(
     engine: Engine,
     project: str,
