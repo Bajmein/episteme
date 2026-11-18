@@ -17,6 +17,7 @@ from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError
 from episteme.tools import docs, hooks, memories, reading
+from episteme.tools import session as session_tool
 
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.
@@ -87,6 +88,13 @@ def _track_docs_write(name: str, text: str) -> None:
             prompting.track(path, "written")
 
 
+def _track_session_save(name: str, arguments: dict[str, Any], text: str) -> None:
+    """A ``session`` save joins the trail as written; it is not a memory write."""
+    if name == "session" and arguments.get("action") == "save":
+        for path in _result_paths(text):
+            prompting.track(path, "written")
+
+
 def _track_result(name: str, arguments: dict[str, Any], text: str) -> None:
     """Count writes and track the notes written or read by a successful tool call."""
     if name in ("remember", "revise") and "hook_event" not in arguments:
@@ -119,6 +127,7 @@ class EpistemeServer(MCPServer):
         text = _result_text(result)
         _track_result(name, arguments, text)
         _track_docs_write(name, text)
+        _track_session_save(name, arguments, text)
         self._log(name, arguments, text, start, True)
         return result
 
@@ -138,4 +147,5 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     memories.register(server, engine)
     hooks.register(server, engine, store)
     docs.register(server, engine)
+    session_tool.register(server, engine)
     return server

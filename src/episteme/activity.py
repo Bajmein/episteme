@@ -24,6 +24,7 @@ BUSY_TIMEOUT_MS = 5000
 ARG_KEYS = (
     "mode", "action", "type", "path", "note", "notes", "file", "relative_path", "query",
     "tags", "status", "zone", "heading", "lines", "limit", "match", "title", "task",
+    "trigger", "source", "reason", "origin",
 )  # fmt: skip
 _MD_IN_PARENS = re.compile(r"\(([^()\s]+\.md)\)")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, NamedTuple
 
 from episteme.index.text import _fts_term, _like_prefix, normalize_tag, query_terms
-from episteme.vault import MEMORY
+from episteme.vault import MEMORY, SESSION
 
 type Filter = tuple[str, list[Any]]
 
@@ -35,10 +35,13 @@ def _project_filter(project: str | list[str]) -> Filter:
 
 
 def _status_filter(status: str | None) -> Filter | None:
-    """By default superseded and archived memories are hidden; ``any`` shows every status."""
+    """By default superseded and archived memories and session states are hidden; ``any``
+    shows every status."""
     if status is None:
-        clause = "not (n.mode = ? and coalesce(n.status, '') in ('superseded', 'archived'))"
-        return clause, [MEMORY]
+        clause = (
+            "not (n.mode in (?, ?) and coalesce(n.status, '') in ('superseded', 'archived'))"
+        )
+        return clause, [MEMORY, SESSION]
     if status != "any":
         return "n.status = ?", [status]
     return None

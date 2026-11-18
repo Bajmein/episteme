@@ -27,6 +27,7 @@ def test_load_fixture_config(vault: Path) -> None:
         ("docs/claude-code", READ_ONLY),
         ("memory", MEMORY),
         ("plans", READ_WRITE),
+        ("sesiones", "session"),
     }
     assert cfg.state_glob == ".fabrik/*/*/estado.md"
 

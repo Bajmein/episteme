@@ -10,6 +10,7 @@ from pydantic import Field
 
 from episteme import checkpoint as checkpoints
 from episteme import hookmode, maintenance, memory, prompting
+from episteme import session as sessions
 from episteme.engine import Engine
 from episteme.errors import invalid
 from episteme.tools.args import (
@@ -174,17 +175,21 @@ def _register_checkpoint(server: MCPServer, engine: Engine) -> None:
         task_title: _TaskTitleArg = None,
         hook_event: HookEvent = None,
     ) -> str:
-        """Save the active task state (estado.md) as a session memory, or restore the latest.
+        """Deprecated: use session. Save the active task state (estado.md) as a session
+        memory, or restore the latest; removed in the next minor release.
 
         save: {"saved", "path", "task_title"}; saved is false when no state is active.
         restore: {"found", "path", "task_title", "content", "source"}. It reads the live active
         estado.md first (the branch's change, else the newest), with a flow line (etapa and
         tasks.md progress); without one it falls back to the saved checkpoint. Saved checkpoints
-        of tasks with no active state are archived. Never blocks compaction.
+        of tasks with no active state are archived. Never blocks compaction. With
+        [checkpoint] state_glob set, the JSON adds "deprecated".
         """
         hookmode.check(hook_event)
         with engine.session():
             data, text, notice = _checkpoint_run(engine, action, project_dir, project, task_title)
+            if engine.vault.config.state_glob:
+                data = {**data, "deprecated": sessions.DEPRECATED}
         return _reply(hook_event, text, data, notice)
 
 

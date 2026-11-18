@@ -94,7 +94,11 @@ class FakeStore:
 
 def fake_engine(archive: bool = True) -> SimpleNamespace:
     cfg = SimpleNamespace(archive_expired=archive, notify=False, every_days=1)
-    return SimpleNamespace(vault=SimpleNamespace(config=SimpleNamespace(maintenance=cfg)))
+    # No session states: the rotation finds nothing to look at.
+    index = SimpleNamespace(rows_in_mode=lambda *args: [])
+    return SimpleNamespace(
+        vault=SimpleNamespace(config=SimpleNamespace(maintenance=cfg)), index=index
+    )
 
 
 def test_run_caps_listed_paths(monkeypatch: pytest.MonkeyPatch) -> None:

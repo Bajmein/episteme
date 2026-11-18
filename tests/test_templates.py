@@ -55,12 +55,22 @@ def test_missing_sections_lists_the_absent_ones_in_template_order() -> None:
         "## Situación (del lunes)",
         "## Situación: despliegue",
         "## ¿Situación?",
+        "## 1. Situación",
+        "## 2) Situación",
+        "## 3 - Situación",
     ],
 )
 def test_missing_sections_ignores_case_accents_and_extra_text(heading: str) -> None:
     body = f"{heading}\n\nx\n\n## Qué pasó\n\ny\n\n## Leccion aprendida\n\nz"
 
     assert missing_sections("lesson", body) == []
+
+
+@pytest.mark.parametrize("heading", ["## 2026 Situación", "## 1.5 Situación"])
+def test_missing_sections_keeps_a_number_that_is_not_numbering(heading: str) -> None:
+    body = f"{heading}\n\nx\n\n## Qué pasó\n\ny\n\n## Lección\n\nz"
+
+    assert missing_sections("lesson", body) == ["Situación"]
 
 
 def test_missing_sections_accepts_the_name_without_its_parenthesised_note() -> None:

@@ -10,6 +10,8 @@ from episteme.markdown import fold
 TEMPLATE_HINT_MIN_CHARS = 300
 _HEADING = re.compile(r"^##[ \t]+(.+?)[ \t#]*$", re.MULTILINE)
 _FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
+# "1. ", "2) " or "3 - " before the name; not "2026 objetivos" nor "1.5 Resultados".
+_NUMBERING = re.compile(r"\d{1,2}(?:[.)]\s+|\s+-\s+)")
 _EMPTY = "Una sección sin contenido lleva «Nada.»; no se quita."
 
 
@@ -101,10 +103,17 @@ def _section_key(name: str) -> str:
     return fold(name.split("(", 1)[0]).strip()
 
 
+def _without_lead(text: str) -> str:
+    """``text`` from its first letter or digit on."""
+    return text[next((i for i, c in enumerate(text) if c.isalnum()), len(text)) :]
+
+
 def _heading_key(heading: str) -> str:
-    """The folded heading without leading punctuation: ``¿Qué pasó?`` -> ``que paso?``."""
-    folded = fold(heading).strip()
-    return folded[next((i for i, c in enumerate(folded) if c.isalnum()), len(folded)) :]
+    """The folded heading without leading punctuation or numbering: ``¿Qué pasó?`` -> ``que
+    paso?``, ``1. Situación`` -> ``situacion``."""
+    key = _without_lead(fold(heading).strip())
+    numbered = _NUMBERING.match(key)
+    return _without_lead(key[numbered.end() :]) if numbered else key
 
 
 def _heading_matches(heading: str, key: str) -> bool:

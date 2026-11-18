@@ -120,6 +120,58 @@ def test_redact_secrets_drops_the_whole_private_key(tail: str, rest: str) -> Non
     assert redact_secrets(f"antes {key}") == f"antes {REDACTED}{rest}"
 
 
+def test_redact_secrets_keeps_the_text_between_a_truncated_key_and_a_full_one() -> None:
+    begin = "-----BEGIN RSA " + "PRIVATE KEY-----"
+    end = "-----END RSA " + "PRIVATE KEY-----"
+    text = f"{begin}\nMIIEvQIBADANBgkq\n\nTexto en medio.\n{begin}\nhkiG9w0BAQEFAASC=\n{end} fin"
+
+    assert redact_secrets(text) == f"{REDACTED}\n\nTexto en medio.\n{REDACTED} fin"
+
+
+def test_redact_secrets_drops_an_encrypted_key_with_its_headers() -> None:
+    text = (
+        "-----BEGIN RSA " + "PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,AB12\n"
+        "\nMIIEvQIBADANBgkq\n-----END RSA " + "PRIVATE KEY----- y sigue"
+    )
+
+    assert redact_secrets(text) == f"{REDACTED} y sigue"
+
+
+@pytest.mark.parametrize("lead,trail", [("    ", ""), ("> ", ""), ("", " ")])
+def test_redact_secrets_drops_an_indented_or_quoted_key(lead: str, trail: str) -> None:
+    lines = [
+        "-----BEGIN RSA " + "PRIVATE KEY-----",
+        "MIIEvQIBADANBgkq",
+        "hkiG9w0BAQEFAASC=",
+        "-----END RSA " + "PRIVATE KEY-----",
+    ]
+    key = "\n".join(f"{lead}{line}{trail}" for line in lines)
+
+    out = redact_secrets(f"antes\n{key}\ndespués")
+
+    assert "MIIE" not in out and "hkiG" not in out and "END RSA" not in out
+    assert out.startswith("antes\n") and out.endswith("después")
+
+
+@pytest.mark.parametrize("sep", ["\\n", " "], ids=["escaped-newline", "spaces"])
+def test_redact_secrets_drops_a_key_written_on_one_line(sep: str) -> None:
+    key = sep.join(
+        ["-----BEGIN " + "PRIVATE KEY-----", "MIIEvQIBADANBgkq", "-----END " + "PRIVATE KEY-----"]
+    )
+
+    out = redact_secrets(f'{{"private_key": "{key}{sep}", "x": 1}}')
+
+    assert out == f'{{"private_key": "{REDACTED}{sep}", "x": 1}}'
+
+
+def test_redact_secrets_returns_on_a_long_key_without_end_line() -> None:
+    lines = "".join("\nProc-Type: " + "a b c " * 20 for _ in range(200))
+
+    out = redact_secrets("-----BEGIN RSA " + "PRIVATE KEY-----" + lines)
+
+    assert out == REDACTED
+
+
 def test_redact_secrets_keeps_the_rest_of_the_text_as_is() -> None:
     text = "ﬁle x² 👨\u200d👩 con ghp_" + "a" * 36
 
