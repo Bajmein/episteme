@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.16.0] - 2026-11-19
+
 ### Añadido
 
 - Hook `SessionStart` (`compact|clear`) en el plugin (`plugin/hooks/hooks.json` y `extract-wake.py`): de tipo `command` con `asyncRewake`, despierta al modelo tras `/compact` o `/clear` para que lance `episteme:extractor` sin esperar al siguiente mensaje. Solo actúa en proyectos con el hook `restore` de episteme en su `settings` (o en el de usuario). Necesita `uv`, como el extractor.
@@ -339,7 +341,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.15.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/Bajmein/episteme/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Bajmein/episteme/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Bajmein/episteme/compare/v0.13.2...v0.14.0
 [0.13.2]: https://github.com/Bajmein/episteme/compare/v0.13.1...v0.13.2
