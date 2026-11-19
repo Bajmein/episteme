@@ -48,6 +48,7 @@ class SaveArgs(NamedTuple):
     origin: str | None = None
     session_id: str | None = None
     plan: str | None = None
+    until: str | None = None
 
 
 def now() -> str:
@@ -227,6 +228,26 @@ def _target(engine: Engine, project: str, project_dir: str | None, note: str | N
     return rel
 
 
+def _extracted_until(args: SaveArgs) -> str | None:
+    """The last transcript time an extractor save covers, as local time to the second.
+
+    The next extraction order starts there instead of at ``saved_at``: what the main session
+    said while the extractor worked is then read again instead of lost.
+    """
+    if args.until is None:
+        return None
+    if args.origin != "extractor":
+        raise invalid('until goes only with origin="extractor". Drop until.')
+    try:
+        when = dt.datetime.fromisoformat(args.until.replace("Z", "+00:00"))
+    except ValueError:
+        raise invalid(
+            f'until must be an ISO date and time, got "{args.until}". Pass the digest\'s "hasta".'
+        ) from None
+    local = when.astimezone() if when.tzinfo else when
+    return local.replace(tzinfo=None, microsecond=0).isoformat()
+
+
 def _meta(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> dict[str, Any]:
     """The frontmatter of a saved state: the fixed keys first, then the extra ones.
 
@@ -243,6 +264,7 @@ def _meta(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> dict[st
         "task_title": fresh["task_title"],
         "saved_at": now(),
         "saved_by": _check_origin(args.origin),
+        "extracted_until": _extracted_until(args),
         "worktree": fresh["worktree"] or old.get("worktree"),
         "session_id": args.session_id or old.get("session_id"),
         "plan": _plan_link(old, fresh, args),
@@ -344,13 +366,16 @@ def show(engine: Engine, project: str, project_dir: str | None) -> dict[str, Any
     parsed = parse(text, rel)
     meta, body = parsed.frontmatter, parsed.body
     title = str(meta.get("task_title") or "").strip() or parsed.title
-    return {
+    data: dict[str, Any] = {
         "found": True,
         "path": rel,
         "task_title": title,
         "saved_at": str(meta.get("saved_at") or "") or None,
         "content": body_without_title(body.strip()).strip(),
     }
+    if meta.get("extracted_until"):
+        data["extracted_until"] = str(meta["extracted_until"])
+    return data
 
 
 def mark_current(engine: Engine, project: str, project_dir: str | None, rel: str) -> None:

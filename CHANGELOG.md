@@ -13,6 +13,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Corregido
 
+- La extracción tras un `/clear` (o un segundo `/compact`) ya no pierde lo que la sesión dijo mientras corría el extractor anterior: empezaba en el `saved_at` de su guardado, posterior a lo que había leído. El extractor pasa ahora el `hasta` del resumen como `until`.
 - `/episteme:docs` usa la versión Markdown (`<url>.md`) de las páginas que un `llms.txt` lista sin extensión (Antigravity), en vez de guardar el HTML.
 
 ## [0.15.0] - 2026-11-18

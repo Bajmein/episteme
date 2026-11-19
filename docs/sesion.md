@@ -22,6 +22,7 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
   | `task_title` | El título |
   | `saved_at` | Fecha y hora local del último guardado del agente o del extractor, a segundos |
   | `saved_by` | `agent`, `extractor` o `compact` (lo último que lo escribió fue el hook `PostCompact`) |
+  | `extracted_until` | Solo si lo último fue un guardado del extractor: hasta qué hora local (a segundos) leyó el transcript (el `until` de `save`). Cualquier otro guardado lo quita |
   | `compacted_at` | Fecha y hora del último resumen de compactación, si lo hubo |
   | `worktree` | La carpeta del proyecto (`project_dir`), si se pasa |
   | `session_id` | El id de la sesión de Claude Code, solo como dato |
@@ -70,17 +71,18 @@ El estado se guarda en cuatro momentos:
 Tras `/compact` o `/clear`, el `restore` del `SessionStart` añade una línea como esta:
 
 ```
-episteme · extracción pendiente: lanza en segundo plano el agente episteme:extractor con este encargo y sigue sin esperarlo: desde=<saved_at o "inicio"> estado=<ruta o "nuevo"> proyecto=<proyecto> transcript=<ruta>
+episteme · extracción pendiente: lanza en segundo plano el agente episteme:extractor con este encargo y sigue sin esperarlo: desde=<extracted_until, saved_at o "inicio"> estado=<ruta o "nuevo"> proyecto=<proyecto> transcript=<ruta>
 ```
 
 El agente lanza el subagente `episteme:extractor` (del plugin, Sonnet con esfuerzo bajo), que corre `transcript_digest.py` de la skill `sesion` sobre el transcript desde `desde`, reescribe el estado con la plantilla (`origin="extractor"`) y guarda como mucho 3 memorias duraderas con el tag `origen/extractor`. El servidor no lee el transcript: lo lee el script, en la máquina de la persona.
 
 - Tras `/compact`, el transcript es el de la sesión en curso (`${transcript_path}` del `SessionStart`). Tras `/clear`, el que guardó `end` en el `SessionEnd`; se entrega una sola vez.
-- `desde` es el `saved_at` del estado: lo anterior ya está en él. `capture` no lo mueve, para que la extracción tras compactar incluya lo que se habló antes.
+- `desde` es el `saved_at` del estado: lo anterior ya está en él. `capture` no lo mueve, para que la extracción tras compactar incluya lo que se habló antes. Si lo último fue un guardado del extractor, `desde` es su `extracted_until`.
+- El modelo no toma un turno solo tras `/compact` o `/clear`: el hook `SessionStart` del plugin (`plugin/hooks/extract-wake.py`, de tipo `command` con `asyncRewake`) sale con código 2 y Claude Code lo despierta con un aviso que le pide lanzar el extractor si el contexto trae la orden. Solo actúa si el `settings.local.json` o el `settings.json` del proyecto, o el `settings.json` de usuario, tienen el hook `restore` de episteme; en los demás proyectos calla. Sin el plugin, la orden espera al siguiente mensaje de la persona.
 - Con `[session] extract = false` no hay orden (el transcript que guardó `end` se descarta igual).
 - La ruta del transcript va al final de la orden y se acepta solo si termina en `.jsonl` y no trae comillas ni caracteres de la shell (`` ` ``, `$`, `;`, `|`, `&`, `<`, `>`): el extractor la pasa a un comando. `end` la guarda solo con `reason` vacío o `clear`.
 - Antes de guardar, el extractor vuelve a leer el estado: si la sesión principal lo guardó mientras trabajaba, parte de ese.
-- Lo que se hable mientras corre el extractor puede quedar fuera de la extracción siguiente, que empieza en el `saved_at` de su guardado; lo recoge el siguiente guardado del agente.
+- El extractor guarda con `until`, la línea `hasta` del resumen (la última entrada que leyó): la extracción siguiente empieza ahí y no en el `saved_at` de su guardado, así que lo que se habló mientras trabajaba no se pierde.
 
 ### Límites
 

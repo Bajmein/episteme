@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from pathlib import Path
 
@@ -183,6 +184,65 @@ async def test_restore_after_compact_orders_the_extraction(vault: Path) -> None:
     assert "lanza en segundo plano el agente episteme:extractor" in context
     assert f"desde={saved_at} estado={saved['path']} proyecto=fabrik" in context
     assert context.endswith(f"transcript={TRANSCRIPT}")
+
+
+UNTIL = "2026-11-19T18:25:21.683Z"
+
+
+def _local(stamp: str) -> str:
+    """``stamp`` as the local, naive, to-the-second time that ``session`` writes."""
+    when = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone()
+    return when.replace(tzinfo=None, microsecond=0).isoformat()
+
+
+async def _restore_order(c) -> str:
+    text = await c.ok(
+        "session",
+        action="restore",
+        source="compact",
+        transcript=TRANSCRIPT,
+        hook_event="SessionStart",
+    )
+    return json.loads(text)["hookSpecificOutput"]["additionalContext"]
+
+
+async def test_restore_after_an_extractor_save_starts_where_it_read(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        saved = await c.ok(
+            "session", action="save", title="Hilo", body=BODY, origin="extractor", until=UNTIL
+        )
+        context = await _restore_order(c)
+
+    fm = _fm(vault / saved["path"])
+    assert str(fm["extracted_until"]) == _local(UNTIL)
+    assert f"desde={_local(UNTIL)} estado={saved['path']}" in context
+
+
+async def test_an_agent_save_drops_the_extractor_mark(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok(
+            "session", action="save", title="Hilo", body=BODY, origin="extractor", until=UNTIL
+        )
+        saved = await c.ok("session", action="save", body=BODY + "Más.")
+        context = await _restore_order(c)
+
+    fm = _fm(vault / saved["path"])
+    assert "extracted_until" not in fm
+    assert f"desde={fm['saved_at']} " in context
+
+
+@pytest.mark.parametrize(
+    ("origin", "until"), [("extractor", "ayer"), ("agent", UNTIL), (None, UNTIL)]
+)
+async def test_save_refuses_until_that_is_not_an_extractor_iso_time(
+    vault: Path, origin: str | None, until: str
+) -> None:
+    async with mcp_client(vault) as c:
+        err = await c.error(
+            "session", action="save", title="Hilo", body=BODY, origin=origin, until=until
+        )
+
+    assert err.startswith("invalid_argument:") and "until" in err
 
 
 async def test_restore_after_clear_uses_the_transcript_end_kept_once(vault: Path) -> None:
