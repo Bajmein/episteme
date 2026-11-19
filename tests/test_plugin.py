@@ -42,14 +42,43 @@ def test_marketplace_points_to_plugin_dir_without_version() -> None:
     assert "version" not in entry
 
 
+def test_antigravity_manifest_is_valid_and_matches_package_version() -> None:
+    manifest = _json(PLUGIN / ".antigravity-plugin" / "plugin.json")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert manifest["name"] == "episteme"
+    assert manifest["version"] == pyproject["project"]["version"]
+    assert "skills" not in manifest
+
+
+def test_agy_rule_has_a_valid_trigger_and_fits_the_size_cap() -> None:
+    path = PLUGIN / "rules" / "AGENTS.md"
+
+    meta = _frontmatter(path)
+
+    assert meta["trigger"] in {"always_on", "model_decision", "glob"}
+    assert len(path.read_bytes()) < 24_000
+
+
+@pytest.mark.parametrize("skill", ["reminder", "mantencion", "sesion"])
+def test_shared_skills_load_tools_with_toolsearch_only_in_claude_code(skill: str) -> None:
+    lines = (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8").splitlines()
+
+    toolsearch = [line for line in lines if "ToolSearch" in line]
+
+    assert toolsearch
+    assert all("En Claude Code" in line for line in toolsearch)
+
+
+SKILL_NAMES = ["setup", "sesion", "mantencion", "reminder", "scaffold", "docs", "agy"]
+
+
 def test_skill_folders() -> None:
     folders = {p.name for p in SKILLS.iterdir() if p.is_dir()}
-    assert folders == {"setup", "sesion", "mantencion", "reminder", "scaffold", "docs"}
+    assert folders == set(SKILL_NAMES)
 
 
-@pytest.mark.parametrize(
-    "skill", ["setup", "sesion", "mantencion", "reminder", "scaffold", "docs"]
-)
+@pytest.mark.parametrize("skill", SKILL_NAMES)
 def test_skill_frontmatter_name_matches_folder(skill: str) -> None:
     meta = _frontmatter(SKILLS / skill / "SKILL.md")
     assert meta["name"] == skill

@@ -6,11 +6,11 @@ argument-hint: "[proyecto | *] [corta | huerfanas]"
 
 # /episteme:mantencion: revisar y ordenar las memorias
 
-Argumentos: $ARGUMENTS
+Argumentos: $ARGUMENTS (en agy, lo que se escribió después del comando)
 
 episteme no fusiona ni borra nada por su cuenta: `review` solo informa. Esta skill lleva ese informe hasta el final, **grupo por grupo y con la aprobación de la persona**. Nada se cambia antes de que diga que sí.
 
-Solo se usan los tools de episteme. Si salen como diferidos, cárgalos antes: `ToolSearch select:mcp__episteme__review,mcp__episteme__read,mcp__episteme__remember,mcp__episteme__revise,mcp__episteme__search`.
+Solo se usan los tools de episteme. En Claude Code, si salen como diferidos, cárgalos con `ToolSearch select:mcp__episteme__review,mcp__episteme__read,mcp__episteme__remember,mcp__episteme__revise,mcp__episteme__search`.
 
 ## 1. Informe
 

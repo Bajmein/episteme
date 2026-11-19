@@ -73,6 +73,7 @@ Los mismos dos comandos sirven en PowerShell. Después, reinicia Claude Code.
 | [`/episteme:reminder <texto>`](../plugin/skills/reminder/SKILL.md) | La persona | Guarda un recordatorio de prioridad 5 del proyecto: `reminder` si el texto trae fecha, `preference` si no |
 | [`/episteme:scaffold`](../plugin/skills/scaffold/SKILL.md) | La persona; o Claude, cuando el hook `doc-review` avisa | Crea o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/`, `.claude/rules/docs.md` y `.gitignore` desde plantillas, y ofrece módulos locales de desarrollo. No hace commits |
 | [`/episteme:docs [suite]`](../plugin/skills/docs/SKILL.md) | La persona, o Claude cuando se le pide poner al día la documentación | Revisa las suites de documentación de `docs/` del vault contra su fuente y escribe lo que cambió con `docs_write` (ver [Suites de documentación](documentacion.md)) |
+| [`/episteme:agy [tarea]`](../plugin/skills/agy/SKILL.md) | La persona, o Claude cuando se le pide «pásale esto a agy» | Activa agy con episteme en el proyecto o le delega una tarea en modo headless (ver «agy (opcional)») |
 
 El plugin sigue a la versión del release y el servidor al tag fijado en cada proyecto: si actualizas uno, actualiza el otro (ver «Actualizar episteme» en `/episteme:setup`).
 
@@ -117,6 +118,26 @@ Al empezar la sesión, el hook suma puntos por cada commit desde la marca que no
 | `CLAUDE.md` | 2 | 1 | 2 | 2 | 2 por archivo | 10 |
 
 Un tipo que no está en la tabla suma 1. El documento está vencido con 7 días y 15 puntos, con 30 días y 1 punto, o con un tag nuevo; con 0 puntos, nunca. Avisa una vez por sesión (no en `compact` ni en `clear`): la persona ve una línea y Claude, al cerrar la tarea en curso, revisa el documento con `/episteme:scaffold auditar <parte>`, corrige lo que contradice al repo, actualiza la marca y dice qué cambió, sin commit. Con `MODE = "propose"` en el hook, propone el diff y espera la aprobación. Para posponerlo: `python3 .claude/hooks/doc-review.py snooze README.md 7`. El estado se guarda en `.git/doc-review.json` (`git rev-parse --git-path`), fuera del repo versionado.
+
+### agy (opcional)
+
+El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravity-plugin/plugin.json`, las skills de `plugin/skills/` y la regla `plugin/rules/AGENTS.md` (`trigger: always_on`), que le da lo esencial de las instrucciones del servidor, porque en agy no llegan al modelo. El plugin de agy es global; la regla se ignora en los workspaces sin episteme. `setup`, `scaffold`, `docs` y `agy` cargan en agy, pero no hacen nada útil ahí.
+
+`/episteme:agy`, sin argumentos y desde Claude Code, activa agy en el proyecto ya conectado con `/episteme:setup`:
+
+1. Comprueba `agy --version` y lee el registro de Claude Code (`claude mcp get episteme`).
+2. Si falta, propone instalar el plugin en agy (`agy plugin install <ruta del plugin | URL del repo>`).
+3. Escribe o fusiona `<proyecto>/.agents/mcp_config.json` con los mismos `command` y `args` del registro de Claude Code y `eager: true` para `context`, `search`, `read`, `remember` y `revise` (`agy mcp add` solo escribe en global).
+4. Si `~/.gemini/config/mcp_config.json` trae una entrada global `episteme`, avisa de que choca de nombre con la del proyecto y propone quitarla.
+5. Pregunta si añadir `.agents/` a `.git/info/exclude`.
+6. Lo comprueba con una ejecución corta de `agy -p … --mode plan` (`agy mcp list` no muestra el MCP de proyecto).
+7. Muestra las reglas `mcp(episteme/*)` para el `settings.json` global de agy, sin tocarlo: agy no aplica permisos de proyecto.
+
+Todo lo que toca fuera del proyecto lo hace solo con la aprobación de la persona.
+
+**Qué no hay en agy.** Ni hooks ni bienvenida automática, ni `surface`, `constraints`, el extractor tras compactar o la copia de planes. agy usa los tools cuando la regla o el prompt se lo piden. Las respuestas de más de ~10 KB llegan truncadas, así que la regla pide lecturas acotadas.
+
+**Delegar.** `/episteme:agy <tarea>` (o «pásale esto a agy») corre en segundo plano `agy -p '<prompt>' --output-format json --mode plan --print-timeout 15m --settings '{"permissions":{"allow":["mcp(episteme/*)"]}}'`; `--mode accept-edits` solo si se piden cambios, y nunca `--dangerously-skip-permissions`. agy no guarda memorias: termina con «Resultado», «Memorias propuestas» y «Tools de episteme usados», y Claude guarda con `remember` lo que valga, anotando «propuesto por agy». Un permiso denegado no da error: sale `status: SUCCESS` con `response` vacío y `denied_actions` con contenido. Para seguir la conversación, `--conversation <conversation_id>`.
 
 ## Uso
 

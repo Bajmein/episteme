@@ -1,0 +1,6 @@
+{
+  "name": "episteme",
+  "version": "0.14.0",
+  "description": "Skills y regla de episteme para agy: usar la memoria y la documentación del vault, guardar y retomar el estado de la sesión, mantención de memorias y recordatorios.",
+  "repository": "https://github.com/Bajmein/episteme"
+}

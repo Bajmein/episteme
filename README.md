@@ -109,6 +109,9 @@ El plugin trae además estas skills:
 | `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
 | `/episteme:scaffold` | Crear o revisar la base del proyecto: `README.md`, `CLAUDE.md`, `CHANGELOG.md`, las reglas para contribuir y el `.gitignore`. Con `auditar` solo revisa, sin cambiar nada. También avisa cuando el README o el `CLAUDE.md` llevan tiempo sin revisar |
 | `/episteme:docs [suite]` | Poner al día la documentación de terceros guardada en `docs/` del vault (todas las suites, o solo la que nombres, como `claude code`): baja las páginas, muestra qué cambió y lo guarda |
+| `/episteme:agy [tarea]` | Activar agy (Google Antigravity CLI) en el proyecto y pasarle tareas. Claude revisa lo que agy propone recordar |
+
+El plugin también funciona con agy, sin los automatismos: ni hooks ni bienvenida automática (ver «agy (opcional)» en [Instalación](docs/instalacion.md)).
 
 ### Opción B · A mano
 

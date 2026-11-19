@@ -6,11 +6,11 @@ argument-hint: "[guardar [nota] | retomar | plantilla [tipo]]"
 
 # /episteme:sesion: el estado de la sesión
 
-Argumentos: $ARGUMENTS
+Argumentos: $ARGUMENTS (en agy, lo que se escribió después del comando)
 
 El estado de la sesión es una nota por línea de trabajo en `sesiones/<proyecto>/` del vault, que solo cambia el tool `session`. Sobrevive a `/compact` y `/clear`: el hook `SessionStart` lo devuelve al contexto y, tras compactar o limpiar, el agente `episteme:extractor` lo pone al día con el transcript.
 
-Solo se usan los tools de episteme. Si salen como diferidos, cárgalos antes: `ToolSearch select:mcp__episteme__session,mcp__episteme__search,mcp__episteme__remember`. Si no aparecen ni diferidos, dilo y detente: no guardes el estado en otro sitio.
+Solo se usan los tools de episteme. En Claude Code, si salen como diferidos, cárgalos con `ToolSearch select:mcp__episteme__session,mcp__episteme__search,mcp__episteme__remember`. Si no aparecen ni diferidos, dilo y detente: no guardes el estado en otro sitio.
 
 Según el primer argumento: `retomar` va a «Retomar», `plantilla` a «Plantilla» y cualquier otro caso (también sin argumentos) a «Guardar».
 
