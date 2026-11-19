@@ -14,7 +14,7 @@ from episteme.memory.secrets import find_secrets
 from episteme.perms import make_private_dir, restrict_db
 from episteme.vault import INDEX_DIR
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 RETENTION_DAYS = 180
 MAX_PATHS = 30
 MAX_STRING = 200
@@ -32,7 +32,7 @@ _SCHEMA = """
 create table calls (
     id integer primary key,
     at text, pid integer, session text, tool text, hook_event text, project text,
-    args text, paths text, chars integer, ms integer, ok integer
+    args text, paths text, chars integer, ms integer, ok integer, client text
 );
 create index calls_at on calls (at);
 create index calls_tool on calls (tool);
@@ -99,6 +99,19 @@ def _text(value: Any) -> str | None:
     return _clip(value)
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring ``calls`` to ``SCHEMA_VERSION``: v1 gains ``client`` in place, older is rebuilt."""
+    version = conn.execute("pragma user_version").fetchone()[0]
+    if version >= SCHEMA_VERSION:
+        return
+    if version == 1:
+        conn.execute("alter table calls add column client text")
+    else:
+        conn.execute("drop table if exists calls")
+        conn.executescript(_SCHEMA)
+    conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
+
+
 class Activity:
     """Best-effort call log; ``record`` never raises."""
 
@@ -120,11 +133,7 @@ class Activity:
                 conn.execute("pragma journal_mode = wal")
                 conn.execute(f"pragma busy_timeout = {BUSY_TIMEOUT_MS}")
                 restrict_db(self.db_path)
-                version = conn.execute("pragma user_version").fetchone()[0]
-                if version < SCHEMA_VERSION:
-                    conn.execute("drop table if exists calls")
-                    conn.executescript(_SCHEMA)
-                    conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
+                _migrate(conn)
             except Exception:
                 conn.close()
                 raise
@@ -132,8 +141,16 @@ class Activity:
         return self._conn
 
     def record(
-        self, tool: str, arguments: dict[str, Any] | None, text: str, ms: int, ok: bool
+        self,
+        tool: str,
+        arguments: dict[str, Any] | None,
+        text: str,
+        ms: int,
+        ok: bool,
+        client: str | None = None,
+        session: str | None = None,
     ) -> None:
+        """Log one call; ``session`` is used when ``arguments`` carry none (agy's ``_meta``)."""
         try:
             if os.environ.get("EPISTEME_ACTIVITY") == "0":
                 return
@@ -148,11 +165,11 @@ class Activity:
             text = text or ""
             conn.execute(
                 "insert into calls (at, pid, session, tool, hook_event, project, args,"
-                " paths, chars, ms, ok) values (?,?,?,?,?,?,?,?,?,?,?)",
+                " paths, chars, ms, ok, client) values (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     now.isoformat(timespec="seconds"),
                     os.getpid(),
-                    _text(arguments.get("session")),
+                    _text(arguments.get("session")) or _text(session),
                     tool,
                     _text(arguments.get("hook_event")),
                     _text(arguments.get("project")),
@@ -161,6 +178,7 @@ class Activity:
                     len(text),
                     int(ms),
                     1 if ok else 0,
+                    _text(client),
                 ),
             )
         except Exception:  # nosec B110
