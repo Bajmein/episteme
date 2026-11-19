@@ -16,7 +16,7 @@ from episteme.markdown import (
 from episteme.memory.files import _files_of
 from episteme.memory.schema import MIN_CONTEXT_SCORE, STOPWORDS_EN
 from episteme.memory.scoring import recency
-from episteme.vault import MEMORY, SESSION, today
+from episteme.vault import MEMORY, PLAN, SESSION, today
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -193,8 +193,8 @@ def _related_notes(engine: Engine, query: str, terms: list[list[str]]) -> list[A
     found, _ = engine.index.search(
         query, any_term=True, drop_stopwords=True, limit=50, snippets=False
     )
-    # Memories are listed apart, and the session state is not documentation.
-    found = [n for n in found if engine.vault.mode_for(n.path) not in (MEMORY, SESSION)]
+    # Memories are listed apart, and the session state and plans are not documentation.
+    found = [n for n in found if engine.vault.mode_for(n.path) not in (MEMORY, SESSION, PLAN)]
     best = max((n.score for n in found), default=0.0)
     notes = []
     for n in found:

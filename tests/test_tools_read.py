@@ -24,6 +24,7 @@ TOOLS = {
     "docs_status",
     "docs_write",
     "session",
+    "plan",
 }
 
 

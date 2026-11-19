@@ -16,6 +16,7 @@ from episteme.memory import check_files, memory_slug, template_hint
 from episteme.memory.schema import _PROJECT_NAME
 from episteme.memory.secrets import _reject_secrets
 from episteme.memory.templates import missing_sections
+from episteme.plans import SLUG, current_slug
 from episteme.vault import SESSION, today
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ class SaveArgs(NamedTuple):
     files: list[str] | None = None
     origin: str | None = None
     session_id: str | None = None
+    plan: str | None = None
 
 
 def now() -> str:
@@ -228,7 +230,8 @@ def _target(engine: Engine, project: str, project_dir: str | None, note: str | N
 def _meta(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> dict[str, Any]:
     """The frontmatter of a saved state: the fixed keys first, then the extra ones.
 
-    ``fresh`` has the ``project``, ``task_title`` and ``worktree`` of this save.
+    ``fresh`` has the ``project``, ``task_title`` and ``worktree`` of this save, and may have
+    the ``plan`` this process holds as current; the state keeps its own plan before that one.
     """
     meta: dict[str, Any] = {
         "type": STATE_TYPE,
@@ -242,8 +245,14 @@ def _meta(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> dict[st
         "saved_by": _check_origin(args.origin),
         "worktree": fresh["worktree"] or old.get("worktree"),
         "session_id": args.session_id or old.get("session_id"),
+        "plan": _plan_link(old, fresh, args),
     }
     return {k: v for k, v in meta.items() if v not in (None, [])}
+
+
+def _plan_link(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> str | None:
+    """The plan a save links: the one passed, else the state's own, else the current one."""
+    return args.plan or old.get("plan") or fresh.get("plan")
 
 
 def _create(engine: Engine, project: str, title: str, text: str) -> str:
@@ -265,6 +274,10 @@ def _checked(args: SaveArgs) -> tuple[str | None, str]:
     title = _clean_title(args.title)
     body = _clean_body(args.body)
     check_files(args.files)
+    if args.plan is not None and not SLUG.fullmatch(args.plan):
+        raise invalid(
+            f'plan "{args.plan}" is not a plan slug. Pass the slug plan(action="show") lists.'
+        )
     for field, value in (
         ("title", title),
         ("body", body),
@@ -310,7 +323,12 @@ def save(
     title = title or str(old.get("task_title") or "").strip()
     if not title:
         raise invalid("a new session state needs title. Pass title, e.g. the task in a few words.")
-    fresh = {"project": project, "task_title": title, "worktree": worktree}
+    fresh = {
+        "project": project,
+        "task_title": title,
+        "worktree": worktree,
+        "plan": current_slug(engine, project, project_dir),
+    }
     text = compose(_meta(old, fresh, args), f"# {title}\n\n{body}\n")
     saved = _store(engine, rel, fresh, text)
     _remember_current(_key(project, project_dir), saved)

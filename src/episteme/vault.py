@@ -23,11 +23,13 @@ READ_WRITE = "read-write"
 MEMORY = "memory"
 DOCS = "docs"
 SESSION = "session"
-MODES = (READ_ONLY, READ_WRITE, MEMORY, DOCS, SESSION)
+PLAN = "plan"
+MODES = (READ_ONLY, READ_WRITE, MEMORY, DOCS, SESSION, PLAN)
 # Zones that only their own tool writes: mode -> that tool. revise refuses them.
-TOOL_MODES: dict[str, str] = {DOCS: "docs_write", SESSION: "session"}
-# The session zone load_config adds when episteme.toml declares none.
+TOOL_MODES: dict[str, str] = {DOCS: "docs_write", SESSION: "session", PLAN: "plan"}
+# The session and plan zones load_config adds when episteme.toml declares none.
 SESSION_ZONE = "sesiones"
+PLAN_ZONE = "planes"
 CONFIG_FILE = "episteme.toml"
 INDEX_DIR = ".index"
 DEFAULT_EVERY_DAYS = 1
@@ -35,6 +37,7 @@ DEFAULT_BACKUP_KEEP = 14
 DEFAULT_ARCHIVE_DAYS = 7
 DEFAULT_NUDGE_EVERY = 12
 SESSION_KEYS = ("extract", "block_manual_compact", "archive_days", "nudge_every")
+PLAN_KEYS = ("archive_days",)
 
 
 @dataclass
@@ -73,6 +76,11 @@ class Session:
     nudge_every: int = DEFAULT_NUDGE_EVERY
 
 
+@dataclass(frozen=True)
+class Plans:
+    archive_days: int = DEFAULT_ARCHIVE_DAYS
+
+
 @dataclass
 class Config:
     zones: list[Zone] = field(default_factory=list)
@@ -80,6 +88,7 @@ class Config:
     maintenance: Maintenance = field(default_factory=Maintenance)
     backup: Backup = field(default_factory=Backup)
     session: Session = field(default_factory=Session)
+    plans: Plans = field(default_factory=Plans)
 
 
 def _table(data: dict, name: str, allowed: tuple[str, ...]) -> dict:
@@ -131,6 +140,11 @@ def _load_session(data: dict) -> Session:
         archive_days=_int_min1(table, "session", "archive_days", DEFAULT_ARCHIVE_DAYS),
         nudge_every=_int_min1(table, "session", "nudge_every", DEFAULT_NUDGE_EVERY),
     )
+
+
+def _load_plans(data: dict) -> Plans:
+    table = _table(data, "plans", PLAN_KEYS)
+    return Plans(archive_days=_int_min1(table, "plans", "archive_days", DEFAULT_ARCHIVE_DAYS))
 
 
 def _backup_dir(raw: str) -> Path:
@@ -192,19 +206,22 @@ def _load_zones(data: dict) -> list[Zone]:
             raise StartupError(f'zone "{name}" is declared twice in episteme.toml.')
         seen.add(name)
         zones.append(Zone(name, _zone_mode(name, value)))
-    return _with_session_zone(zones)
+    zones = _with_implicit_zone(
+        zones, Zone(SESSION_ZONE, SESSION), "the session state lives there"
+    )
+    return _with_implicit_zone(zones, Zone(PLAN_ZONE, PLAN), "the plan copies live there")
 
 
-def _with_session_zone(zones: list[Zone]) -> list[Zone]:
-    """``zones`` plus the implicit ``sesiones`` zone when none has mode ``session``."""
-    if any(z.mode == SESSION for z in zones):
+def _with_implicit_zone(zones: list[Zone], implicit: Zone, what: str) -> list[Zone]:
+    """``zones`` plus ``implicit`` when no zone has its mode (``sesiones``, ``planes``)."""
+    if any(z.mode == implicit.mode for z in zones):
         return zones
-    if any(z.path == SESSION_ZONE for z in zones):
+    if any(z.path == implicit.path for z in zones):
         raise StartupError(
-            f'zone "{SESSION_ZONE}" must have mode "{SESSION}" (the session state lives there). '
-            f'Set its mode to "{SESSION}" or declare another zone with that mode.'
+            f'zone "{implicit.path}" must have mode "{implicit.mode}" ({what}). '
+            f'Set its mode to "{implicit.mode}" or declare another zone with that mode.'
         )
-    return [*zones, Zone(SESSION_ZONE, SESSION)]
+    return [*zones, implicit]
 
 
 def _load_state_glob(data: dict) -> str | None:
@@ -232,6 +249,7 @@ def load_config(root: Path) -> Config:
         _load_maintenance(data),
         _load_backup(data, root),
         _load_session(data),
+        _load_plans(data),
     )
 
 
@@ -425,6 +443,11 @@ class Vault:
     def session_zone(self) -> Zone:
         """The zone of the session state; load_config always leaves one."""
         return next(z for z in self.config.zones if z.mode == SESSION)
+
+    @property
+    def plan_zone(self) -> Zone:
+        """The zone of the plan copies; load_config always leaves one."""
+        return next(z for z in self.config.zones if z.mode == PLAN)
 
     # -- writes ------------------------------------------------------------
 
