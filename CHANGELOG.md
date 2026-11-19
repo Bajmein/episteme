@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Cambiado
+
+- Autor del paquete en `pyproject.toml` y titular de la licencia en `LICENSE` y en el `README.md`: Benjamín C. Rossa. `pyproject.toml` declara también Python 3.15 en sus clasificadores.
+
 ## [0.15.0] - 2026-11-18
 
 ### Añadido
