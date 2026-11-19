@@ -65,14 +65,15 @@ Se calcula al vuelo y no se guarda en el frontmatter: la primera revisión solo 
 
 | Tool | Solo lectura | Qué hace |
 | --- | --- | --- |
-| `docs_status(suite?, pages=false)` | sí | Sin `suite`, `{"suites": [...]}` con, por suite, `notes` (sin el manifiesto), `with_source`, `deprecated`, `invalid`, `manifest_valid`, `upstream`, `include`, `context7` y `synced`. Con `suite` (`docs/mise` o `mise`), ese objeto; con `pages=true` añade `pages`, un TSV con una línea por nota con `source`: `<source>\t<hash>\t<ruta en la suite>\t<status>`. En TSV, una suite de 400 notas cabe en unos 10 000 tokens |
-| `docs_write(suite, path?, source?, body?, fields?)` | no | Ver abajo |
+| `docs_status(suite?, pages=false)` | sí | Sin `suite`, `{"suites": [...]}` con, por suite, `inbox` (la ruta absoluta de su bandeja; no la crea), `notes` (sin el manifiesto), `with_source`, `deprecated`, `invalid`, `manifest_valid`, `upstream`, `include`, `context7` y `synced`. Con `suite` (`docs/mise` o `mise`), ese objeto; con `pages=true` añade `pages`, un TSV con una línea por nota con `source`: `<source>\t<hash>\t<ruta en la suite>\t<status>`. En TSV, una suite de 400 notas cabe en unos 10 000 tokens |
+| `docs_write(suite, path?, source?, body?, body_ref?, fields?)` | no | Ver abajo |
 
 `docs_write`:
 
 - **Busca la nota** por `source` y, si no viene, por `path` (relativa a la suite, terminada en `.md`; el manifiesto es `README.index.md`). Un `source` que ya tiene otra nota y un `path` distinto es `invalid_argument`.
 - **Si no la encuentra y viene `path`, la crea.** `path` tiene que quedar dentro de la suite (`outside_vault` si sale), no existir y venir con las claves obligatorias en `fields`; `created` y `updated` son hoy si no vienen.
 - **`body`**: si su hash es el mismo, el cuerpo no se toca. Sin `body`, el cuerpo queda como está.
+- **`body_ref`**: el hash (16 hexadecimales en minúscula) de un cuerpo que `docs_check.py diff` dejó en la bandeja de la suite, `<vault>/.index/docs-inbox/<suite>/<hash>.md`. Sustituye a `body`: pasar los dos es `invalid_argument`, y un hash mal formado también. El servidor lee el archivo, comprueba que su `body_hash` coincide con `body_ref` (si no, `invalid_argument` y el archivo se conserva) y sigue como con `body`. Si el archivo no está, `not_found`; si pesa más de 2 MiB, `invalid_argument`; si es un enlace que sale de la bandeja, `outside_vault`. Tras escribir con éxito, o si el cuerpo no cambió (`changed: false`), borra el archivo; con cualquier error, queda. Así el texto de las páginas no pasa por el contexto del modelo.
 - **`fields`** se fusiona en el frontmatter (`null` borra una clave), como `revise set`. Si cambian el cuerpo o los `fields`, `updated` pasa a hoy, salvo que `fields` traiga `updated`. Un `source` repetido en la suite es `invalid_argument`.
 - **Secretos**: los textos de `fields` pasan por el mismo filtro de credenciales que `remember`. El `body` no: es texto público, idéntico al de la fuente, y la documentación trae claves de ejemplo que el filtro rechazaría.
 - **Frontmatter roto**: si el de la nota no se puede leer, se reconstruye solo con `fields`, que entonces tiene que traer todas las claves obligatorias.
@@ -85,19 +86,21 @@ Se calcula al vuelo y no se guarda en el frontmatter: la primera revisión solo 
 | Comando | Qué hace |
 | --- | --- |
 | `docs_check.py context7 <id>…` | Pregunta a la API pública de Context7 la `lastUpdateDate` de cada ID. Si existe `CONTEXT7_API_KEY`, la manda como `Authorization: Bearer` |
-| `docs_check.py diff --pages <tsv> --out <dir> [--upstream <url>…] [--include <prefijo>…]` | Baja cada `source` del TSV (8 a la vez, 30 s de espera, 2 reintentos) y guarda cada página en `<dir>/<sha1 de la url>.md`. Lee los `llms.txt` de `--upstream` y busca las URL bajo `--include` que la suite no tiene. Si el `llms.txt` lista páginas sin `.md`, el script prueba `<url>.md` y, si responde Markdown, usa esa (y la reconoce como ya presente en la corrida siguiente). Devuelve `changed`, `unchanged`, `gone` (404 o 410), `new` (con `suggested_path`) y `errors` (5xx, tiempo agotado y demás) |
+| `docs_check.py diff --pages <tsv> --inbox <dir> [--upstream <url>…] [--include <prefijo>…]` | Baja cada `source` del TSV (8 a la vez, 30 s de espera, 2 reintentos). `<dir>` es la bandeja que da `docs_status`: al empezar la crea y borra sus archivos `<16 hexadecimales>.md` de una corrida anterior (nada más), y guarda cada página `changed` o `new` como `<dir>/<body_hash>.md`; dos páginas con el mismo cuerpo comparten archivo. Lee los `llms.txt` de `--upstream` y busca las URL bajo `--include` que la suite no tiene. Si el `llms.txt` lista páginas sin `.md`, el script prueba `<url>.md` y, si responde Markdown, usa esa (y la reconoce como ya presente en la corrida siguiente). Devuelve `changed`, `unchanged`, `gone` (404 o 410), `new` (con `suggested_path` y `title`, el primer encabezado `# `) y `errors` (5xx, tiempo agotado y demás); cada `changed` y `new` trae `hash` (el `body_ref` para `docs_write`) y `file` |
 
 El flujo tiene tres fases:
 
 1. **Revisión rápida.** `docs_status()`; las suites sin manifiesto válido se configuran primero, con la persona. Context7 sirve solo de filtro por fecha: si su `lastUpdateDate` es anterior a `synced`, la suite está al día y no se revisa más. Context7 no sirve como fuente, porque devuelve fragmentos según una consulta y no páginas enteras.
-2. **Conteo.** Un subagente por suite, en paralelo: pide las páginas con `docs_status(suite, pages=true)`, corre `docs_check.py diff` y devuelve los conteos. La skill muestra una tabla antes de escribir nada.
-3. **Actualización.** El mismo subagente escribe con `docs_write`: las cambiadas con su cuerpo nuevo, las nuevas con su frontmatter, las desaparecidas como `status: deprecated` y, si no hubo errores, `synced` en el manifiesto. Con más de 100 cambiadas en una suite, pregunta antes.
+2. **Conteo.** Un subagente por suite, en paralelo: pide las páginas con `docs_status(suite, pages=true)`, corre `docs_check.py diff --inbox <inbox>` (el `inbox` de `docs_status`) y devuelve los conteos. La skill muestra una tabla antes de escribir nada.
+3. **Actualización.** El mismo subagente escribe con `docs_write`: las cambiadas con `body_ref=<hash>`, las nuevas con `body_ref` y su frontmatter (`type` y `summary` salen de las primeras líneas del archivo, nunca entero), las desaparecidas como `status: deprecated` y, si no hubo errores, `synced` en el manifiesto. Con más de 100 cambiadas en una suite, pregunta antes. Si `docs_write` da `not_found` para un `body_ref` (cuerpo compartido por dos páginas o bandeja vaciada), al final se corre `diff` otra vez y se escribe lo que quede. Ningún cuerpo pasa por el modelo.
 
 Una segunda corrida seguida tiene que dar 0 cambiadas.
 
 ## Límites
 
 - **El servidor no tiene HTTP.** episteme solo lista hashes y escribe lo que recibe; las descargas son del script, en la máquina de la persona.
+- **La bandeja está dentro del vault**, en `.index/docs-inbox/<suite>/` (fuera de toda zona, sin indexar, fuera del backup). El único escritor fuera de los tools es `docs_check.py`; `docs_write` solo lee y borra ahí, confinado a la bandeja y por nombre-hash. Cada cuerpo pesa como mucho 2 MiB (el tope de indexado); una página mayor no se escribe, porque episteme no la indexaría (`reference/cli.md` de uv, con 807 KB, cabe).
+- **`read` corta a 20.000 caracteres**: las páginas grandes de una suite se leen por `heading`.
 - **No se borra ni se mueve nada.** Una página que desaparece de la fuente queda como `deprecated`.
 - **El índice de la suite no se reescribe.** El cuerpo del `README.index.md` (la lista de páginas) es de la persona: las páginas nuevas se informan para enlazarlas a mano.
 

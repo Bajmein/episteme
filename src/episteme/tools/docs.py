@@ -37,10 +37,13 @@ def _register_docs_status(server: MCPServer, engine: Engine) -> None:
     ) -> str:
         """List the docs suites (zones with mode "docs") and their manifests. Never writes.
 
-        Without suite returns JSON {"suites": [{"suite", "notes", "with_source", "deprecated",
-        "invalid", "manifest_valid", "upstream", "include", "context7", "synced"}]}: notes
+        Without suite returns JSON {"suites": [{"suite", "inbox", "notes", "with_source",
+        "deprecated", "invalid", "manifest_valid", "upstream", "include", "context7",
+        "synced"}]}: notes
         leaves out README.index.md (the manifest), invalid counts notes that fail the suite
-        schema. With suite returns that one object; pages=true adds "pages", one string with a
+        schema, inbox is the absolute path of the suite's inbox (never created here), where
+        docs_check.py diff leaves the downloaded bodies that docs_write takes by body_ref.
+        With suite returns that one object; pages=true adds "pages", one string with a
         line per note that has a source: <source>\\t<hash>\\t<path in the suite>\\t<status>.
         The hash is what /episteme:docs compares with the downloaded page. Used by the
         /episteme:docs skill; to update docs/, run that skill, never edit by hand.
@@ -69,6 +72,13 @@ def _register_docs_write(server: MCPServer, engine: Engine) -> None:
             str | None,
             Field(description="Page text as downloaded, without frontmatter. Omit to keep it."),
         ] = None,
+        body_ref: Annotated[
+            str | None,
+            Field(
+                description="Hash of a body in the suite's inbox (docs_check.py diff), "
+                "instead of body. The file is deleted once used."
+            ),
+        ] = None,
         fields: Annotated[
             dict[str, Any] | None,
             Field(description="Frontmatter keys to merge; null deletes a key."),
@@ -80,6 +90,11 @@ def _register_docs_write(server: MCPServer, engine: Engine) -> None:
         not exist, and fields must bring title, type, status, lang and tags; created and
         updated default to today). A body with the same hash as the current one is not
         rewritten; a new body or changed fields set updated to today unless fields has it.
+        body_ref (16 lowercase hex digits, never together with body) takes the body from the
+        suite's inbox, <vault>/.index/docs-inbox/<suite>/<hash>.md, which docs_check.py diff
+        fills: the text must hash to body_ref (invalid_argument), a missing file is not_found,
+        and the file is deleted after a successful write or when the body was unchanged (it is
+        kept on any error).
         fields={"suite": {...}} replaces the whole manifest mapping (upstream, include,
         context7, synced). The result is checked against the suite schema (invalid_schema);
         string values in fields that look like a credential are refused; the body is not
@@ -88,4 +103,4 @@ def _register_docs_write(server: MCPServer, engine: Engine) -> None:
         means nothing was written.
         """
         with engine.session():
-            return dump(docs.docs_write(engine, suite, path, source, body, fields))
+            return dump(docs.docs_write(engine, suite, path, source, body, body_ref, fields))

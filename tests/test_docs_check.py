@@ -91,10 +91,10 @@ def test_diff_classifies_pages(
     ]
     tsv = tmp_path / "pages.tsv"
     tsv.write_text("".join("\t".join(r) + "\n" for r in rows), encoding="utf-8")
-    out = tmp_path / "out"
+    inbox = tmp_path / "inbox"
 
     code = check.main(
-        ["diff", "--pages", str(tsv), "--out", str(out), "--upstream", f"{base}/llms.txt",
+        ["diff", "--pages", str(tsv), "--inbox", str(inbox), "--upstream", f"{base}/llms.txt",
          "--include", f"{base}/docs/"]
     )  # fmt: skip
 
@@ -104,7 +104,8 @@ def test_diff_classifies_pages(
     [changed] = report["changed"]
     assert changed["path"] == "changed.md"
     assert Path(changed["file"]).read_text(encoding="utf-8") == "# Changed\n\nNew text.\n"
-    assert Path(changed["file"]).parent == out
+    assert Path(changed["file"]) == inbox / f"{changed['hash']}.md"
+    assert changed["hash"] == check.body_hash("# Changed\n\nNew text.\n")
     assert report["gone"] == [
         {"source": f"{base}/docs/gone.md", "path": "gone.md", "http_status": 404}
     ]
@@ -113,11 +114,14 @@ def test_diff_classifies_pages(
     assert new["source"] == f"{base}/docs/guide/index.md"
     assert new["suggested_path"] == "guide.md"
     assert Path(new["file"]).read_text(encoding="utf-8") == "# Guide\n"
+    assert Path(new["file"]) == inbox / f"{new['hash']}.md"
+    assert new["hash"] == check.body_hash("# Guide\n")
+    assert new["title"] == "Guide"
 
 
 def _new_pages(check: ModuleType, base: str, tmp_path: Path, listed: str, known: list) -> dict:
     _Handler.llms = f"# Docs\n\n- [P]({base}{listed})\n"
-    return check.diff(known, tmp_path / "out", [f"{base}/llms.txt"], [f"{base}/docs/"])
+    return check.diff(known, tmp_path / "inbox", [f"{base}/llms.txt"], [f"{base}/docs/"])
 
 
 def test_diff_uses_the_markdown_variant_of_a_page_listed_without_md(
@@ -157,7 +161,7 @@ def test_diff_lists_a_page_once_when_the_index_has_both_forms(
 ) -> None:
     _Handler.llms = f"- [A]({base}/docs/a)\n- [A]({base}/docs/a.md)\n"
 
-    report = check.diff([], tmp_path / "out", [f"{base}/llms.txt"], [f"{base}/docs/"])
+    report = check.diff([], tmp_path / "inbox", [f"{base}/llms.txt"], [f"{base}/docs/"])
 
     assert [n["source"] for n in report["new"]] == [f"{base}/docs/a.md"]
 
@@ -239,3 +243,30 @@ def test_context7_picks_the_matching_id(
     assert check.context7_date("/astral-sh/uv") == "2026-11-16T13:01:47.686Z"
     assert check.context7_date("/nobody/uv") is None
     assert "libraryName=uv" in seen[0][0] and seen[0][1] == {"Authorization": "Bearer k"}
+
+
+def test_diff_clears_hash_named_files_of_an_earlier_run_and_keeps_the_rest(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    stale = inbox / f"{'a' * 16}.md"
+    stale.write_text("old", encoding="utf-8")
+    other = inbox / "notes.md"
+    other.write_text("mine", encoding="utf-8")
+    longer = inbox / f"{'b' * 17}.md"
+    longer.write_text("mine", encoding="utf-8")
+
+    report = _new_pages(check, base, tmp_path, "/docs/a", [])
+
+    assert not stale.exists()
+    assert other.exists()
+    assert longer.exists()
+    assert (inbox / f"{report['new'][0]['hash']}.md").exists()
+
+
+def test_first_heading_is_none_without_one(check: ModuleType) -> None:
+    assert check._first_heading("text\n\n## Sub\n") is None
+    assert check._first_heading("intro\n# Title #\n") == "Title"
+    assert check._first_heading("# Using C#\n") == "Using C#"
+    assert check._first_heading("```sh\n# comment\n```\n# Real\n") == "Real"

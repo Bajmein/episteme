@@ -21,7 +21,7 @@ sqlite3 <vault>/.index/activity.db "select at, tool, hook_event, ok, ms from cal
 sqlite3 <vault>/.index/activity.db "select tool, count(*) from calls where at >= date('now') group by tool"
 ```
 
-El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Junto a él, `.index/maintenance.db` guarda cuándo corrió cada tarea de mantención y qué cambió (no se reconstruye). En Linux y macOS, `.index/` se crea con permisos 0700 y sus bases con 0600 (en Windows no aplica). Añade `.index/` al `.gitignore` del vault.
+El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Junto a él, `.index/maintenance.db` guarda cuándo corrió cada tarea de mantención y qué cambió (no se reconstruye). En Linux y macOS, `.index/` se crea con permisos 0700 y sus bases con 0600 (en Windows no aplica). Añade `.index/` al `.gitignore` del vault. Dentro está también `.index/docs-inbox/<suite>/`, la bandeja donde `docs_check.py` deja las páginas descargadas hasta que `docs_write` las toma con `body_ref`; no es caché del índice.
 
 ## `episteme.toml`
 

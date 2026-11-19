@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from episteme.docs.hashing import body_hash, split_note
+from episteme.docs.inbox import check_ref, discard, read_body
 from episteme.docs.schema import DATE_KEYS, as_day, is_url, ordered, validate
 from episteme.docs.status import find_zone, manifest_path
 from episteme.errors import NOT_FOUND, OUTSIDE_VAULT, READ_ONLY_ZONE, EpistemeError, invalid
@@ -71,11 +72,30 @@ def _check_target(path: str | None, source: str | None) -> None:
         raise invalid(f"path {path!r} must end in .md. Pass a path relative to the suite.")
 
 
-def _check_arguments(path: str | None, source: str | None, body: str | None) -> None:
+def _check_arguments(
+    path: str | None, source: str | None, body: str | None, body_ref: str | None
+) -> None:
     _check_target(path, source)
+    if body is not None and body_ref is not None:
+        raise invalid("pass body or body_ref, not both. Use body_ref for a downloaded page.")
+    check_ref(body_ref)
     if _too_big(body):
         limit = NOTE_MAX_BYTES // 1024 // 1024
         raise invalid(f"body is over the {limit} MB limit; episteme would not index it. Skip it.")
+
+
+def _resolve_body(
+    engine: Engine, zone: Zone, body: str | None, body_ref: str | None
+) -> tuple[str | None, Path | None]:
+    """The body to write and the inbox file it came from (None when it was passed inline)."""
+    if body_ref is None:
+        return body, None
+    return read_body(engine.vault, zone, body_ref)
+
+
+def _consume(file: Path | None) -> None:
+    if file is not None:
+        discard(file)
 
 
 def _by_source(engine: Engine, zone: Zone, source: str) -> str | None:
@@ -213,22 +233,26 @@ def docs_write(
     path: str | None = None,
     source: str | None = None,
     body: str | None = None,
+    body_ref: str | None = None,
     fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create or update one note of a docs suite; write only when something changed."""
     zone = find_zone(engine.vault, suite)
     fields = fields or {}
-    _check_arguments(path, source, body)
+    _check_arguments(path, source, body, body_ref)
     _check_secrets(fields)
+    text, inbox_file = _resolve_body(engine, zone, body, body_ref)
     target = _find(engine, zone, path, source)
-    change = _change(target, fields, source, body)
+    change = _change(target, fields, source, text)
     result = {"path": target.rel, "created": False, "changed": False, "hash": change.hash}
     if not change.changed:
+        _consume(inbox_file)
         return result
     fm = _finish(change, fields)
     validate(fm, target.rel, target.rel == manifest_path(zone))
     _check_unique_source(engine, zone, target, fm)
     _save(engine, target.rel, compose(fm, change.body), change.created)
+    _consume(inbox_file)
     return {**result, "created": change.created, "changed": True}
 
 
