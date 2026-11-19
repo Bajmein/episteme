@@ -8,7 +8,7 @@ argument-hint: "[suite en lenguaje natural]"
 
 Argumentos: $ARGUMENTS
 
-Una **suite** es una zona del vault con `mode = "docs"` (`docs/mise`, `docs/uv`…): páginas de documentación de terceros copiadas tal cual. Solo `docs_write` las cambia. episteme no tiene HTTP: las descarga el script de esta skill, en la máquina de la persona, y el agente escribe el resultado con `docs_write`. Nunca se editan a mano ni con Bash, Read, Edit o Write.
+Una **suite** es una zona del vault con `mode = "docs"` (`docs/mise`, `docs/uv`…): páginas de documentación de terceros copiadas tal cual. Solo `docs_write` las cambia. episteme no tiene HTTP: las descarga el script de esta skill, en la máquina de la persona, y deja cada cuerpo en la **bandeja** de la suite (`.index/docs-inbox/<suite>/<hash>.md`, dentro del vault), de donde `docs_write(body_ref=<hash>)` lo toma: ningún cuerpo de página pasa por tu contexto. Nunca se editan las suites a mano ni con Bash, Read, Edit o Write. La única excepción es el script, que escribe solo en la carpeta `inbox` que da `docs_status`; nada más del vault se toca fuera de los tools.
 
 Herramientas: los tools de episteme son diferidos. Cárgalos antes de empezar: `ToolSearch select:mcp__episteme__docs_status,mcp__episteme__docs_write,mcp__episteme__read`. Si no aparecen, dilo y detente.
 
@@ -35,8 +35,8 @@ Los archivos de trabajo van en el scratchpad de la sesión: `<scratchpad>/docs-<
 Lanza todos los subagentes en **un solo mensaje**: `general-purpose`, `model: "sonnet"`, `effort: "medium"`. El brief de cada uno trae la suite, la ruta de trabajo y estas instrucciones:
 
 1. Cargar `mcp__episteme__docs_status` y `mcp__episteme__docs_write` con ToolSearch; si no aparecen, decirlo y parar.
-2. `docs_status(suite="<suite>", pages=true)` y escribir `pages` tal cual en `<scratchpad>/docs-<suite>/pages.tsv`.
-3. Correr `docs_check.py diff --pages <scratchpad>/docs-<suite>/pages.tsv --out <scratchpad>/docs-<suite>/pages --upstream <upstream…> --include <include…>`.
+2. `docs_status(suite="<suite>", pages=true)`: guardar `inbox` (la bandeja) y escribir `pages` tal cual en `<scratchpad>/docs-<suite>/pages.tsv`.
+3. Correr `docs_check.py diff --pages <scratchpad>/docs-<suite>/pages.tsv --inbox <inbox> --upstream <upstream…> --include <include…>`.
 4. Devolver solo los conteos (cambiadas, nuevas, desaparecidas, errores) y el JSON del diff. No escribir nada todavía.
 
 Muestra una tabla con suite, cambiadas, nuevas, desaparecidas, errores y «al día según Context7».
@@ -49,12 +49,12 @@ El subagente conserva su contexto; mándale con `SendMessage` que escriba:
 
 | Caso | Llamada |
 | --- | --- |
-| `changed` | `docs_write(suite, source=…, body=<contenido del archivo tal cual>)`. Solo cambia `summary` o `description` si cambió el sentido de la página |
-| `new` | `docs_write(suite, path=<suggested_path>, source=…, body=…, fields={"title": <el H1>, "type": <reference, guide, concept o how-to>, "status": "stable", "lang": "en", "tags": [<suite>, <suite>/<primera carpeta>], "summary": <una frase en español>, "up": "[[README.index]]"})` |
+| `changed` | `docs_write(suite, source=…, body_ref=<hash>)`. Solo cambia `summary` o `description` si cambió el sentido de la página (léelo en las primeras ~40 líneas de `file`, nunca el archivo entero) |
+| `new` | `docs_write(suite, path=<suggested_path>, source=…, body_ref=<hash>, fields={"title": <el `title` de la entrada; si es `null`, el H1 de las primeras líneas de `file`>, "type": <reference, guide, concept o how-to>, "status": "stable", "lang": "en", "tags": [<suite>, <suite>/<primera carpeta>], "summary": <una frase en español>, "up": "[[README.index]]"})` |
 | `gone` | `docs_write(suite, source=…, fields={"status": "deprecated"})`. Nada se borra |
 | Sin `errors` al final | `docs_write(suite, path="README.index.md", fields={"suite": {…las cuatro claves…, "synced": <hoy>}})` |
 
-El cuerpo se pasa **tal cual** lo dejó el script: `docs_write` compara su hash y no reescribe lo que no cambió. No se escanea en busca de secretos (es texto público); los `fields` sí. Con `errors`, `synced` no se toca: la próxima corrida vuelve a revisar la suite.
+`type` y `summary` de una página `new` salen de las primeras ~40 líneas de su `file`: nunca leas ni copies el archivo entero. `docs_write` lee el cuerpo de la bandeja, comprueba que su hash es `body_ref`, no reescribe lo que no cambió y borra el archivo al terminar. No se escanea en busca de secretos (es texto público); los `fields` sí. Si `docs_write` responde `not_found` para un `body_ref` (dos páginas con el mismo cuerpo comparten archivo, o la bandeja se vació), al final vuelve a correr `diff` de esa suite y escribe lo que quede. Con `errors`, `synced` no se toca: la próxima corrida vuelve a revisar la suite.
 
 El subagente devuelve lo que escribió y lo que falló. Cierra con una tabla final por suite. El cuerpo del `README.index.md` (la lista de páginas) **no** se reescribe: las páginas nuevas se informan para enlazarlas a mano en Obsidian.
 

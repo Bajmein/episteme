@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import TYPE_CHECKING, Any
 
 from episteme.docs.hashing import body_hash, split_note
+from episteme.docs.inbox import inbox_dir
 from episteme.docs.schema import MANIFEST, SUITE_KEYS, is_url, manifest_errors, note_errors
 from episteme.errors import AMBIGUOUS, NOT_FOUND, READ_ONLY_ZONE, EpistemeError, invalid
 from episteme.vault import Vault, Zone
@@ -96,12 +98,13 @@ def _manifest_valid(manifest: dict[str, Any] | None) -> bool:
     return manifest is not None and not manifest_errors(manifest)
 
 
-def _summary(zone: Zone, notes: dict[str, dict[str, Any] | None]) -> dict[str, Any]:
+def _summary(vault: Vault, zone: Zone, notes: dict[str, dict[str, Any] | None]) -> dict[str, Any]:
     notes = dict(notes)
     manifest = notes.pop(manifest_path(zone), None)
     pages = [fm for fm in notes.values() if fm is not None]
     return {
         "suite": zone.path,
+        "inbox": os.fspath(inbox_dir(vault, zone)),
         "notes": len(notes),
         "with_source": len(list(filter(_has_source, pages))),
         "deprecated": len(list(filter(_is_deprecated, pages))),
@@ -138,10 +141,10 @@ def docs_status(engine: Engine, suite: str | None = None, pages: bool = False) -
         if pages:
             raise invalid("pages needs a suite. Pass suite, e.g. docs_status(suite=\"mise\").")
         zones = engine.vault.docs_zones
-        return {"suites": [_summary(z, suite_notes(engine, z)) for z in zones]}
+        return {"suites": [_summary(engine.vault, z, suite_notes(engine, z)) for z in zones]}
     zone = find_zone(engine.vault, suite)
     notes = suite_notes(engine, zone)
-    result = _summary(zone, notes)
+    result = _summary(engine.vault, zone, notes)
     if pages:
         result["pages"] = _pages(engine, zone, notes)
     return result

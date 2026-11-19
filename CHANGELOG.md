@@ -4,6 +4,14 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- `docs_write` acepta `body_ref`: el cuerpo de la página por su hash, desde la bandeja `.index/docs-inbox/<suite>/<hash>.md` del vault, en vez de `body`. Comprueba el hash, respeta el tope de 2 MiB y borra el archivo tras escribir. `docs_status` devuelve `inbox`, la ruta de la bandeja de cada suite.
+
+### Cambiado
+
+- `docs_check.py diff` usa `--inbox <dir>` en vez de `--out`, guarda cada página como `<hash>.md` y devuelve `hash` (y `title` en las nuevas). `/episteme:docs` ya no pasa cuerpos de página por el modelo: sincroniza suites grandes (uv, mise, render) sin copiar cientos de KB en las llamadas.
+
 ## [0.16.0] - 2026-11-19
 
 ### Añadido

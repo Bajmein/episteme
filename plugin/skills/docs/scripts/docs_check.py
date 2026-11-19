@@ -2,11 +2,13 @@
 
     docs_check.py context7 <id>...
         JSON {id: lastUpdateDate | null} from Context7's public search API.
-    docs_check.py diff --pages <tsv> --out <dir> [--upstream <url>...] [--include <prefix>...]
+    docs_check.py diff --pages <tsv> --inbox <dir> [--upstream <url>...] [--include <prefix>...]
         Downloads every source of the TSV that docs_status(suite, pages=true) returns, saves
-        each page as <dir>/<sha1 of the url>.md and prints JSON with the changed, gone, new
-        and failed pages. episteme itself has no HTTP: this script runs on the person's machine
-        and the agent writes the results with docs_write.
+        each changed or new page as <dir>/<body hash>.md (<dir> is the "inbox" docs_status
+        gives) and prints JSON with the changed, gone, new and failed pages, each changed or
+        new one with its "hash". docs_write takes the body from the inbox with body_ref, so no
+        page text passes through the model. episteme itself has no HTTP: this script runs on
+        the person's machine.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ GONE_STATUSES = (404, 410)
 CONTEXT7_SEARCH = "https://context7.com/api/v2/libs/search"
 URL_RE = re.compile(r"https?://[^\s)\]>\"'`]+")
 SCHEMES = ("http", "https")
+INBOX_FILE_RE = re.compile(rf"[0-9a-f]{{{HASH_LEN}}}\.md")
 
 
 def body_hash(body: str) -> str:
@@ -146,15 +149,41 @@ def read_pages(tsv: Path) -> list[Page]:
     return pages
 
 
-def file_for(out: Path, url: str) -> Path:
-    return out / f"{hashlib.sha1(url.encode('utf-8'), usedforsecurity=False).hexdigest()}.md"
+def file_for(inbox: Path, digest: str) -> Path:
+    return inbox / f"{digest}.md"
 
 
-def _save(out: Path, result: Fetched) -> str:
-    path = file_for(out, result.url)
+def _save(inbox: Path, text: str) -> tuple[str, str]:
+    """Write ``text`` to ``<inbox>/<body hash>.md``; the hash and the path."""
+    digest = body_hash(text)
+    path = file_for(inbox, digest)
     with path.open("w", encoding="utf-8", newline="") as fh:
-        fh.write(result.text or "")
-    return str(path)
+        fh.write(text)
+    return digest, str(path)
+
+
+def _outside_fences(text: str) -> Iterable[str]:
+    """The lines of ``text`` that are not inside a fenced code block."""
+    fenced = False
+    for line in text.splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+        elif not fenced:
+            yield line
+
+
+def _first_heading(text: str) -> str | None:
+    """The text of the first ``# `` heading outside code fences, or None."""
+    matches = (re.fullmatch(r"# +(.+?)(?:\s+#+)?\s*", line) for line in _outside_fences(text))
+    return next((m.group(1) for m in matches if m), None)
+
+
+def prepare_inbox(inbox: Path) -> None:
+    """Create the inbox and delete the ``<hash>.md`` files of a previous run, nothing else."""
+    inbox.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for entry in inbox.iterdir():
+        if INBOX_FILE_RE.fullmatch(entry.name) and entry.is_file():
+            entry.unlink()
 
 
 def suggested_path(url: str, include: Iterable[str]) -> str:
@@ -226,7 +255,7 @@ def _included(url: str, include: list[str]) -> bool:
     return not include or any(url.startswith(p) for p in include)
 
 
-def _classify(page: Page, result: Fetched, out: Path, report: dict) -> None:
+def _classify(page: Page, result: Fetched, inbox: Path, report: dict) -> None:
     if result.status in GONE_STATUSES:
         if page.status == "deprecated":
             report["unchanged"] += 1
@@ -239,34 +268,38 @@ def _classify(page: Page, result: Fetched, out: Path, report: dict) -> None:
     elif body_hash(result.text) == page.hash:
         report["unchanged"] += 1
     else:
+        digest, file = _save(inbox, result.text)
         report["changed"].append(
-            {"source": page.source, "path": page.path, "file": _save(out, result)}
+            {"source": page.source, "path": page.path, "hash": digest, "file": file}
         )
 
 
-def _new_entry(result: Fetched, include: list[str], out: Path, report: dict) -> None:
+def _new_entry(result: Fetched, include: list[str], inbox: Path, report: dict) -> None:
     if result.text is None:
         report["errors"].append({"source": result.url, "error": result.error})
         return
+    digest, file = _save(inbox, result.text)
     report["new"].append(
         {
             "source": result.url,
-            "file": _save(out, result),
+            "hash": digest,
+            "file": file,
+            "title": _first_heading(result.text),
             "suggested_path": suggested_path(result.url, include),
         }
     )
 
 
-def diff(pages: list[Page], out: Path, upstream: list[str], include: list[str]) -> dict:
+def diff(pages: list[Page], inbox: Path, upstream: list[str], include: list[str]) -> dict:
     """Download the suite pages and the new ones in its upstream indexes; classify them."""
-    out.mkdir(parents=True, exist_ok=True)
+    prepare_inbox(inbox)
     report: dict = {"changed": [], "unchanged": 0, "gone": [], "new": [], "errors": []}
     new = upstream_urls(upstream, include, {p.source for p in pages}, report)
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for page, result in zip(pages, pool.map(fetch, [p.source for p in pages]), strict=True):
-            _classify(page, result, out, report)
+            _classify(page, result, inbox, report)
         for result in pool.map(_fetch_new, new):
-            _new_entry(result, include, out, report)
+            _new_entry(result, include, inbox, report)
     return report
 
 
@@ -280,7 +313,7 @@ def _parser() -> argparse.ArgumentParser:
     c7.add_argument("ids", nargs="+")
     d = sub.add_parser("diff", help="compare a suite with its sources")
     d.add_argument("--pages", type=Path, required=True)
-    d.add_argument("--out", type=Path, required=True)
+    d.add_argument("--inbox", type=Path, required=True)
     d.add_argument("--upstream", nargs="*", default=[])
     d.add_argument("--include", nargs="*", default=[])
     return parser
@@ -291,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "context7":
         report: dict = {i: context7_date(i) for i in args.ids}
     else:
-        report = diff(read_pages(args.pages), args.out, args.upstream, args.include)
+        report = diff(read_pages(args.pages), args.inbox, args.upstream, args.include)
     json.dump(report, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0

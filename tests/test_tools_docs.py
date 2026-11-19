@@ -11,6 +11,8 @@ import pytest
 import yaml
 from conftest import TODAY, mcp_client
 
+from episteme.index import NOTE_MAX_BYTES
+
 pytestmark = pytest.mark.anyio
 
 SUITE = "docs/mise"
@@ -77,6 +79,9 @@ async def test_docs_status_lists_docs_zones_with_counts(suite: Path) -> None:
     async with mcp_client(suite) as c:
         res = await c.ok("docs_status")
 
+    inbox = res["suites"][0].pop("inbox")
+    assert Path(inbox).parts[-4:] == (".index", "docs-inbox", "docs", "mise")
+    assert not (suite / ".index" / "docs-inbox").exists()
     assert res == {
         "suites": [
             {
@@ -376,3 +381,155 @@ def test_backup_leaves_docs_zones_out(suite: Path) -> None:
 
     assert not any(rel.startswith(SUITE) for rel in members)
     assert any(rel.startswith("memory/") for rel in members)
+
+
+# -- body_ref: the body comes from the inbox ----------------------------------------------------
+
+
+def _inbox_file(vault: Path, body: str, name: str | None = None) -> Path:
+    folder = vault / ".index" / "docs-inbox" / SUITE
+    folder.mkdir(parents=True, exist_ok=True)
+    file = folder / f"{name or _hash(body)}.md"
+    file.write_text(body, encoding="utf-8", newline="")
+    return file
+
+
+async def test_docs_write_body_ref_replaces_the_body_and_consumes_the_file(suite: Path) -> None:
+    new = "# Getting started\n\nInstall mise with `curl`.\n"
+    file = _inbox_file(suite, new)
+
+    async with mcp_client(suite) as c:
+        res = await c.ok(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=_hash(new)
+        )
+
+    page = suite / SUITE / PAGE
+    assert res["changed"] is True and res["hash"] == _hash(new)
+    assert page.read_text(encoding="utf-8").endswith("---\n" + new)
+    assert str(_fm(page)["updated"]) == TODAY
+    assert not file.exists()
+
+
+async def test_docs_write_body_ref_of_the_current_body_changes_nothing_and_consumes_it(
+    suite: Path,
+) -> None:
+    file = _inbox_file(suite, BODY)
+
+    async with mcp_client(suite) as c:
+        res = await c.ok(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=_hash(BODY)
+        )
+
+    assert res["changed"] is False
+    assert not file.exists()
+
+
+async def test_docs_write_body_ref_creates_a_note(suite: Path) -> None:
+    file = _inbox_file(suite, "# Tasks\n")
+
+    async with mcp_client(suite) as c:
+        res = await c.ok(
+            "docs_write",
+            suite=SUITE,
+            path="tasks/running.md",
+            source=f"{URL}/tasks/running.md",
+            body_ref=_hash("# Tasks\n"),
+            fields=NEW_FIELDS,
+        )
+
+    note = suite / SUITE / "tasks/running.md"
+    assert res["created"] is True
+    assert note.read_text(encoding="utf-8").endswith("---\n# Tasks\n")
+    assert not file.exists()
+
+
+async def test_docs_write_refuses_body_together_with_body_ref(suite: Path) -> None:
+    file = _inbox_file(suite, "# X\n")
+
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md",
+            body="# X\n", body_ref=_hash("# X\n"),
+        )  # fmt: skip
+
+    assert text.startswith("invalid_argument:"), text
+    assert file.exists()
+
+
+@pytest.mark.parametrize("ref", ["../x", "ABCDEF0123456789", "abc", "0123456789abcdef0", ""])
+async def test_docs_write_refuses_a_malformed_body_ref(suite: Path, ref: str) -> None:
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=ref
+        )
+
+    assert text.startswith("invalid_argument:"), text
+
+
+async def test_docs_write_body_ref_without_a_file_is_not_found(suite: Path) -> None:
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref="0" * 16
+        )
+
+    assert text.startswith("not_found:") and "docs_check.py diff" in text, text
+    assert str(suite) not in text
+
+
+async def test_docs_write_body_ref_whose_content_differs_keeps_the_file(suite: Path) -> None:
+    file = _inbox_file(suite, "# Other\n", name="1" * 16)
+
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref="1" * 16
+        )
+
+    assert text.startswith("invalid_argument:"), text
+    assert str(suite) not in text
+    assert file.exists()
+
+
+async def test_docs_write_refuses_a_body_ref_file_over_the_note_limit(suite: Path) -> None:
+    big = "# Big\n\n" + "x" * NOTE_MAX_BYTES
+    file = _inbox_file(suite, big)
+
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=_hash(big)
+        )
+
+    assert text.startswith("invalid_argument:"), text
+    assert file.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+async def test_docs_write_refuses_an_inbox_symlink_that_leaves_the_inbox(
+    suite: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("# Out\n", encoding="utf-8")
+    folder = suite / ".index" / "docs-inbox" / SUITE
+    folder.mkdir(parents=True)
+    (folder / f"{_hash('# Out\n')}.md").symlink_to(outside)
+
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md",
+            body_ref=_hash("# Out\n"),
+        )  # fmt: skip
+
+    assert text.startswith("outside_vault:"), text
+    assert outside.exists()
+
+
+async def test_docs_write_invalid_schema_keeps_the_body_ref_file(suite: Path) -> None:
+    file = _inbox_file(suite, "# X\n")
+
+    async with mcp_client(suite) as c:
+        text = await c.error(
+            "docs_write", suite=SUITE, path="x.md", source=f"{URL}/x.md",
+            body_ref=_hash("# X\n"), fields={"title": "X"},
+        )  # fmt: skip
+
+    assert text.startswith("invalid_schema:"), text
+    assert file.exists()
