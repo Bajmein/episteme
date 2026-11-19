@@ -26,7 +26,7 @@ import urllib.request
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 HASH_LEN = 16
 WORKERS = 8
@@ -40,6 +40,14 @@ CONTEXT7_SEARCH = "https://context7.com/api/v2/libs/search"
 URL_RE = re.compile(r"https?://[^\s)\]>\"'`]+")
 SCHEMES = ("http", "https")
 INBOX_FILE_RE = re.compile(rf"[0-9a-f]{{{HASH_LEN}}}\.md")
+HTML_ERROR = "HTML instead of Markdown"
+EXCERPT_MAX = 300
+PAGE_SUFFIX_RE = re.compile(r"(?:/index)?\.(?:md|html?)$", re.IGNORECASE)
+NON_PAGE_PATH = "/.well-known/"
+NON_PAGE_SUFFIXES = (".json", ".txt")
+FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+NON_PROSE_STARTS = (">", "|", "<", "![", ":::")
+LINK_ITEM_RE = re.compile(r"(?:[-*+]|\d+\.)\s+\[")
 
 
 def body_hash(body: str) -> str:
@@ -203,24 +211,63 @@ def upstream_urls(
 ) -> list[str]:
     """URLs listed in the ``llms.txt`` indexes, under ``include`` and not in the suite yet.
 
-    A URL is known when it or its Markdown variant (``md_variant``) is in ``known``.
-    An index that cannot be read goes to ``report["errors"]``, so the suite is not marked synced.
+    A URL is known when its page key (``_page_key``) is the key of a ``known`` source or of an
+    index, so ``X``, ``X/``, ``X.md``, ``X/index.md`` and ``X#sec`` are the same page. The
+    URLs that are not pages (``_is_page``) are dropped, and the rest are deduplicated by key
+    (the first URL wins, without query or fragment). An index that cannot be read goes to
+    ``report["errors"]``, so the suite is not marked synced.
     """
-    skip = known | set(upstream)
-    found: dict[str, None] = {}
-    for index in upstream:
+    indexes = list(upstream)
+    skip = {_page_key(u) for u in known | set(indexes)}
+    found: dict[str, str] = {}
+    for index in indexes:
         for url in _listed(index, report):
-            if url not in skip and md_variant(url) not in skip and _included(url, include):
-                found[url] = None
-    return [url for url in found if md_variant(url) not in found]
+            key = _page_key(url)
+            if key not in skip and key not in found and _is_candidate(url, include):
+                found[key] = _without_query(url)
+    return list(found.values())
+
+
+def _is_candidate(url: str, include: list[str]) -> bool:
+    return _is_page(url) and _included(url, include)
+
+
+def _without_query(url: str) -> str:
+    return urllib.parse.urlsplit(url)._replace(query="", fragment="").geturl()
+
+
+def _page_key(url: str) -> str:
+    """The URL without scheme, query, fragment, ``index.md``/``.md``/``.html`` or final ``/``."""
+    parts = urllib.parse.urlsplit(url)
+    path = PAGE_SUFFIX_RE.sub("", parts.path).rstrip("/")
+    return f"{parts.netloc}{path}"
+
+
+def _is_page(url: str) -> bool:
+    """False for templates, ``.well-known`` files, JSON and ``.txt`` files (``llms*.txt``…)."""
+    if "{" in url or "}" in url:
+        return False
+    path = urllib.parse.urlsplit(url).path.lower()
+    return not (NON_PAGE_PATH in path + "/" or path.endswith(NON_PAGE_SUFFIXES))
 
 
 def md_variant(url: str) -> str | None:
-    """The ``.md`` twin of a page URL, or None when the URL already ends in ``.md``."""
+    """The ``.md`` twin of a page URL, or None when there is none to ask for.
+
+    None when the URL already ends in ``.md`` or its last segment has another extension
+    (``.txt``, ``.json``…); ``.html``/``.htm`` is replaced by ``.md``.
+    """
     parts = urllib.parse.urlsplit(url)
-    if parts.path.endswith(".md"):
+    path = parts.path or "/"
+    suffix = PurePosixPath(path).suffix.lower()
+    if path.endswith("/"):
+        path += "index.md"
+    elif suffix in (".html", ".htm"):
+        path = path[: -len(suffix)] + ".md"
+    elif suffix.lstrip(".").isalpha():  # .txt, .json…; not a version like v1.2
         return None
-    path = parts.path + ("index.md" if parts.path.endswith("/") else ".md")
+    else:
+        path += ".md"
     return urllib.parse.urlunsplit(parts._replace(path=path, query="", fragment=""))
 
 
@@ -232,7 +279,12 @@ def _is_markdown(result: Fetched) -> bool:
     return not head.startswith(("<!doctype", "<html"))
 
 
-def _fetch_new(url: str) -> Fetched:
+def _is_html(result: Fetched) -> bool:
+    """A fetch that has text but looks like an HTML document."""
+    return result.text is not None and not _is_markdown(result)
+
+
+def _fetch_markdown(url: str) -> Fetched:
     """The Markdown variant of ``url`` when it answers with Markdown; else ``url`` itself."""
     variant = md_variant(url)
     if variant is not None:
@@ -257,14 +309,13 @@ def _included(url: str, include: list[str]) -> bool:
 
 def _classify(page: Page, result: Fetched, inbox: Path, report: dict) -> None:
     if result.status in GONE_STATUSES:
-        if page.status == "deprecated":
-            report["unchanged"] += 1
-        else:
-            report["gone"].append(
-                {"source": page.source, "path": page.path, "http_status": result.status}
-            )
+        report["gone"].append(
+            {"source": page.source, "path": page.path, "http_status": result.status}
+        )
     elif result.text is None:
         report["errors"].append({"source": page.source, "error": result.error})
+    elif _is_html(result):
+        report["errors"].append({"source": page.source, "error": HTML_ERROR})
     elif body_hash(result.text) == page.hash:
         report["unchanged"] += 1
     else:
@@ -275,8 +326,9 @@ def _classify(page: Page, result: Fetched, inbox: Path, report: dict) -> None:
 
 
 def _new_entry(result: Fetched, include: list[str], inbox: Path, report: dict) -> None:
-    if result.text is None:
-        report["errors"].append({"source": result.url, "error": result.error})
+    if result.text is None or _is_html(result):
+        reason = result.error if result.text is None else HTML_ERROR
+        report["skipped"].append({"source": result.url, "reason": reason})
         return
     digest, file = _save(inbox, result.text)
     report["new"].append(
@@ -285,20 +337,65 @@ def _new_entry(result: Fetched, include: list[str], inbox: Path, report: dict) -
             "hash": digest,
             "file": file,
             "title": _first_heading(result.text),
+            "excerpt": _excerpt(result.text),
             "suggested_path": suggested_path(result.url, include),
         }
     )
 
 
+def _paragraphs(text: str) -> Iterable[list[str]]:
+    """Blocks of consecutive non-blank, non-heading lines outside code fences."""
+    block: list[str] = []
+    for line in _outside_fences(text):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            block.append(stripped)
+        elif block:
+            yield block
+            block = []
+    if block:
+        yield block
+
+
+def _is_prose(block: list[str]) -> bool:
+    """A block that is not a quote or a list of links."""
+    return not (block[0].startswith(NON_PROSE_STARTS) or LINK_ITEM_RE.match(block[0]))
+
+
+def _excerpt(text: str) -> str | None:
+    """The first paragraph of prose on one line, cut to ``EXCERPT_MAX`` characters, or None."""
+    body = FRONTMATTER_RE.sub("", text, count=1)
+    block = next((b for b in _paragraphs(body) if _is_prose(b)), None)
+    if block is None:
+        return None
+    line = " ".join(block)
+    return line if len(line) <= EXCERPT_MAX else line[:EXCERPT_MAX].rstrip() + "…"
+
+
 def diff(pages: list[Page], inbox: Path, upstream: list[str], include: list[str]) -> dict:
-    """Download the suite pages and the new ones in its upstream indexes; classify them."""
+    """Download the suite pages and the new ones in its upstream indexes; classify them.
+
+    A ``deprecated`` page is not downloaded: it counts as unchanged. A new page that fails
+    goes to ``skipped`` (it is tried again next run); ``errors`` is for the suite pages and
+    the indexes that cannot be read.
+    """
     prepare_inbox(inbox)
-    report: dict = {"changed": [], "unchanged": 0, "gone": [], "new": [], "errors": []}
+    report: dict = {
+        "changed": [],
+        "unchanged": 0,
+        "gone": [],
+        "new": [],
+        "skipped": [],
+        "errors": [],
+    }
     new = upstream_urls(upstream, include, {p.source for p in pages}, report)
+    active = [p for p in pages if p.status != "deprecated"]
+    report["unchanged"] += len(pages) - len(active)
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        for page, result in zip(pages, pool.map(fetch, [p.source for p in pages]), strict=True):
+        results = pool.map(_fetch_markdown, [p.source for p in active])
+        for page, result in zip(active, results, strict=True):
             _classify(page, result, inbox, report)
-        for result in pool.map(_fetch_new, new):
+        for result in pool.map(_fetch_markdown, new):
             _new_entry(result, include, inbox, report)
     return report
 
