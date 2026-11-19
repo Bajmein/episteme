@@ -24,6 +24,11 @@ PAGES = {
     "/docs/a": (200, "<!DOCTYPE html>\n<html><body>app shell</body></html>"),
     "/docs/a.md": (200, "# A\n\nMarkdown.\n"),
     "/docs/b": (200, "# B\n\nPlain.\n"),
+    "/docs/x": (200, "<!doctype html><html></html>"),
+    "/docs/x.md": (200, "# X\n\nBody.\n"),
+    "/docs/html-only": (200, "<html><body>shell</body></html>"),
+    "/docs/api.txt": (200, "plain api text\n"),
+    "/docs/spec.json": (200, '{"openapi": "3.1"}'),
 }
 
 
@@ -181,6 +186,10 @@ def test_diff_keeps_a_listed_md_url(check: ModuleType, base: str, tmp_path: Path
         ("https://d.io/docs/a?x=1#top", "https://d.io/docs/a.md"),
         ("https://d.io/docs/a.md", None),
         ("https://d.io/docs/a.md?x=1", None),
+        ("https://d.io/docs/api.txt", None),
+        ("https://d.io/docs/spec.json", None),
+        ("https://d.io/docs/a.html", "https://d.io/docs/a.md"),
+        ("https://d.io/docs/a.htm?x=1", "https://d.io/docs/a.md"),
     ],
 )
 def test_md_variant(check: ModuleType, url: str, expected: str | None) -> None:
@@ -270,3 +279,128 @@ def test_first_heading_is_none_without_one(check: ModuleType) -> None:
     assert check._first_heading("intro\n# Title #\n") == "Title"
     assert check._first_heading("# Using C#\n") == "Using C#"
     assert check._first_heading("```sh\n# comment\n```\n# Real\n") == "Real"
+
+
+def _existing(check: ModuleType, base: str, tmp_path: Path, path: str, text: str) -> dict:
+    page = check.Page(f"{base}{path}", check.body_hash(text), "p.md", "stable")
+    return check.diff([page], tmp_path / "inbox", [], [])
+
+
+def test_existing_page_without_md_compares_its_markdown_variant(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    same = _existing(check, base, tmp_path, "/docs/x", "# X\n\nBody.\n")
+    changed = _existing(check, base, tmp_path, "/docs/x", "# X\n")
+
+    assert same["unchanged"] == 1 and same["changed"] == []
+    [entry] = changed["changed"]
+    assert Path(entry["file"]).read_text(encoding="utf-8") == "# X\n\nBody.\n"
+
+
+def test_existing_page_that_only_serves_html_is_an_error_not_a_change(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _existing(check, base, tmp_path, "/docs/html-only", "# Old\n")
+
+    assert report["errors"] == [
+        {"source": f"{base}/docs/html-only", "error": "HTML instead of Markdown"}
+    ]
+    assert report["changed"] == [] and report["unchanged"] == 0
+    assert list((tmp_path / "inbox").iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("path", "text"),
+    [("/docs/api.txt", "plain api text\n"), ("/docs/spec.json", '{"openapi": "3.1"}')],
+)
+def test_existing_txt_and_json_pages_are_downloaded_as_they_are(
+    check: ModuleType, base: str, tmp_path: Path, path: str, text: str
+) -> None:
+    report = _existing(check, base, tmp_path, path, text)
+
+    assert report["unchanged"] == 1
+    assert report["errors"] == []
+
+
+def test_new_page_that_only_serves_html_is_an_error(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _new_pages(check, base, tmp_path, "/docs/html-only", [])
+
+    assert report["new"] == []
+    assert [e["error"] for e in report["errors"]] == ["HTML instead of Markdown"]
+    assert list((tmp_path / "inbox").iterdir()) == []
+
+
+@pytest.mark.parametrize("listed", ["/docs/x.md", "/docs/x/", "/docs/x/index.md", "/docs/x#sec"])
+def test_listed_variants_of_a_known_page_are_not_new(
+    check: ModuleType, base: str, tmp_path: Path, listed: str
+) -> None:
+    known = [check.Page(f"{base}/docs/x", "0" * 16, "x.md", "stable")]
+
+    report = _new_pages(check, base, tmp_path, listed, known)
+
+    assert report["new"] == []
+
+
+def test_variants_of_the_same_new_page_come_out_once(check: ModuleType, base: str) -> None:
+    suffixes = ("#top", "/", ".md", "/index.md")
+    _Handler.llms = "\n".join(f"- [A]({base}/docs/a{s})" for s in suffixes)
+    report: dict = {"errors": []}
+
+    urls = check.upstream_urls([f"{base}/llms.txt"], [f"{base}/docs/"], set(), report)
+
+    assert urls == [f"{base}/docs/a"]
+
+
+@pytest.mark.parametrize(
+    "listed",
+    [
+        "/docs/{query}",
+        "/docs/.well-known/ai-plugin",
+        "/docs/openapi.json",
+        "/docs/llms-full.txt",
+        "/docs/llms.txt",
+        "/docs/llms-api.txt",
+    ],
+)
+def test_urls_that_are_not_pages_are_not_listed_as_new(
+    check: ModuleType, base: str, listed: str
+) -> None:
+    _Handler.llms = f"- [P]({base}{listed})\n"
+    report: dict = {"errors": []}
+
+    urls = check.upstream_urls([f"{base}/llms.txt"], [], set(), report)
+
+    assert urls == []
+
+
+def test_new_entry_has_an_excerpt(check: ModuleType, base: str, tmp_path: Path) -> None:
+    report = _new_pages(check, base, tmp_path, "/docs/a", [])
+
+    assert report["new"][0]["excerpt"] == "Markdown."
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "# T\n\n> quote\n\n```\ncode\n```\n\nFirst line\nsecond line.\n\nOther.\n",
+            "First line second line.",
+        ),
+        ("# T\n\n- [Link](x)\n- [Link2](y)\n\nReal text.\n", "Real text."),
+        ("# T\n\n## Sub\n\n> only quote\n", None),
+        ("", None),
+    ],
+)
+def test_excerpt_is_the_first_paragraph_of_prose(
+    check: ModuleType, text: str, expected: str | None
+) -> None:
+    assert check._excerpt(text) == expected
+
+
+def test_excerpt_is_cut_at_300_characters(check: ModuleType) -> None:
+    excerpt = check._excerpt("# T\n\n" + "word " * 100)
+
+    assert excerpt is not None
+    assert 300 <= len(excerpt) <= 301 and excerpt.endswith("…")
