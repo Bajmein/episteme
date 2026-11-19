@@ -162,17 +162,20 @@ def _save(inbox: Path, text: str) -> tuple[str, str]:
     return digest, str(path)
 
 
-def _first_heading(text: str) -> str | None:
-    """The text of the first ``# `` heading outside code fences, or None."""
+def _outside_fences(text: str) -> Iterable[str]:
+    """The lines of ``text`` that are not inside a fenced code block."""
     fenced = False
     for line in text.splitlines():
         if line.lstrip().startswith(("```", "~~~")):
             fenced = not fenced
         elif not fenced:
-            match = re.fullmatch(r"# +(.+?)(?:\s+#+)?\s*", line)
-            if match:
-                return match.group(1)
-    return None
+            yield line
+
+
+def _first_heading(text: str) -> str | None:
+    """The text of the first ``# `` heading outside code fences, or None."""
+    matches = (re.fullmatch(r"# +(.+?)(?:\s+#+)?\s*", line) for line in _outside_fences(text))
+    return next((m.group(1) for m in matches if m), None)
 
 
 def prepare_inbox(inbox: Path) -> None:
