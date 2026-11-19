@@ -95,7 +95,7 @@ Locales por defecto: sus rutas van a `.git/info/exclude` y se indexan en `CLAUDE
 - `grep -rn '{{' <archivos escritos>` sale vacío.
 - Los enlaces relativos de `README.md` y `CLAUDE.md` existen.
 - Cada glob de `paths:` de las reglas escritas coincide con al menos un archivo (`git ls-files '<glob>'`).
-- Los hooks copiados arrancan: `python3 .claude/hooks/<hook>.py < /dev/null` sale con 0 (`python-serena.py` con el argumento `pre`).
+- Los hooks copiados arrancan: `python3 .claude/hooks/<hook>.py < /dev/null` sale con 0 (`python-serena.py` con los argumentos `pre` y `remind`).
 
 ### 7. Registro en episteme
 

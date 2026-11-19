@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -169,3 +170,106 @@ def test_hooks_start_with_no_input(hook: str, tmp_path: Path) -> None:
     done = _run_hook(hook, env=env, cwd=tmp_path)
 
     assert done.returncode == 0
+
+
+def _hook_module() -> dict:
+    return runpy.run_path(str(HOOKS / "python-serena.py"), run_name="python_serena_template")
+
+
+def _call(tool: str, **tool_input: str) -> dict:
+    return {"tool_name": tool, "tool_input": tool_input}
+
+
+PYTHON_CALLS = [
+    _call("mcp__serena__find_symbol", name_path="x"),
+    _call("Read", file_path="/p/a.py"),
+    _call("Edit", file_path="/p/a.pyi"),
+    _call("MultiEdit", file_path="a.py"),
+    _call("Write", file_path="a.py"),
+    _call("NotebookEdit", file_path="a.py"),
+    _call("Grep", pattern="x", type="py"),
+    _call("Grep", pattern="x", glob="*.py"),
+    _call("Grep", pattern="x", path="a.pyi"),
+    _call("Grep", pattern="x", path="src/pkg"),
+    _call("Bash", command="grep -rn x src/"),
+    _call("Bash", command="grep -n x tests/test_a.py"),
+    _call("Bash", command="grep -rn x --include=*.py ."),
+    _call("Bash", command="rg -g '*.py' x"),
+    _call("Bash", command="rg -t py x"),
+    _call("Bash", command="rg --type=py x"),
+    _call("Bash", command="cat scripts/run.sh"),
+]
+OTHER_CALLS = [
+    _call("Read", file_path="/p/README.md"),
+    _call("Edit", file_path="/p/a.json"),
+    _call("Grep", pattern="x", glob="*.md"),
+    _call("Grep", pattern="x", path="docs"),
+    _call("Grep", pattern="x"),
+    _call("Bash", command="grep -n x README.md"),
+    _call("Bash", command="curl -s https://example.com/a | grep x"),
+    _call("Bash", command="ls docs"),
+    _call("Bash", command="grep x notes.pyc"),
+    _call("WebFetch", url="https://example.com/a.py"),
+]
+
+
+@pytest.mark.parametrize("call", PYTHON_CALLS)
+def test_python_serena_counts_python_calls(call: dict, tmp_path: Path) -> None:
+    assert _hook_module()["python_call"]({**call, "cwd": str(tmp_path)}) is True
+
+
+@pytest.mark.parametrize("call", OTHER_CALLS)
+def test_python_serena_ignores_other_calls(call: dict, tmp_path: Path) -> None:
+    assert _hook_module()["python_call"]({**call, "cwd": str(tmp_path)}) is False
+
+
+def _fake_serena_hooks(tmp_path: Path) -> tuple[dict, Path]:
+    """A PATH with a `serena-hooks` that records its stdin and exits 3."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    marker = tmp_path / "called.json"
+    script = bin_dir / "serena-hooks"
+    script.write_text(
+        f"#!/bin/sh\ncat > '{marker}'\necho out-text\necho err-text >&2\nexit 3\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+           "CLAUDE_PROJECT_DIR": str(tmp_path)}
+    return env, marker
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake serena-hooks is a sh script")
+def test_remind_skips_serena_hooks_for_a_non_python_call(tmp_path: Path) -> None:
+    env, marker = _fake_serena_hooks(tmp_path)
+    event = json.dumps(_call("Bash", command="grep -n x README.md"))
+
+    done = _run_hook("python-serena.py", "remind", stdin=event, env=env, cwd=tmp_path)
+
+    assert (done.returncode, done.stdout, done.stderr) == (0, "", "")
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake serena-hooks is a sh script")
+def test_remind_forwards_a_python_call_and_its_result(tmp_path: Path) -> None:
+    env, marker = _fake_serena_hooks(tmp_path)
+    event = _call("Bash", command="grep -rn x src/")
+
+    done = _run_hook("python-serena.py", "remind", stdin=json.dumps(event), env=env, cwd=tmp_path)
+
+    assert json.loads(marker.read_text(encoding="utf-8")) == event
+    assert done.returncode == 3
+    assert done.stdout.strip() == "out-text"
+    assert done.stderr.strip() == "err-text"
+
+
+def test_serena_python_settings_route_remind_through_the_hook() -> None:
+    settings = json.loads(
+        (TEMPLATES / "settings" / "serena-python.json").read_text(encoding="utf-8")
+    )
+    first = settings["hooks"]["PreToolUse"][0]
+
+    assert first["matcher"] == ""
+    assert first["hooks"][0]["command"] == (
+        'python3 -I "$CLAUDE_PROJECT_DIR/.claude/hooks/python-serena.py" remind'
+    )
