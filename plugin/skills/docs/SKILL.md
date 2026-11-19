@@ -49,7 +49,7 @@ El subagente conserva su contexto; mándale con `SendMessage` que escriba:
 
 | Caso | Llamada |
 | --- | --- |
-| `changed` | `docs_write(suite, source=…, body_ref=<hash>)`. Solo cambia `summary` o `description` si cambió el sentido de la página (léelo en las primeras ~40 líneas de `file`, nunca el archivo entero) |
+| `changed` | `docs_write(suite, source=…, body_ref=<hash>)`. Solo cambia `summary` o `description` si cambió el sentido de la página (no leas el archivo de la bandeja; basta con saber que cambió) |
 | `new` | `docs_write(suite, path=<suggested_path>, source=…, body_ref=<hash>, fields={"title": <el `title` de la entrada; si es `null`, deduce uno del `excerpt` o de `suggested_path`>, "type": <reference, guide, concept o how-to>, "status": "stable", "lang": "en", "tags": [<suite>, <suite>/<primera carpeta>], "summary": <una frase en español>, "up": "[[README.index]]"})` |
 | `gone` | `docs_write(suite, source=…, fields={"status": "deprecated"})`. Nada se borra |
 | Sin `errors` al final | `docs_write(suite, path="README.index.md", fields={"suite": {…las cuatro claves…, "synced": <hoy>}})` |

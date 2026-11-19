@@ -404,3 +404,26 @@ def test_excerpt_is_cut_at_300_characters(check: ModuleType) -> None:
 
     assert excerpt is not None
     assert 300 <= len(excerpt) <= 301 and excerpt.endswith("…")
+
+
+def test_excerpt_skips_frontmatter_and_tables(check: ModuleType) -> None:
+    text = "---\ntitle: X\n---\n\n| a | b |\n|---|---|\n\nReal text.\n"
+
+    assert check._excerpt(text) == "Real text."
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://d.io/docs/v1.2", "https://d.io/docs/v1.2.md"),
+        ("https://d.io", "https://d.io/index.md"),
+    ],
+)
+def test_md_variant_edge_cases(check: ModuleType, url: str, expected: str) -> None:
+    assert check.md_variant(url) == expected
+
+
+def test_non_pages_are_matched_without_regard_to_case(check: ModuleType) -> None:
+    assert not check._is_page("https://d.io/openapi.JSON")
+    assert not check._is_page("https://d.io/LLMS-full.txt")
+    assert not check._is_page("https://d.io/.well-known")

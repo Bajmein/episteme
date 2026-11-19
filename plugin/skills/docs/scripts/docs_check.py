@@ -45,6 +45,8 @@ EXCERPT_MAX = 300
 PAGE_SUFFIX_RE = re.compile(r"(?:/index)?\.(?:md|html?)$", re.IGNORECASE)
 NON_PAGE_PATH = "/.well-known/"
 NON_PAGE_NAME_RE = re.compile(r"llms.*\.txt")
+FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+NON_PROSE_STARTS = (">", "|", "<", "![", ":::")
 LINK_ITEM_RE = re.compile(r"(?:[-*+]|\d+\.)\s+\[")
 
 
@@ -245,10 +247,10 @@ def _is_page(url: str) -> bool:
     """False for templates, ``.well-known`` files, JSON and ``llms*.txt`` indexes."""
     if "{" in url or "}" in url:
         return False
-    path = urllib.parse.urlsplit(url).path
+    path = urllib.parse.urlsplit(url).path.lower()
     last = path.rsplit("/", 1)[-1]
     return not (
-        NON_PAGE_PATH in path or path.endswith(".json") or NON_PAGE_NAME_RE.fullmatch(last)
+        NON_PAGE_PATH in path + "/" or path.endswith(".json") or NON_PAGE_NAME_RE.fullmatch(last)
     )
 
 
@@ -259,13 +261,13 @@ def md_variant(url: str) -> str | None:
     (``.txt``, ``.json``…); ``.html``/``.htm`` is replaced by ``.md``.
     """
     parts = urllib.parse.urlsplit(url)
-    path = parts.path
+    path = parts.path or "/"
     suffix = PurePosixPath(path).suffix.lower()
     if path.endswith("/"):
         path += "index.md"
     elif suffix in (".html", ".htm"):
         path = path[: -len(suffix)] + ".md"
-    elif suffix:
+    elif suffix.lstrip(".").isalpha():  # .txt, .json…; not a version like v1.2
         return None
     else:
         path += ".md"
@@ -365,12 +367,13 @@ def _paragraphs(text: str) -> Iterable[list[str]]:
 
 def _is_prose(block: list[str]) -> bool:
     """A block that is not a quote or a list of links."""
-    return not (block[0].startswith(">") or LINK_ITEM_RE.match(block[0]))
+    return not (block[0].startswith(NON_PROSE_STARTS) or LINK_ITEM_RE.match(block[0]))
 
 
 def _excerpt(text: str) -> str | None:
     """The first paragraph of prose on one line, cut to ``EXCERPT_MAX`` characters, or None."""
-    block = next((b for b in _paragraphs(text) if _is_prose(b)), None)
+    body = FRONTMATTER_RE.sub("", text, count=1)
+    block = next((b for b in _paragraphs(body) if _is_prose(b)), None)
     if block is None:
         return None
     line = " ".join(block)
