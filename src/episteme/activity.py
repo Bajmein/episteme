@@ -104,12 +104,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
     version = conn.execute("pragma user_version").fetchone()[0]
     if version >= SCHEMA_VERSION:
         return
-    if version == 1:
-        conn.execute("alter table calls add column client text")
-    else:
-        conn.execute("drop table if exists calls")
-        conn.executescript(_SCHEMA)
-    conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
+    # One transaction: a crash never leaves the new column without its user_version.
+    conn.execute("begin immediate")
+    try:
+        if version == 1:
+            conn.execute("alter table calls add column client text")
+        else:
+            conn.execute("drop table if exists calls")
+            for statement in filter(str.strip, _SCHEMA.split(";")):
+                conn.execute(statement)
+        conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
+        conn.execute("commit")
+    except Exception:
+        conn.execute("rollback")
+        raise
 
 
 class Activity:

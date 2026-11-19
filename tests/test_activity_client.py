@@ -124,3 +124,23 @@ async def test_stdio_records_client_and_meta_session(vault: Path) -> None:
             )
     row = _rows(vault / ".index" / "activity.db")[-1]
     assert (row["tool"], row["client"], row["session"]) == ("search", "agy-test", "conv-9")
+
+
+def test_failed_migration_rolls_back_user_version(tmp_path: Path) -> None:
+    db = tmp_path / ".index" / "activity.db"
+    db.parent.mkdir()
+    conn = sqlite3.connect(db)
+    conn.executescript(_V1 + "alter table calls add column client text;")
+    conn.execute("pragma user_version = 1")
+    conn.commit()
+    conn.close()
+
+    act = Activity(tmp_path)
+    act.record("search", {}, "", 1, True)
+    act.close()
+
+    conn = sqlite3.connect(db)
+    try:
+        assert conn.execute("pragma user_version").fetchone()[0] == 1
+    finally:
+        conn.close()
