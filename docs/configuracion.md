@@ -43,11 +43,17 @@ mode = "docs"          # suite de documentación: solo docs_write escribe (ver d
 [zones."sesiones"]
 mode = "session"       # estado de la sesión: solo el tool session escribe; se añade si no se declara
 
+[zones."planes"]
+mode = "plan"          # copias de los planes: solo el tool plan escribe; se añade si no se declara
+
 [session]                     # opcional; estos son los valores por defecto
 extract = true                # orden de extracción tras compact/clear
 block_manual_compact = true   # bloquea una vez un /compact manual con el estado desactualizado
 archive_days = 7              # días sin guardar antes de archivar el estado
 nudge_every = 12              # mensajes sin guardar antes del aviso
+
+[plans]                       # opcional; este es el valor por defecto
+archive_days = 7              # días sin guardar antes de archivar la copia de un plan
 
 [checkpoint]                  # obsoleto: se elimina en la próxima versión (usa session)
 state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir; opcional
@@ -62,10 +68,11 @@ dir = '/ruta/absoluta/fuera/del/vault'   # entre comillas simples, también en W
 keep = 14                # copias que se conservan
 ```
 
-- `[maintenance]`, `[backup]` y `[session]` rechazan claves desconocidas. `every_days`, `keep`, `archive_days` y `nudge_every` son enteros >= 1; `notify`, `archive_expired`, `extract` y `block_manual_compact`, booleanos; `[backup]` exige un `dir` absoluto fuera del vault.
-- `mode` es `read-only`, `read-write`, `memory`, `docs` o `session`. Un valor distinto o una zona repetida impiden arrancar.
+- `[maintenance]`, `[backup]`, `[session]` y `[plans]` rechazan claves desconocidas. `every_days`, `keep`, `archive_days` y `nudge_every` son enteros >= 1; `notify`, `archive_expired`, `extract` y `block_manual_compact`, booleanos; `[backup]` exige un `dir` absoluto fuera del vault.
+- `mode` es `read-only`, `read-write`, `memory`, `docs`, `session` o `plan`. Un valor distinto o una zona repetida impiden arrancar.
 - Una zona `docs` es una suite de documentación de terceros: solo la cambia `docs_write` (lo usa la skill `/episteme:docs`); `revise` responde `read_only_zone`, `review` la trata como de solo lectura y el backup no la incluye, porque las páginas se pueden volver a bajar. Ver [Suites de documentación](documentacion.md).
 - Una zona `session` guarda el estado de la sesión: solo la cambia el tool `session`; `revise` y `remember` responden `read_only_zone` y `review` la trata como de solo lectura. Si `episteme.toml` no declara ninguna, se añade `sesiones` con ese modo (declarar `sesiones` con otro modo impide arrancar). A diferencia de `docs`, entra en el backup. Ver [Estado de la sesión](sesion.md).
+- Una zona `plan` guarda las copias de los planes de plan mode: solo la cambia el tool `plan`; `revise` y `remember` responden `read_only_zone` y `review` la trata como de solo lectura. Si `episteme.toml` no declara ninguna, se añade `planes` con ese modo (declarar `planes` con otro modo impide arrancar). Entra en el backup. No tiene que ver con una zona `read-write` llamada `plans`. Ver [Planes](planes.md).
 - `[checkpoint] state_glob` está obsoleto: con él, el servidor avisa por stderr al arrancar y las respuestas de `checkpoint` traen `deprecated`. Se elimina en la próxima versión.
 - Lo que no está en ninguna zona es de solo lectura. Si dos zonas se anidan, manda la más específica.
 - Se ignoran `.obsidian/`, `.index/`, `.git/`, toda carpeta que empiece por `.` y los archivos que no son `.md`.

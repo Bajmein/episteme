@@ -4,6 +4,13 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- Tool `plan` y zona `planes/`: una copia de cada plan de plan mode en `planes/<proyecto>/<slug>.md`, una nota por slug (el nombre del archivo del plan) que se sobrescribe. `save` redacta las credenciales y corta a 200 000 caracteres; `show` lista los planes activos o devuelve uno; `archive` lo archiva sin borrarlo; `restore` apunta a la copia tras «clear context». La zona se añade sola si `episteme.toml` no la declara; solo la escribe `plan` (`revise` y `remember` responden `read_only_zone`), `search` la encuentra (sin las archivadas) y no sale en la bienvenida ni en las notas relacionadas de `context`. Los planes de Claude Code no se leen ni se tocan. Ver `docs/planes.md`.
+- Hooks de `/episteme:setup`: `plan` save en `PreToolUse` con matcher `ExitPlanMode` (responde siempre vacío y nunca frena `ExitPlanMode`) y `plan` restore en `SessionStart` (`compact|clear`), que solo tras `clear` devuelve una línea con la ruta de la copia del plan de la tarea. `mcp__episteme__plan` va en el `allow`.
+- Tabla `[plans]` en `episteme.toml` (`archive_days = 7`): la mantención de la primera bienvenida archiva los planes con `saved_at` de más de `archive_days` días, salvo el que enlaza un estado de sesión activo.
+- Clave `plan` en el estado de sesión: `session(action="save")` acepta `plan` (un slug) y, si no se pasa, conserva el que tenía el estado o toma el plan vigente del proceso.
+
 ## [0.14.0] - 2026-11-18
 
 ### Añadido

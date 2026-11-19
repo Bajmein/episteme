@@ -99,15 +99,44 @@ def test_setup_hooks_drive_the_session_state_without_checkpoint() -> None:
     [gate] = _hook(settings, "PreCompact")
     [capture] = _hook(settings, "PostCompact")
     [end] = _hook(settings, "SessionEnd")
-    restore, welcome = _hook(settings, "SessionStart")
+    restore, plan_restore, welcome = _hook(settings, "SessionStart")
     assert gate["input"]["action"] == "gate" and gate["input"]["trigger"] == "${trigger}"
     assert capture["input"]["summary"] == "${compact_summary}"
     assert end["input"]["transcript"] == "${transcript_path}"
     assert settings["hooks"]["SessionEnd"][0]["matcher"] == "clear"
     assert restore["input"]["action"] == "restore" and restore["input"]["source"] == "${source}"
+    assert plan_restore["tool"] == "plan" and plan_restore["input"]["action"] == "restore"
     assert welcome["tool"] == "context"
     tools = {h["tool"] for event in settings["hooks"] for h in _hook(settings, event)}
     assert "checkpoint" not in tools
+
+
+def test_setup_copies_the_plan_on_exit_plan_mode_and_restores_it() -> None:
+    settings = _json(SKILLS / "setup" / "settings.json")
+    entries = {e.get("matcher"): e["hooks"] for e in settings["hooks"]["PreToolUse"]}
+
+    [save] = entries["ExitPlanMode"]
+    [constraints] = entries["Edit|Write|mcp__serena__.*"]
+    restore = _hook(settings, "SessionStart")[1]
+    assert save["type"] == "mcp_tool" and save["tool"] == "plan"
+    assert save["input"] == {
+        "action": "save",
+        "plan": "${tool_input.plan}",
+        "plan_path": "${tool_input.planFilePath}",
+        "session": "${session_id}",
+        "project_dir": "${cwd}",
+        "hook_event": "${hook_event_name}",
+    }
+    assert constraints["tool"] == "constraints"
+    assert restore["input"] == {
+        "action": "restore",
+        "source": "${source}",
+        "project_dir": "${cwd}",
+        "session": "${session_id}",
+        "hook_event": "${hook_event_name}",
+    }
+    assert settings["hooks"]["SessionStart"][0]["matcher"] == "compact|clear"
+    assert "mcp__episteme__plan" in settings["permissions"]["allow"]
 
 
 def test_setup_allows_session_and_only_the_digest_script() -> None:

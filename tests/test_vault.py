@@ -11,11 +11,14 @@ from test_startup import _start
 from episteme.errors import EpistemeError, StartupError
 from episteme.vault import (
     MEMORY,
+    PLAN,
     READ_ONLY,
     READ_WRITE,
     Backup,
     Maintenance,
+    Plans,
     Vault,
+    Zone,
     is_ignored,
     load_config,
 )
@@ -28,8 +31,40 @@ def test_load_fixture_config(vault: Path) -> None:
         ("memory", MEMORY),
         ("plans", READ_WRITE),
         ("sesiones", "session"),
+        ("planes", PLAN),
     }
     assert cfg.state_glob == ".fabrik/*/*/estado.md"
+    assert cfg.plans == Plans(archive_days=7)
+
+
+def _append_config(vault: Path, extra: str) -> None:
+    toml = vault / "episteme.toml"
+    toml.write_text(toml.read_text(encoding="utf-8") + "\n" + extra + "\n", encoding="utf-8")
+
+
+def test_declared_plan_zone_replaces_the_implicit_one(vault: Path) -> None:
+    _append_config(vault, '[zones."copias"]\nmode = "plan"\n[plans]\narchive_days = 3')
+
+    cfg = load_config(vault)
+
+    assert Zone("copias", PLAN) in cfg.zones and not any(z.path == "planes" for z in cfg.zones)
+    assert cfg.plans.archive_days == 3
+
+
+@pytest.mark.parametrize(
+    ("extra", "needle"),
+    [
+        ('[zones."planes"]\nmode = "read-write"', 'must have mode "plan"'),
+        ("[plans]\narchive_days = 0", "archive_days must be an integer >= 1"),
+        ("[plans]\narchive_days = true", "archive_days must be an integer >= 1"),
+        ("[plans]\nkeep = 3", 'unknown key "keep"'),
+    ],
+)
+def test_bad_plans_config_stops_startup(vault: Path, extra: str, needle: str) -> None:
+    _append_config(vault, extra)
+
+    with pytest.raises(StartupError, match=needle):
+        load_config(vault)
 
 
 @pytest.mark.parametrize(

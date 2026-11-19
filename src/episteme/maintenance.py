@@ -11,8 +11,9 @@ from __future__ import annotations
 import datetime as dt
 import sqlite3
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from episteme.index import Index
 from episteme.perms import make_private_dir, restrict_db
@@ -20,7 +21,7 @@ from episteme.vault import INDEX_DIR, today
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
-    from episteme.vault import Vault
+    from episteme.vault import Config, Vault
 
 SCHEMA_VERSION = 1
 LOG_RETENTION_DAYS = 365
@@ -182,27 +183,67 @@ def _archive_line(engine: Engine, store: Store, every_days: int) -> str:
     return _archived_line(paths)
 
 
+class _Rotation(NamedTuple):
+    """A zone whose active notes the maintenance archives after ``archive_days`` unsaved.
+
+    ``days`` reads that ``archive_days`` from the config (``[session]``, ``[plans]``).
+    """
+
+    task: str
+    has_active: Callable[[Engine], bool]
+    rotate: Callable[[Engine, int], list[str]]
+    days: Callable[[Config], int]
+    what: str
+
+
+def _rotation_line(engine: Engine, store: Store, every_days: int, rotation: _Rotation) -> str:
+    """Run ``rotation`` if due; return the notice line (``""`` if nothing was archived)."""
+    if not rotation.has_active(engine):  # nothing to rotate: no claim, no maintenance.db
+        return ""
+    previous = store.claim(rotation.task, every_days)
+    if previous is None:
+        return ""
+    days = rotation.days(engine.vault.config)
+    try:
+        paths = rotation.rotate(engine, days)
+    except Exception:
+        store.restore(rotation.task, previous)
+        return ""
+    if not paths:
+        return ""
+    store.log(rotation.task, paths)
+    return (
+        f"episteme · mantención: {len(paths)} {rotation.what} archivados "
+        f"(más de {days} días sin guardar)."
+    )
+
+
 def _sessions_line(engine: Engine, store: Store, every_days: int) -> str:
     """Archive the session states unsaved for ``[session] archive_days`` if due; notice line."""
     from episteme import session
 
-    if not session.has_active(engine):  # nothing to rotate: no claim, no maintenance.db
-        return ""
-    previous = store.claim("archive_sessions", every_days)
-    if previous is None:
-        return ""
-    try:
-        paths = session.rotate(engine, engine.vault.config.session.archive_days)
-    except Exception:
-        store.restore("archive_sessions", previous)
-        return ""
-    if not paths:
-        return ""
-    store.log("archive_sessions", paths)
-    return (
-        f"episteme · mantención: {len(paths)} estados de sesión archivados "
-        f"(más de {engine.vault.config.session.archive_days} días sin guardar)."
+    rotation = _Rotation(
+        "archive_sessions",
+        session.has_active,
+        session.rotate,
+        lambda config: config.session.archive_days,
+        "estados de sesión",
     )
+    return _rotation_line(engine, store, every_days, rotation)
+
+
+def _plans_line(engine: Engine, store: Store, every_days: int) -> str:
+    """Archive the plan copies unsaved for ``[plans] archive_days`` if due; notice line."""
+    from episteme import plans
+
+    rotation = _Rotation(
+        "archive_plans",
+        plans.has_active,
+        plans.rotate,
+        lambda config: config.plans.archive_days,
+        "planes",
+    )
+    return _rotation_line(engine, store, every_days, rotation)
 
 
 def _notify_line(engine: Engine, store: Store, project: str, every_days: int) -> str:
@@ -226,6 +267,7 @@ def run(engine: Engine, store: Store, project: str) -> str:
     if cfg.archive_expired:
         lines.append(_archive_line(engine, store, cfg.every_days))
     lines.append(_sessions_line(engine, store, cfg.every_days))
+    lines.append(_plans_line(engine, store, cfg.every_days))
     if cfg.notify:
         lines.append(_notify_line(engine, store, project, cfg.every_days))
     return "\n".join(line for line in lines if line)

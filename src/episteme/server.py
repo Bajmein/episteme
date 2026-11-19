@@ -16,7 +16,7 @@ from episteme import maintenance, prompting
 from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError
-from episteme.tools import docs, hooks, memories, reading
+from episteme.tools import docs, hooks, memories, plans, reading
 from episteme.tools import session as session_tool
 
 INSTRUCTIONS = """\
@@ -152,4 +152,5 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     hooks.register(server, engine, store)
     docs.register(server, engine)
     session_tool.register(server, engine)
+    plans.register(server, engine)
     return server

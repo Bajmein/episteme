@@ -102,7 +102,7 @@ async def test_hints(vault):
 
         res = await c.ok("search", query="serena", path="memoria")
         assert res["hints"] == [
-            'no note under "memoria". Zones: docs/claude-code, memory, plans, sesiones.'
+            'no note under "memoria". Zones: docs/claude-code, memory, planes, plans, sesiones.'
         ]
 
         res = await c.ok("search", query="zzzxxyy")

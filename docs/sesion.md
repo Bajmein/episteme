@@ -25,6 +25,7 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
   | `compacted_at` | Fecha y hora del último resumen de compactación, si lo hubo |
   | `worktree` | La carpeta del proyecto (`project_dir`), si se pasa |
   | `session_id` | El id de la sesión de Claude Code, solo como dato |
+  | `plan` | El slug del plan de la tarea en `planes/<proyecto>/` (ver [Planes](planes.md)): el que se pasa a `save`; si no, el que ya tenía el estado; si no, el plan vigente del proceso. Mientras el estado esté activo, ese plan no rota |
 
   No lleva `kind`, `priority`, `helpful` ni `valid_until`: no es una memoria.
 
@@ -38,7 +39,7 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
 
 | `action` | Qué hace |
 | --- | --- |
-| `save` | Crea o reescribe el estado. Destino: `note`, si viene; si no, el estado en uso; si no hay, uno nuevo, que pide `title`. `body` reemplaza el cuerpo entero (si empieza con `# título`, esa línea se quita). Con `note` de un estado archivado, lo reescribe y lo vuelve a activar. Rechaza una credencial en `title`, `body`, `files` o `session` (`invalid_argument`). Devuelve `path`, `created`, `missing_sections` y, si a un cuerpo de 300 caracteres o más le faltan secciones de la plantilla, `template_hint`. Nunca rechaza por formato |
+| `save` | Crea o reescribe el estado. `plan` (un slug) lo enlaza con su plan. Destino: `note`, si viene; si no, el estado en uso; si no hay, uno nuevo, que pide `title`. `body` reemplaza el cuerpo entero (si empieza con `# título`, esa línea se quita). Con `note` de un estado archivado, lo reescribe y lo vuelve a activar. Rechaza una credencial en `title`, `body`, `files` o `session` (`invalid_argument`). Devuelve `path`, `created`, `missing_sections` y, si a un cuerpo de 300 caracteres o más le faltan secciones de la plantilla, `template_hint`. Nunca rechaza por formato |
 | `show` | Devuelve el estado en uso (`found`, `path`, `task_title`, `saved_at`, `content`). No escribe |
 | `restore` | Lo mismo, como contexto (`Estado de la sesión «…» (guardado …; compruébalo contra el repo antes de repetir pasos):`), y lo fija como estado en uso. Con `hook_event` sale en formato de hook, con el aviso `episteme · estado de sesión recuperado: «…»` |
 | `template` | El esqueleto de `type` (`session` por defecto; vale cualquier tipo de memoria) |

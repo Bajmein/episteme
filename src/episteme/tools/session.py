@@ -53,6 +53,10 @@ _ReasonArg = Annotated[str | None, Field(description="end: why the session ended
 _SourceArg = Annotated[
     str | None, Field(description='restore: "compact" or "clear" (${source}) from the hook.')
 ]
+_PlanArg = Annotated[
+    str | None,
+    Field(description="save: slug of the plan of the task; default keeps the state's plan."),
+]
 _TypeArg = Annotated[
     str | None, Field(description='template: memory type; default "session".')
 ]
@@ -97,6 +101,7 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         project_dir: _DirArg = None,
         origin: _OriginArg = None,
         session: _SessionArg = None,
+        plan: _PlanArg = None,
         type: _TypeArg = None,
         summary: _SummaryArg = None,
         transcript: _TranscriptArg = None,
@@ -116,7 +121,9 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         leading "# title" line is dropped);
         a credential in title, body, files or session is refused (invalid_argument). Returns
         {"path", "created", "missing_sections"} plus "template_hint" when a long body lacks
-        template sections; it never refuses for format.
+        template sections; it never refuses for format. plan (a slug of the plan tool) links
+        the state to its plan; without it the state keeps its plan, else takes the plan this
+        process saved last for the worktree.
         show: {"found", "path", "task_title", "saved_at", "content"}. Never writes.
         restore: the state as context, made current: {"found", "path", "task_title",
         "saved_at", "content", "source"}. Without a state it falls back to the deprecated
@@ -140,7 +147,7 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
             return dump(sessions.template(type))
         if action == "end":
             return _reply(hook_event, sessions.end(transcript, reason))
-        save = sessions.SaveArgs(title, body, note, files, origin, session)
+        save = sessions.SaveArgs(title, body, note, files, origin, session, plan)
         hook = _Hook(summary, transcript, trigger, source, session, hook_event)
         with engine.session():
             return _run(_Args(engine, project, project_dir), action, save, hook)

@@ -11,6 +11,7 @@
       "mcp__episteme__constraints",
       "mcp__episteme__docs_status",
       "mcp__episteme__session",
+      "mcp__episteme__plan",
       "Bash(uv run --no-project --python 3.14 python -I <SESION_SCRIPT> *)"
     ],
     "deny": [
@@ -49,6 +50,24 @@
             "input": {
               "file": "${tool_input.file_path}",
               "relative_path": "${tool_input.relative_path}",
+              "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "plan",
+            "input": {
+              "action": "save",
+              "plan": "${tool_input.plan}",
+              "plan_path": "${tool_input.planFilePath}",
+              "session": "${session_id}",
               "project_dir": "${cwd}",
               "hook_event": "${hook_event_name}"
             }
@@ -143,6 +162,18 @@
               "transcript": "${transcript_path}",
               "session": "${session_id}",
               "project_dir": "${cwd}",
+              "hook_event": "${hook_event_name}"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "episteme",
+            "tool": "plan",
+            "input": {
+              "action": "restore",
+              "source": "${source}",
+              "project_dir": "${cwd}",
+              "session": "${session_id}",
               "hook_event": "${hook_event_name}"
             }
           },
