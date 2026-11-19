@@ -10,6 +10,14 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - Hooks de `/episteme:setup`: `plan` save en `PreToolUse` con matcher `ExitPlanMode` (responde siempre vacío y nunca frena `ExitPlanMode`) y `plan` restore en `SessionStart` (`compact|clear`), que solo tras `clear` devuelve una línea con la ruta de la copia del plan de la tarea. `mcp__episteme__plan` va en el `allow`.
 - Tabla `[plans]` en `episteme.toml` (`archive_days = 7`): la mantención de la primera bienvenida archiva los planes con `saved_at` de más de `archive_days` días, salvo el que enlaza un estado de sesión activo.
 - Clave `plan` en el estado de sesión: `session(action="save")` acepta `plan` (un slug) y, si no se pasa, conserva el que tenía el estado o toma el plan vigente del proceso.
+- Skill `/episteme:agy [tarea]`: activa agy (Google Antigravity CLI) en un proyecto ya conectado (`<proyecto>/.agents/mcp_config.json` con los `args` del registro de Claude Code, aviso de la entrada global `episteme` que choca de nombre, `.agents/` en `.git/info/exclude` y una comprobación con `agy -p`) y le delega tareas en segundo plano con `--mode plan`; agy propone memorias y Claude guarda las que valgan, anotando «propuesto por agy».
+- Plugin para agy: `plugin/.antigravity-plugin/plugin.json` y la regla `plugin/rules/AGENTS.md` (`trigger: always_on`), con lo esencial de las instrucciones del servidor, que en agy no llegan al modelo. Se instala con `agy plugin install`. En agy no hay hooks.
+- Columna `client` en el registro de actividad (`activity.db`): el nombre del cliente MCP de cada llamada. La migración de v1 a v2 conserva el historial. Con agy, la sesión sale de `_meta` (`antigravity.google/root_conversation_id`).
+
+### Cambiado
+
+- Las skills `reminder`, `mantencion` y `sesion` sirven a Claude Code y a agy: la carga con `ToolSearch` solo vale «En Claude Code» y, en agy, los argumentos son lo que se escribió después del comando.
+- Las instrucciones del servidor (`INSTRUCTIONS`) son neutras respecto del cliente.
 
 ## [0.14.0] - 2026-11-18
 

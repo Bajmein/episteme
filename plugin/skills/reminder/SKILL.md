@@ -7,9 +7,9 @@ disable-model-invocation: true
 
 # /episteme:reminder: recordatorio del proyecto en cada sesión
 
-Texto: $ARGUMENTS
+Texto: $ARGUMENTS (en agy, lo que se escribió después del comando)
 
-Guarda `$ARGUMENTS` en episteme como recordatorio del **proyecto actual**. Si los tools salen como diferidos, cárgalos antes: `ToolSearch select:mcp__episteme__search,mcp__episteme__remember`. Si no existen en la sesión, dilo y no guardes en otro sitio.
+Guarda `$ARGUMENTS` en episteme como recordatorio del **proyecto actual**. En Claude Code, si los tools salen como diferidos, cárgalos con `ToolSearch select:mcp__episteme__search,mcp__episteme__remember`. Si no existen en la sesión, dilo y no guardes en otro sitio.
 
 Sin texto en `$ARGUMENTS`, pregunta qué recordar; no inventes uno.
 

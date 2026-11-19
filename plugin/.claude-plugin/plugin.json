@@ -1,7 +1,7 @@
 {
   "name": "episteme",
   "version": "0.14.0",
-  "description": "Skills y agente de episteme: conectar un proyecto, guardar y retomar el estado de la sesión (con un extractor tras /compact o /clear), mantención de memorias, recordatorios y scaffolding (README, CLAUDE.md, CHANGELOG, .github y reglas).",
+  "description": "Skills y agente de episteme: conectar un proyecto, guardar y retomar el estado de la sesión (con un extractor tras /compact o /clear), mantención de memorias, recordatorios, scaffolding (README, CLAUDE.md, CHANGELOG, .github y reglas) y delegar tareas a agy.",
   "author": { "name": "Bajmein" },
   "license": "MIT",
   "homepage": "https://github.com/Bajmein/episteme",
