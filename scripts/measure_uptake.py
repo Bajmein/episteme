@@ -46,9 +46,10 @@ DEFAULT_MIN_DELIVERIES = 3
 DEFAULT_OLD_DAYS = 90
 
 _ROWS_SQL = (
-    "select session, tool, hook_event, args, paths, ok, project, pid from calls"
+    "select session, tool, hook_event, args, paths, ok, project, pid, {client} from calls"
     " where at >= ? order by at, id"
 )
+NO_CLIENT = "(sin cliente)"
 
 
 class Row(NamedTuple):
@@ -62,6 +63,7 @@ class Row(NamedTuple):
     ok: int
     project: str | None
     pid: int | None = None
+    client: str | None = None
 
 
 @dataclass
@@ -188,10 +190,17 @@ def _with_sessions(rows: list[Row]) -> list[Row]:
     return out
 
 
+def _client_column(conn: sqlite3.Connection) -> str:
+    """``client`` when the log has it (schema v2), else ``null`` for a v1 log."""
+    columns = {r[1] for r in conn.execute("pragma table_info(calls)")}
+    return "client" if "client" in columns else "null"
+
+
 def _load_rows(vault_root: Path, since: str, project: str | None) -> list[Row]:
     conn = _open_ro(vault_root)
     try:
-        rows = _with_sessions([Row(*r) for r in conn.execute(_ROWS_SQL, (since,)).fetchall()])
+        sql = _ROWS_SQL.format(client=_client_column(conn))  # nosec B608
+        rows = _with_sessions([Row(*r) for r in conn.execute(sql, (since,)).fetchall()])
     finally:
         conn.close()
     if project:
@@ -356,6 +365,7 @@ def measure(
         "sessions_no_write": sorted(scan.sessions_read - scan.sessions_wrote),
         "empty": sorted(scan.empty.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_EMPTY],
         "empty_total": sum(scan.empty.values()),
+        "clients": Counter(r.client or NO_CLIENT for r in rows).most_common(),
     }
 
 
@@ -437,11 +447,17 @@ def _render_empty(r: dict) -> list[str]:
     )
 
 
+def _render_clients(r: dict) -> list[str]:
+    out = ["", "### Llamadas por cliente MCP", ""]
+    return out + ([f"- {c}: {n}" for c, n in r.get("clients", [])] or ["- (ninguna)"])
+
+
 def render(r: dict) -> str:
     out = _render_table(r)
     out += _render_followed_and_never_read(r)
     out += _render_old_and_sessions(r)
     out += _render_empty(r)
+    out += _render_clients(r)
     return "\n".join(out) + "\n"
 
 

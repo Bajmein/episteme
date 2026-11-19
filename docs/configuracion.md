@@ -14,7 +14,7 @@ Variables:
 - `EPISTEME_TODAY=AAAA-MM-DD` fija la fecha de hoy (por defecto, la fecha local). Existe para los tests.
 - `EPISTEME_ACTIVITY=0` desactiva el registro de actividad (no se crea `activity.db`).
 
-Cada llamada a un tool deja una fila en `<vault>/.index/activity.db`: tool, hook y sesión, proyecto, argumentos de orientación (consulta, ruta, modo; nunca el cuerpo de las notas ni los mensajes), rutas de las notas que devolvió, tamaño de la respuesta, milisegundos y si fue bien. Si un argumento parece una credencial, se guarda `[redacted: <tipo>]` en su lugar (filtro de mejor esfuerzo). Sirve para diagnosticar y como señal de uso. No se borra al reconstruir el índice, y se descartan las filas de más de 180 días.
+Cada llamada a un tool deja una fila en `<vault>/.index/activity.db`: tool, hook y sesión, proyecto, argumentos de orientación (consulta, ruta, modo; nunca el cuerpo de las notas ni los mensajes), rutas de las notas que devolvió, tamaño de la respuesta, milisegundos, si fue bien y el cliente MCP (`client`: el `clientInfo.name` del `initialize` o, si no lo hubo, del `_meta` de la petición). Cuando la llamada no trae `session`, la sesión sale del `_meta` `antigravity.google/root_conversation_id` (agy). Un `activity.db` del esquema 1 gana la columna `client` sin perder filas. Si un argumento parece una credencial, se guarda `[redacted: <tipo>]` en su lugar (filtro de mejor esfuerzo). Sirve para diagnosticar y como señal de uso. No se borra al reconstruir el índice, y se descartan las filas de más de 180 días.
 
 ```sh
 sqlite3 <vault>/.index/activity.db "select at, tool, hook_event, ok, ms from calls order by id desc limit 20"

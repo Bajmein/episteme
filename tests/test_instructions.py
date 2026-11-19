@@ -17,3 +17,11 @@ async def test_instructions_carry_triggers_and_fit(vault: Path) -> None:
         assert len(text) <= 2000
         for needle in ('context(mode="task"', "search is literal", "Save without being asked"):
             assert needle in text
+
+
+async def test_instructions_name_any_agent_memory(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        text = c.session.initialize_result.instructions
+
+    assert "auto memory" not in text
+    assert "AGENTS.md" in text and "GEMINI.md" in text

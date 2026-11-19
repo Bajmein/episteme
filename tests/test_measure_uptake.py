@@ -148,3 +148,31 @@ def test_missing_log(tmp_path: Path) -> None:
     )
     assert r.returncode == 1
     assert r.stderr.startswith("not_found:")
+
+
+def test_calls_are_broken_down_by_client(tmp_path: Path) -> None:
+    m = _script()
+    root = _vault(tmp_path, CALLS)
+    conn = sqlite3.connect(root / ".index/activity.db")
+    conn.execute("update calls set client = 'agy' where id <= 2")
+    conn.commit()
+    conn.close()
+
+    r = m.measure(root, days=7, now=NOW)
+
+    assert r["clients"] == [(m.NO_CLIENT, len(CALLS) - 2), ("agy", 2)]
+    assert "- agy: 2" in m.render(r)
+
+
+def test_v1_log_without_client_column_still_loads(tmp_path: Path) -> None:
+    m = _script()
+    root = _vault(tmp_path, CALLS)
+    conn = sqlite3.connect(root / ".index/activity.db")
+    conn.execute("alter table calls drop column client")
+    conn.commit()
+    conn.close()
+
+    r = m.measure(root, days=7, now=NOW)
+
+    assert r["rows"] == len(CALLS)
+    assert r["clients"] == [(m.NO_CLIENT, len(CALLS))]
