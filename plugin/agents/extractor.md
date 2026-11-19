@@ -3,7 +3,11 @@ name: extractor
 description: Extrae el estado de la sesión del transcript tras /compact o /clear y lo guarda en episteme. Lánzalo solo cuando un hook de episteme lo pida.
 model: sonnet
 effort: low
-tools: Bash, mcp__episteme__session, mcp__episteme__search, mcp__episteme__remember
+tools:
+  - Bash
+  - mcp__episteme__session
+  - mcp__episteme__search
+  - mcp__episteme__remember
 maxTurns: 15
 background: true
 omitClaudeMd: true

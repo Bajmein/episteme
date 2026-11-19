@@ -118,6 +118,17 @@ def test_extractor_agent_frontmatter() -> None:
     )
 
 
+def test_extractor_tools_are_a_yaml_list_for_agy() -> None:
+    meta = _frontmatter(PLUGIN / "agents" / "extractor.md")
+
+    assert meta["tools"] == [
+        "Bash",
+        "mcp__episteme__session",
+        "mcp__episteme__search",
+        "mcp__episteme__remember",
+    ]
+
+
 def _hook(settings: dict, event: str) -> list[dict]:
     return [h for entry in settings["hooks"][event] for h in entry["hooks"]]
 
