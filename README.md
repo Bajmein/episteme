@@ -29,7 +29,7 @@
   <a href="#cómo-funciona">Cómo funciona</a> ·
   <a href="#instalación">Instalación</a> ·
   <a href="#uso-diario">Uso diario</a> ·
-  <a href="#las-12-herramientas">Herramientas</a> ·
+  <a href="#las-14-herramientas">Herramientas</a> ·
   <a href="#límites">Límites</a> ·
   <a href="#documentación">Documentación</a>
 </p>
@@ -38,9 +38,7 @@
 
 ## Qué es
 
-Claude Code es como un colega brillante que cada mañana llega sin recordar nada de ayer.
-
-Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que Claude consulta y completa mientras trabaja.
+Claude Code es como un colega brillante que cada mañana llega sin recordar nada de ayer: empieza cada sesión sin saber qué pasó en la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que Claude consulta y completa mientras trabaja.
 
 | | Qué hace por ti |
 | :-- | :-- |
@@ -48,6 +46,7 @@ Claude Code empieza cada sesión sin recordar la anterior. **episteme le da una 
 | **Encuentra** | Busca en todo el vault, en español, sin distinguir mayúsculas ni tildes |
 | **Avisa a tiempo** | Antes de editar un archivo, muestra las normas que le aplican; después, lo que ya se sabe de él |
 | **Retoma** | Lleva una nota viva de en qué vas, la pone al día sola después de compactar o de `/clear` y la recupera al seguir |
+| **Guarda tus planes** | Copia cada plan que apruebas en plan mode y, si limpias el contexto al aprobarlo, le dice a Claude dónde está |
 | **Mantiene la documentación al día** | Con `/episteme:docs`, baja las páginas de la documentación de terceros guardada en el vault y actualiza solo las que cambiaron |
 | **Cuida el orden** | Detecta duplicados, memorias vencidas, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
 
@@ -59,10 +58,10 @@ Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.
 ## Cómo funciona
 
 <p align="center">
-  <img src="static/diagrams/arquitectura.png" alt="Claude Code (el agente y sus hooks) llama al servidor episteme, que lee y escribe las notas Markdown del vault y mantiene un índice de búsqueda; Obsidian puede abrir el mismo vault" width="880">
+  <img src="static/diagrams/arquitectura.png" alt="Claude Code (el agente y sus hooks) y, si lo activas, agy llaman al servidor episteme, que lee y escribe las notas Markdown del vault (memorias, documentación, sesiones y planes) y mantiene un índice de búsqueda; Obsidian puede abrir el mismo vault" width="880">
 </p>
 
-1. **Claude Code** habla con episteme de dos formas: el agente usa sus herramientas cuando las necesita, y los *hooks* las llaman solos en momentos fijos de la sesión.
+1. **Claude Code** habla con episteme de dos formas: el agente usa sus herramientas cuando las necesita, y los *hooks* las llaman solos en momentos fijos de la sesión. **agy** (Google Antigravity CLI) es opcional: usa las mismas herramientas, pero sin hooks.
 2. **episteme** es un programa pequeño que corre en tu máquina. Es la única puerta al vault: valida lo que se guarda y mantiene un índice para buscar rápido.
 3. **El vault** es una carpeta de notas Markdown, por defecto `~/.episteme`. Tú puedes leerlo y editarlo con Obsidian.
 
@@ -71,7 +70,7 @@ Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.
 
 | Término | Qué significa |
 | :-- | :-- |
-| **Vault** | La carpeta con todas las notas. Se divide en zonas: documentación, memorias, planes |
+| **Vault** | La carpeta con todas las notas. Se divide en zonas: memorias, documentación, estado de las sesiones y planes |
 | **Memoria** | Una nota corta con algo que vale la pena recordar: una decisión, una lección, un recordatorio |
 | **Herramienta (tool)** | Una acción que Claude puede pedirle a episteme: buscar, leer, guardar |
 | **Hook** | Un automatismo de Claude Code que llama a una herramienta sin que nadie lo pida |
@@ -137,7 +136,11 @@ Luego faltan los hooks, los permisos y la regla del `CLAUDE.md`: los pasos está
 
 ## Uso diario
 
-No hay comandos que aprender: se usa conversando con Claude.
+No hay comandos que aprender: se usa conversando con Claude. Cada memoria pasa por un ciclo: se guarda, se encuentra cuando hace falta, avisa a tiempo y, cuando queda vieja, se corrige o se ordena.
+
+<p align="center">
+  <img src="static/diagrams/ciclo-memoria.png" alt="Ciclo de una memoria en episteme, alrededor del vault: guardar con remember, encontrar con search y read, avisar a tiempo con context, constraints y surface, corregir con revise y ordenar con /episteme:mantencion" width="720">
+</p>
 
 | Tú | episteme |
 | :-- | :-- |
@@ -146,24 +149,29 @@ No hay comandos que aprender: se usa conversando con Claude.
 | Dices «recuerda que…» | Guarda una memoria nueva, salvo que ya exista una casi igual |
 | Preguntas «¿qué decidimos sobre…?» | Claude busca en el vault antes de responder |
 | Claude va a editar un archivo | Le muestra las normas que aplican a ese archivo |
+| Apruebas un plan en plan mode | Guarda una copia del plan; si eliges limpiar el contexto, le dice a Claude dónde quedó |
 | La conversación se compacta o la limpias con `/clear` | Recupera el estado del trabajo y lo pone al día en segundo plano con lo que se habló. Si vas a compactar a mano sin haberlo guardado, te avisa una vez |
 
 ### Lo que pasa solo en cada sesión
 
 <p align="center">
-  <img src="static/diagrams/hooks-sesion.png" alt="Secuencia de una sesión: al enviar un mensaje, antes y después de usar un archivo, al compactar o limpiar la conversación, Claude Code llama a una herramienta de episteme y recibe contexto" width="880">
+  <img src="static/diagrams/hooks-sesion.png" alt="Secuencia del día a día: con cada mensaje, antes y después de usar un archivo y al aprobar un plan, un hook de Claude Code llama a una herramienta de episteme, que responde con la bienvenida, memorias o normas, o guarda una copia del plan en el vault" width="880">
 </p>
 
 Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. Funcionan como un semáforo, no como un muro: Claude puede leer la norma y aun así equivocarse. La configuración está en [Hooks](docs/hooks.md).
 
-#### Quién hace qué y cuándo
+#### Al compactar o con `/clear`
+
+<p align="center">
+  <img src="static/diagrams/compactar-clear.png" alt="Secuencia de cómo el estado del trabajo sobrevive a /compact y a /clear: episteme guarda el resumen al compactar, lo devuelve con la bienvenida al volver a empezar y el agente extractor lo pone al día en segundo plano" width="880">
+</p>
+
+Si vas a compactar a mano y el estado lleva rato sin guardarse, episteme te lo pide una sola vez; si repites `/compact`, compacta igual. El detalle está en [Estado de la sesión](docs/sesion.md).
+
+#### El resto: quién hace qué
 
 | Cuándo | Quién | Qué pasa |
 | :-- | :-- | :-- |
-| Al escribir un mensaje | hook | La primera vez entrega la bienvenida; después sugiere memorias que vienen al caso |
-| Antes de editar un archivo | hook | Muestra las normas de ese archivo. No pausa ni bloquea la edición |
-| Después de leer o editar un archivo | hook | Muestra lo que ya se sabe de él |
-| Al compactar o con `/clear` | hook | Guarda el resumen de la compactación en el estado del trabajo; después lo recupera y pide al agente extractor que lo complete |
 | En la primera bienvenida, como mucho una vez por periodo | episteme | Avisa de lo pendiente de revisar y propone una ronda corta; si lo activas, archiva lo vencido y hace un backup |
 | Cuando lo necesita | Claude | Busca, lee, guarda («recuerda que…») y corrige memorias |
 | Cuando tú lo pides | tú | `/episteme:mantencion` para revisar y ordenar |

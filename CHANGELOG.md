@@ -7,6 +7,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Cambiado
 
 - Autor del paquete en `pyproject.toml` y titular de la licencia en `LICENSE` y en el `README.md`: Benjamín C. Rossa. `pyproject.toml` declara también Python 3.15 en sus clasificadores.
+- Diagramas del `README.md` al día con 0.15.0: la arquitectura muestra las 14 tools, agy y las zonas `sesiones/` y `planes/`; el de hooks cubre el día a día (con la copia del plan al aprobarlo) y dos nuevos explican el ciclo de una memoria y qué pasa al compactar o con `/clear`. `docs/hooks.md` incrusta también el de compactar.
 
 ## [0.15.0] - 2026-11-18
 
