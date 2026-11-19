@@ -2,7 +2,9 @@
 
 [← Volver al README](../README.md)
 
-![Secuencia de una sesión: cada evento de hook llama a un tool de episteme y recibe contexto para el modelo](../static/diagrams/hooks-sesion.png)
+![Secuencia del día a día: con cada mensaje, antes y después de usar un archivo y al aprobar un plan, un hook llama a un tool de episteme](../static/diagrams/hooks-sesion.png)
+
+![Secuencia al compactar o con /clear: session gate, capture, end y restore, y el agente extractor que pone al día el estado](../static/diagrams/compactar-clear.png)
 
 Los hooks son `type: "mcp_tool"` y llaman a los mismos tools. En `UserPromptSubmit`, `SessionStart`, `PreToolUse` y `PostToolUse` el tool devuelve el objeto JSON `{"hookSpecificOutput": {"hookEventName", "additionalContext"}}` (en Claude Code 2.1.322 el texto plano de un hook `mcp_tool` no llega al modelo); en `SessionStart` puede llevar además un `systemMessage` para la persona; en `PreCompact`, `PostCompact` y `SessionEnd`, nada. Sin nada que decir, la salida es una cadena vacía. Nunca devuelve `decision`, `permissionDecision` ni `continue: false`, salvo una excepción: `session(action="gate")` en `PreCompact` devuelve `{"decision": "block", "reason": …}` una vez para frenar un `/compact` manual cuando el estado de la sesión lleva 5 mensajes o más sin guardarse (ver [Estado de la sesión](sesion.md)); repetir `/compact` compacta igual.
 

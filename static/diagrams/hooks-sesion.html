@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>episteme · Hooks en una sesión</title>
+  <title>episteme · Hooks en el día a día</title>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -61,12 +61,12 @@
 <body>
   <div class="frame">
     <p class="eyebrow">Secuencia · episteme</p>
-    <h1>Qué hook llama a qué tool durante una sesión</h1>
+    <h1>Qué hook llama a qué tool en el día a día</h1>
 
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 584" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="hooks-sesion-title hooks-sesion-desc">
+      <svg viewBox="0 0 1000 504" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="hooks-sesion-title hooks-sesion-desc">
         <title id="hooks-sesion-title">Hooks de episteme en una sesión</title>
-        <desc id="hooks-sesion-desc">Secuencia de una sesión de Claude Code: cada evento de hook llama a un tool de episteme (context, constraints, surface, checkpoint) y recibe contexto para el modelo; al compactar, checkpoint guarda una memoria de sesión en el vault.</desc>
+        <desc id="hooks-sesion-desc">Secuencia del día a día en Claude Code: cada evento de hook llama a un tool de episteme (context, constraints, surface, plan) y recibe contexto para el modelo; al aprobar un plan, episteme guarda una copia en el vault sin responder a Claude Code.</desc>
         <defs>
           <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bfc0c0"/></marker>
           <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#f08a59"/></marker>
@@ -76,16 +76,15 @@
         <rect width="100%" height="100%" fill="#2d3142"/>
 
         <!-- Lifelines: 336, 616, 856 -->
-        <line x1="336" y1="80" x2="336" y2="504" stroke="rgba(245,245,245,0.22)" stroke-width="1" stroke-dasharray="3,3"/>
-        <line x1="616" y1="80" x2="616" y2="504" stroke="rgba(245,245,245,0.22)" stroke-width="1" stroke-dasharray="3,3"/>
-        <line x1="856" y1="80" x2="856" y2="504" stroke="rgba(245,245,245,0.22)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="336" y1="80" x2="336" y2="424" stroke="rgba(245,245,245,0.22)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="616" y1="80" x2="616" y2="424" stroke="rgba(245,245,245,0.22)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="856" y1="80" x2="856" y2="424" stroke="rgba(245,245,245,0.22)" stroke-width="1" stroke-dasharray="3,3"/>
 
         <!-- Activation bars on episteme -->
         <rect x="612" y="124" width="8" height="32" fill="rgba(245,245,245,0.06)" stroke="#bfc0c0" stroke-width="0.8"/>
         <rect x="612" y="204" width="8" height="32" fill="rgba(245,245,245,0.06)" stroke="#bfc0c0" stroke-width="0.8"/>
         <rect x="612" y="284" width="8" height="32" fill="rgba(245,245,245,0.06)" stroke="#bfc0c0" stroke-width="0.8"/>
         <rect x="612" y="364" width="8" height="32" fill="rgba(245,245,245,0.06)" stroke="#bfc0c0" stroke-width="0.8"/>
-        <rect x="612" y="444" width="8" height="32" fill="rgba(245,245,245,0.06)" stroke="#bfc0c0" stroke-width="0.8"/>
 
         <!-- Messages -->
         <!-- 1 · UserPromptSubmit -->
@@ -97,12 +96,9 @@
         <!-- 3 · PostToolUse -->
         <line x1="336" y1="284" x2="612" y2="284" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="612" y1="316" x2="336" y2="316" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
-        <!-- 4 · PreCompact -->
+        <!-- 4 · PreToolUse · ExitPlanMode -->
         <line x1="336" y1="364" x2="612" y2="364" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="620" y1="396" x2="856" y2="396" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
-        <!-- 5 · SessionStart -->
-        <line x1="336" y1="444" x2="612" y2="444" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
-        <line x1="612" y1="476" x2="336" y2="476" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
 
         <!-- Message labels -->
         <rect x="422" y="104" width="104" height="12" rx="2" fill="#2d3142"/>
@@ -120,15 +116,10 @@
         <rect x="414" y="296" width="120" height="12" rx="2" fill="#2d3142"/>
         <text x="474" y="305" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">MEMORIAS DEL ARCHIVO</text>
 
-        <rect x="422" y="344" width="104" height="12" rx="2" fill="#2d3142"/>
-        <text x="474" y="353" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">CHECKPOINT · SAVE</text>
-        <rect x="686" y="376" width="104" height="12" rx="2" fill="#2d3142"/>
-        <text x="738" y="385" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">MEMORIA DE SESIÓN</text>
-
-        <rect x="386" y="424" width="176" height="12" rx="2" fill="#2d3142"/>
-        <text x="474" y="433" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">CHECKPOINT · RESTORE + CONTEXT</text>
-        <rect x="416" y="456" width="116" height="12" rx="2" fill="#2d3142"/>
-        <text x="474" y="465" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ESTADO + BIENVENIDA</text>
+        <rect x="440" y="344" width="68" height="12" rx="2" fill="#2d3142"/>
+        <text x="474" y="353" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">PLAN · SAVE</text>
+        <rect x="692" y="376" width="92" height="12" rx="2" fill="#2d3142"/>
+        <text x="738" y="385" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">COPIA DEL PLAN</text>
 
         <!-- Hook events (left gutter) -->
         <text x="32" y="46" fill="#949eb2" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">EVENTO DEL HOOK</text>
@@ -142,11 +133,8 @@
         <text x="32" y="296" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">PostToolUse</text>
         <text x="32" y="312" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">tras Read · Edit · Write</text>
 
-        <text x="32" y="376" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">PreCompact</text>
-        <text x="32" y="392" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">antes de compactar</text>
-
-        <text x="32" y="456" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">SessionStart</text>
-        <text x="32" y="472" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">tras compact · clear</text>
+        <text x="32" y="376" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">PreToolUse</text>
+        <text x="32" y="392" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">al aprobar un plan</text>
 
         <!-- Actors -->
         <rect x="256" y="32" width="160" height="48" rx="6" fill="#2d3142"/>
@@ -162,20 +150,20 @@
         <rect x="776" y="32" width="160" height="48" rx="6" fill="#2d3142"/>
         <rect x="776" y="32" width="160" height="48" rx="6" fill="rgba(245,245,245,0.05)" stroke="#bfc0c0" stroke-width="1"/>
         <text x="856" y="54" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Vault</text>
-        <text x="856" y="69" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">memory/</text>
+        <text x="856" y="69" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">memory/ · planes/</text>
 
         <!-- Legend strip -->
-        <line x1="32" y1="528" x2="968" y2="528" stroke="rgba(245,245,245,0.10)" stroke-width="0.8"/>
-        <text x="32" y="544" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEYENDA</text>
+        <line x1="32" y1="448" x2="968" y2="448" stroke="rgba(245,245,245,0.10)" stroke-width="0.8"/>
+        <text x="32" y="464" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEYENDA</text>
 
-        <line x1="32" y1="562" x2="60" y2="562" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
-        <text x="68" y="565" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Llamada al tool</text>
+        <line x1="32" y1="482" x2="60" y2="482" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="68" y="485" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Llamada al tool</text>
 
-        <line x1="176" y1="562" x2="204" y2="562" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
-        <text x="212" y="565" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Respuesta: additionalContext para el modelo</text>
+        <line x1="176" y1="482" x2="204" y2="482" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <text x="212" y="485" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Respuesta: additionalContext para el modelo</text>
 
-        <line x1="432" y1="562" x2="460" y2="562" stroke="#f08a59" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
-        <text x="468" y="565" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Bienvenida de la sesión y memorias que vienen al caso</text>
+        <line x1="432" y1="482" x2="460" y2="482" stroke="#f08a59" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <text x="468" y="485" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Bienvenida de la sesión y memorias que vienen al caso</text>
       </svg>
     </div>
   </div>

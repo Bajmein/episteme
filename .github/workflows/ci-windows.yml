@@ -10,6 +10,7 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
+      - "plugin/**"   # sus scripts (transcript_digest, docs_check, doc-review) tienen tests
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
@@ -25,15 +26,15 @@ concurrency:
 
 jobs:
   test:
-    # Solo en repo público (en uno privado gasta cuota): se activa solo al
-    # publicar el repo.
+    # Solo en repo público (en uno privado gasta cuota); el repo es público
+    # desde el 16-11-2026.
     if: ${{ !github.event.repository.private }}
     runs-on: windows-latest
     timeout-minutes: 20
     env:
       PYTHONUTF8: "1"   # los tests leen fixtures UTF-8 con read_text() sin encoding
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3

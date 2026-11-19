@@ -40,9 +40,10 @@ body:
     validations:
       required: true
   - type: input
-    id: claude-code
+    id: cliente
     attributes:
-      label: Versión de Claude Code
+      label: Cliente y versión
+      placeholder: Claude Code 2.1.x o agy (Google Antigravity CLI)
   - type: input
     id: uv
     attributes:

@@ -18,11 +18,13 @@ Los tests copian `tests/fixtures/vault/` a un directorio temporal antes de escri
 
 El paquete pide Python 3.14 o superior (`requires-python`); el repo se desarrolla y se prueba en 3.15, fijado en `.python-version`, que es la versión que `uv` usa aquí y en el CI (Linux y Windows).
 
-No hay Dependabot de versiones: `.github/dependabot.yml` se quitó a propósito, porque sus PR molestaban al CI. Las alertas y las actualizaciones de seguridad de Dependabot se decidirán al publicar el repo.
+No hay Dependabot de versiones: `.github/dependabot.yml` se quitó a propósito, porque sus PR molestaban al CI. Las alertas y las actualizaciones de seguridad de Dependabot sí están activas desde que el repo es público (16-11-2026): sus PR corren en `ubuntu-latest`.
 
-El CI tiene dos workflows. `ci.yml` (`lint` y `test` en Linux) corre en un runner propio, registrado en el repo con las etiquetas `self-hosted` y `linux`, para `main` y las ramas del propio repo; los PR de forks (y los de las actualizaciones de seguridad de Dependabot) corren en `ubuntu-latest`, para que código de terceros no se ejecute en el equipo propio. Si el runner está apagado, sus jobs esperan en cola hasta 24 horas. El job `lint` corre además `zizmor` sobre los workflows. `ci-windows.yml` corre los tests en `windows-latest` (en un repo público no gasta cuota) en `main` y en los PR que cambian `src/`, `tests/`, `scripts/`, `pyproject.toml`, `uv.lock`, `.python-version` o el propio workflow, solo cuando el repo es público (lo es): en un repo privado se saltaría, igual que `dependency-review`. En los dos, un push nuevo cancela la ejecución anterior de la misma rama. Aparte, `stale.yml` corre los lunes en `ubuntu-latest` y solo mira lo que tiene el label `espera respuesta`: a los 30 días sin actividad lo marca `inactivo` y a los 14 siguientes lo cierra. La configuración del runner no está en este repo.
+El CI tiene dos workflows. `ci.yml` (`lint` y `test` en Linux) corre en un runner propio, registrado en el repo con las etiquetas `self-hosted` y `linux`, para `main` y las ramas del propio repo; los PR de forks (y los de las actualizaciones de seguridad de Dependabot) corren en `ubuntu-latest`, para que código de terceros no se ejecute en el equipo propio. Si el runner está apagado, sus jobs esperan en cola hasta 24 horas. El job `lint` corre además `zizmor` sobre los workflows. `ci-windows.yml` corre los tests en `windows-latest` (en un repo público no gasta cuota) en `main` y en los PR que cambian `src/`, `tests/`, `scripts/`, `plugin/`, `pyproject.toml`, `uv.lock`, `.python-version` o el propio workflow, solo cuando el repo es público (lo es): en un repo privado se saltaría, igual que `dependency-review`. En los dos, un push nuevo cancela la ejecución anterior de la misma rama. Aparte, `stale.yml` corre los lunes en `ubuntu-latest` y solo mira lo que tiene el label `espera respuesta`: a los 30 días sin actividad lo marca `inactivo` y a los 14 siguientes lo cierra. La configuración del runner no está en este repo.
 
 El banner es `static/banner-episteme.jpg` (1600 px de ancho, JPEG progresivo). El badge de versión de la cabecera es estático: se cambia en cada release, junto con el tag de los ejemplos de instalación.
+
+Los diagramas del README y de `docs/` están en `static/diagrams/`: cada uno es un HTML (la fuente, hecho con el plugin diagram-design en su variante oscura) y el PNG que se incrusta, exportado del HTML a 2x. Si cambia el HTML, se vuelve a exportar el PNG.
 
 ## Salud del código
 
@@ -37,7 +39,7 @@ Para bajar la complejidad sin cambiar lo que ve el agente:
 - Los tests no se modifican: son la red del refactor. CodeScene avisa entonces «Absence of Expected Change Pattern», que en un refactor es esperable.
 - Se compara la foto del contrato antes y después: arrancar el servidor por stdio, volcar las instrucciones y `list_tools` a JSON con las claves ordenadas y comprobar con `cmp` que no cambió.
 
-El refactor de noviembre de 2026 (PR #63 a #75) partió de 8,73 de code health y 8,02 en hotspots (análisis sobre `266ab09`). Por archivo, según la revisión de cada PR:
+El refactor de noviembre de 2026 (PR #63 a #75, como los de abajo y los commits citados, del repo anterior, hoy archivado en `Bajmein/episteme-archive`) partió de 8,73 de code health y 8,02 en hotspots (análisis sobre `266ab09`). Por archivo, según la revisión de cada PR:
 
 | Archivo | Antes | Después |
 | :-- | --: | --: |
@@ -123,8 +125,6 @@ uv run scripts/measure_uptake.py --vault ~/.episteme [--project <proyecto>] [--d
 Imprime una tabla por memoria (entregas por hook, lecturas del agente, las que ocurren en la misma sesión después de una entrega y apariciones en `search`) y un resumen: (a) porcentaje de entregas seguidas de lectura, (b) memorias entregadas `--min-deliveries` veces o más y nunca leídas, (c) memorias de más de `--old-days` días con y sin lectura, (d) sesiones con lecturas y sin ninguna llamada a `remember` o `revise`, (e) búsquedas del agente sin resultados agrupadas por consulta, `match` y `zone`, por frecuencia (es el dato que decide el reintento con prefijo).
 
 Límites: una fila de `context` no distingue la bienvenida del recall, así que se cuentan juntas (`welcome` es solo el subconjunto con `mode=welcome`); las entregas sin sesión no se pueden emparejar con una lectura y cuentan como no seguidas.
-
-Los diagramas del README y de `docs/` están en `static/diagrams/`: cada uno es un HTML (la fuente, hecho con el plugin diagram-design en su variante oscura) y el PNG que se incrusta, exportado del HTML a 2x. Si cambia el HTML, se vuelve a exportar el PNG.
 
 ## Medir el grafo de enlaces
 

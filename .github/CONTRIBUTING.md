@@ -25,6 +25,8 @@ uv run deptry .
 uv run zizmor .github/workflows
 ```
 
+CodeScene revisa además cada PR: no debe bajar el code health de ningún archivo.
+
 ## Commits y ramas
 
 - Commits en inglés, con [Conventional Commits](https://www.conventionalcommits.org/): `feat(search): …`, `fix(memory): …`, `docs: …`. La plantilla `.github/.gitmessage` lista los tipos y los alcances en uso.
@@ -41,7 +43,7 @@ uv run zizmor .github/workflows
 ## Documentación y registro de cambios
 
 - Un cambio que note quien usa episteme (tools, hooks, skills, scripts, instalación) se anota en `CHANGELOG.md`, en «Sin publicar».
-- Si cambia un tool, revisa también `README.md`, `docs/` y los `SKILL.md` del plugin.
+- Si cambia un tool, revisa también `README.md`, `docs/`, los `SKILL.md` del plugin, su agente (`plugin/agents/extractor.md`) y `plugin/rules/AGENTS.md`. Si cambian los hooks o los permisos, también `plugin/skills/setup/settings.json`.
 - `README.md` y `docs/` van en español; el código, los docstrings y los commits, en inglés.
 
 ## Licencia
