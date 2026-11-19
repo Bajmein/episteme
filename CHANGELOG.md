@@ -10,6 +10,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - Diagramas del `README.md` al día con 0.15.0: la arquitectura muestra las 14 tools, agy y las zonas `sesiones/` y `planes/`; el de hooks cubre el día a día (con la copia del plan al aprobarlo) y dos nuevos explican el ciclo de una memoria y qué pasa al compactar o con `/clear`. `docs/hooks.md` incrusta también el de compactar.
 - `SECURITY.md` cuenta entre los riesgos aceptados el estado de sesión y las copias de planes, que `session` y `plan` guardan sin pedir permiso y vuelven al contexto.
 
+### Corregido
+
+- `/episteme:docs` usa la versión Markdown (`<url>.md`) de las páginas que un `llms.txt` lista sin extensión (Antigravity), en vez de guardar el HTML.
+
 ## [0.15.0] - 2026-11-18
 
 ### Añadido
