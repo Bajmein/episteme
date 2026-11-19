@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "serena-hooks remind --client=claude-code"
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/python-serena.py\" remind"
           }
         ]
       },

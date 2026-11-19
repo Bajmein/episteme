@@ -8,6 +8,10 @@ Module serena-python of /episteme:scaffold (local by default). Registered in
           A whole-file Read, or an Edit/Write of an existing .py/.pyi file, gets a short
           additionalContext naming the Serena tool to use instead. Once per session, tool kind
           and file; it never blocks (serena-hooks remind already denies long grep/read streaks).
+    remind PreToolUse (every tool)
+          Hands the call to `serena-hooks remind` only when it is Python work (Serena tools,
+          .py/.pyi files, Grep or Bash on Python files or under src/, tests/, scripts/), so
+          greps over Markdown, JSON or command output no longer count toward its streaks.
     post  PostToolUse Edit|MultiEdit|Write and Serena's editing tools
           Runs `uv run --frozen ty check --output-format concise` on the project (the same ty
           that Serena's python_ty language server runs) and, if it fails, hands the diagnostics
@@ -20,6 +24,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 import subprocess  # nosec B404
 import sys
 import tempfile
@@ -44,6 +50,12 @@ SERENA_EDIT_TOOLS = {
 SERENA_MULTI_FILE_TOOLS = {"replace_in_files", "rename_symbol", "safe_delete_symbol"}
 MAX_DIAGNOSTIC_LINES = 40
 TY_TIMEOUT_SECONDS = 60
+REMIND = ("serena-hooks", "remind", "--client=claude-code")
+REMIND_TIMEOUT_SECONDS = 10
+PY_DIRS = ("src", "tests", "scripts")
+FILE_TOOLS = ("Read", "Edit", "MultiEdit", "Write", "NotebookEdit")
+PY_TOKEN = re.compile(r"\.pyi?(?=$|[\s'\"`:;|)&,])")
+PY_FILTER = re.compile(r"--include=['\"]?\*\.pyi?|-g\s+['\"]?\*\.pyi?|-t\s*py\b|--type[= ]py\b")
 
 READ_HINT = (
     "Python file {rel}: prefer Serena over a whole-file Read. Start with "
@@ -179,10 +191,80 @@ def post(data: dict) -> None:
     )
 
 
+def under_py_dir(path: str, root: Path) -> bool:
+    """Whether `path` is, or is inside, one of PY_DIRS of the project."""
+    p = Path(path.strip("'\""))
+    if not p.is_absolute():
+        p = root / p
+    try:
+        parts = p.resolve().relative_to(root.resolve()).parts
+    except ValueError:
+        return False
+    return bool(parts) and parts[0] in PY_DIRS
+
+
+def grep_is_python(tool_input: dict, root: Path) -> bool:
+    if tool_input.get("type") == "py":
+        return True
+    glob = tool_input.get("glob") or ""
+    path = tool_input.get("path") or ""
+    if glob.endswith(PY_SUFFIXES) or path.endswith(PY_SUFFIXES):
+        return True
+    return bool(path) and under_py_dir(path, root)
+
+
+def bash_operands(command: str) -> list[str]:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    return [t for t in tokens if t and not t.startswith("-")]
+
+
+def bash_is_python(command: str, root: Path) -> bool:
+    if PY_TOKEN.search(command) or PY_FILTER.search(command):
+        return True
+    return any(under_py_dir(t, root) for t in bash_operands(command))
+
+
+def python_call(data: dict) -> bool:
+    """Whether a tool call is Python work, the only kind serena-hooks remind should count."""
+    tool = data.get("tool_name", "")
+    tool_input = data.get("tool_input") or {}
+    if tool.startswith(SERENA):
+        return True
+    if tool in FILE_TOOLS:
+        return (tool_input.get("file_path") or "").endswith(PY_SUFFIXES)
+    root = project_root(data)
+    if tool == "Grep":
+        return grep_is_python(tool_input, root)
+    if tool == "Bash":
+        return bash_is_python(tool_input.get("command") or "", root)
+    return False
+
+
+def remind(data: dict) -> None:
+    """Pass Python calls on to serena-hooks remind; the rest never reaches its counter."""
+    if not python_call(data):
+        return
+    # fixed argv, no shell.
+    proc = subprocess.run(  # nosec B603
+        REMIND,
+        input=json.dumps(data),
+        capture_output=True,
+        text=True,
+        timeout=REMIND_TIMEOUT_SECONDS,
+        check=False,
+    )
+    sys.stdout.write(proc.stdout)
+    sys.stderr.write(proc.stderr)
+    sys.exit(proc.returncode)
+
+
 def main() -> None:
     try:
         data = json.load(sys.stdin)
-        {"pre": pre, "post": post}[sys.argv[1]](data)
+        {"pre": pre, "post": post, "remind": remind}[sys.argv[1]](data)
     # a hook must never break the tool call.
     except Exception:  # nosec B110
         pass
