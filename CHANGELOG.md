@@ -4,6 +4,11 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- Hook `SessionStart` (`compact|clear`) en el plugin (`plugin/hooks/hooks.json` y `extract-wake.py`): de tipo `command` con `asyncRewake`, despierta al modelo tras `/compact` o `/clear` para que lance `episteme:extractor` sin esperar al siguiente mensaje. Solo actúa en proyectos con el hook `restore` de episteme en su `settings` (o en el de usuario). Necesita `uv`, como el extractor.
+- `session(action="save")` acepta `until` (solo con `origin="extractor"`): la hora de la última entrada del transcript que leyó el extractor. Se guarda como `extracted_until`, `show` la devuelve y la orden de extracción siguiente empieza ahí.
+
 ### Cambiado
 
 - El módulo `serena-python` de `/episteme:scaffold` solo pasa al aviso de Serena (`serena-hooks remind`) las búsquedas y lecturas de Python; las de Markdown, JSON y demás ya no cuentan para la racha. El hook `python-serena.py` gana la acción `remind` y `serena-python.json` la usa en lugar de llamar a `serena-hooks` directamente.
@@ -13,6 +18,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Corregido
 
+- La extracción tras un `/clear` (o un segundo `/compact`) ya no pierde lo que la sesión dijo mientras corría el extractor anterior: empezaba en el `saved_at` de su guardado, posterior a lo que había leído. El extractor pasa ahora el `hasta` del resumen como `until`.
 - `/episteme:docs` usa la versión Markdown (`<url>.md`) de las páginas que un `llms.txt` lista sin extensión (Antigravity), en vez de guardar el HTML.
 
 ## [0.15.0] - 2026-11-18

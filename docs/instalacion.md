@@ -50,7 +50,7 @@ En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por 
 
 ## El plugin
 
-El repo es también un marketplace de Claude Code con un plugin, `episteme`, que trae las skills (en [`plugin/skills/`](../plugin/skills/)) y el agente `episteme:extractor` (en [`plugin/agents/`](../plugin/agents/extractor.md)), que pone al día el estado de la sesión tras `/compact` o `/clear` cuando un hook lo pide. El servidor no va en el plugin: se sigue registrando en cada proyecto con `claude mcp add` y fijado a un tag.
+El repo es también un marketplace de Claude Code con un plugin, `episteme`, que trae las skills (en [`plugin/skills/`](../plugin/skills/)) y el agente `episteme:extractor` (en [`plugin/agents/`](../plugin/agents/extractor.md)), que pone al día el estado de la sesión tras `/compact` o `/clear` cuando un hook lo pide, y un hook `SessionStart` (en [`plugin/hooks/`](../plugin/hooks/hooks.json)) que despierta al modelo para que lo lance sin esperar al siguiente mensaje (ver [Estado de la sesión](sesion.md)). El servidor no va en el plugin: se sigue registrando en cada proyecto con `claude mcp add` y fijado a un tag.
 
 ```bash
 claude plugin marketplace add Bajmein/episteme

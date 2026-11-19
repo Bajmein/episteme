@@ -44,7 +44,8 @@ def _fallback(engine: Engine, project: str, project_dir: str | None) -> dict[str
 def extraction_order(project: str, transcript: str, state: dict[str, Any]) -> str:
     """The line that asks the agent to launch the extractor on ``transcript``."""
     managed = state.get("source") == "session"
-    saved = str(state.get("saved_at") or "") if managed else ""
+    mark = state.get("extracted_until") or state.get("saved_at")
+    saved = str(mark or "") if managed else ""
     since = saved if _SAVED_AT.fullmatch(saved) else SINCE_ALL
     target = state["path"] if managed else "nuevo"
     return (

@@ -1,0 +1,18 @@
+{
+  "description": "Despierta a Claude tras /compact o /clear para que lance el extractor de episteme sin esperar al siguiente mensaje.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project --python 3.14 python -I \"${CLAUDE_PLUGIN_ROOT}/hooks/extract-wake.py\"",
+            "asyncRewake": true,
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -37,6 +37,13 @@ _DirArg = Annotated[
 _OriginArg = Annotated[
     str | None, Field(description='save: "agent" (default) or "extractor"; goes to saved_by.')
 ]
+_UntilArg = Annotated[
+    str | None,
+    Field(
+        description='save with origin="extractor": the digest\'s "hasta" (ISO); the next '
+        "extraction starts there."
+    ),
+]
 _SessionArg = Annotated[
     str | None,
     Field(description="Claude Code session id (hooks pass ${session_id}); metadata for save."),
@@ -100,6 +107,7 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         project: ProjectArg = None,
         project_dir: _DirArg = None,
         origin: _OriginArg = None,
+        until: _UntilArg = None,
         session: _SessionArg = None,
         plan: _PlanArg = None,
         type: _TypeArg = None,
@@ -123,8 +131,11 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         {"path", "created", "missing_sections"} plus "template_hint" when a long body lacks
         template sections; it never refuses for format. plan (a slug of the plan tool) links
         the state to its plan; without it the state keeps its plan, else takes the plan this
-        process saved last for the worktree.
-        show: {"found", "path", "task_title", "saved_at", "content"}. Never writes.
+        process saved last for the worktree. The extractor passes until (the last transcript
+        time it read) and the next extraction order starts there, not at saved_at; any
+        later save drops it.
+        show: {"found", "path", "task_title", "saved_at", "content"} (plus "extracted_until"
+        when the extractor saved last). Never writes.
         restore: the state as context, made current: {"found", "path", "task_title",
         "saved_at", "content", "source"}. Without a state it falls back to the deprecated
         checkpoint when [checkpoint] state_glob is set (adds "deprecated").
@@ -147,7 +158,7 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
             return dump(sessions.template(type))
         if action == "end":
             return _reply(hook_event, sessions.end(transcript, reason))
-        save = sessions.SaveArgs(title, body, note, files, origin, session, plan)
+        save = sessions.SaveArgs(title, body, note, files, origin, session, plan, until)
         hook = _Hook(summary, transcript, trigger, source, session, hook_event)
         with engine.session():
             return _run(_Args(engine, project, project_dir), action, save, hook)
