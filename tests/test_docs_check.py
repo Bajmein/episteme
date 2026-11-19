@@ -322,14 +322,47 @@ def test_existing_txt_and_json_pages_are_downloaded_as_they_are(
     assert report["errors"] == []
 
 
-def test_new_page_that_only_serves_html_is_an_error(
+def test_new_page_that_only_serves_html_is_skipped_not_an_error(
     check: ModuleType, base: str, tmp_path: Path
 ) -> None:
     report = _new_pages(check, base, tmp_path, "/docs/html-only", [])
 
     assert report["new"] == []
-    assert [e["error"] for e in report["errors"]] == ["HTML instead of Markdown"]
+    assert report["errors"] == []
+    assert report["skipped"] == [
+        {"source": f"{base}/docs/html-only", "reason": "HTML instead of Markdown"}
+    ]
     assert list((tmp_path / "inbox").iterdir()) == []
+
+
+def test_new_page_that_fails_is_skipped_not_an_error(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _new_pages(check, base, tmp_path, "/docs/gone.md", [])
+
+    assert report["new"] == [] and report["errors"] == []
+    assert report["skipped"] == [{"source": f"{base}/docs/gone.md", "reason": "HTTP 404"}]
+
+
+def test_deprecated_pages_are_not_downloaded(
+    check: ModuleType, base: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+    real = check.fetch
+    monkeypatch.setattr(check, "fetch", lambda url, headers=None: (seen.append(url), real(url))[1])
+    page = check.Page(f"{base}/docs/html-only", "0" * 16, "p.md", "deprecated")
+
+    report = check.diff([page], tmp_path / "inbox", [], [])
+
+    assert report["unchanged"] == 1 and report["errors"] == [] and report["changed"] == []
+    assert seen == []
+
+
+def test_txt_urls_are_not_listed_as_new(check: ModuleType, base: str) -> None:
+    _Handler.llms = f"- [F]({base}/docs/_llms/fr.txt)\n- [R]({base}/docs/robots.txt)\n"
+    report: dict = {"errors": []}
+
+    assert check.upstream_urls([f"{base}/llms.txt"], [], set(), report) == []
 
 
 @pytest.mark.parametrize("listed", ["/docs/x.md", "/docs/x/", "/docs/x/index.md", "/docs/x#sec"])

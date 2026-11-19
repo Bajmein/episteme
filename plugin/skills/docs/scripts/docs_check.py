@@ -44,7 +44,7 @@ HTML_ERROR = "HTML instead of Markdown"
 EXCERPT_MAX = 300
 PAGE_SUFFIX_RE = re.compile(r"(?:/index)?\.(?:md|html?)$", re.IGNORECASE)
 NON_PAGE_PATH = "/.well-known/"
-NON_PAGE_NAME_RE = re.compile(r"llms.*\.txt")
+NON_PAGE_SUFFIXES = (".json", ".txt")
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
 NON_PROSE_STARTS = (">", "|", "<", "![", ":::")
 LINK_ITEM_RE = re.compile(r"(?:[-*+]|\d+\.)\s+\[")
@@ -244,14 +244,11 @@ def _page_key(url: str) -> str:
 
 
 def _is_page(url: str) -> bool:
-    """False for templates, ``.well-known`` files, JSON and ``llms*.txt`` indexes."""
+    """False for templates, ``.well-known`` files, JSON and ``.txt`` files (``llms*.txt``…)."""
     if "{" in url or "}" in url:
         return False
     path = urllib.parse.urlsplit(url).path.lower()
-    last = path.rsplit("/", 1)[-1]
-    return not (
-        NON_PAGE_PATH in path + "/" or path.endswith(".json") or NON_PAGE_NAME_RE.fullmatch(last)
-    )
+    return not (NON_PAGE_PATH in path + "/" or path.endswith(NON_PAGE_SUFFIXES))
 
 
 def md_variant(url: str) -> str | None:
@@ -312,12 +309,9 @@ def _included(url: str, include: list[str]) -> bool:
 
 def _classify(page: Page, result: Fetched, inbox: Path, report: dict) -> None:
     if result.status in GONE_STATUSES:
-        if page.status == "deprecated":
-            report["unchanged"] += 1
-        else:
-            report["gone"].append(
-                {"source": page.source, "path": page.path, "http_status": result.status}
-            )
+        report["gone"].append(
+            {"source": page.source, "path": page.path, "http_status": result.status}
+        )
     elif result.text is None:
         report["errors"].append({"source": page.source, "error": result.error})
     elif _is_html(result):
@@ -332,11 +326,9 @@ def _classify(page: Page, result: Fetched, inbox: Path, report: dict) -> None:
 
 
 def _new_entry(result: Fetched, include: list[str], inbox: Path, report: dict) -> None:
-    if result.text is None:
-        report["errors"].append({"source": result.url, "error": result.error})
-        return
-    if _is_html(result):
-        report["errors"].append({"source": result.url, "error": HTML_ERROR})
+    if result.text is None or _is_html(result):
+        reason = result.error if result.text is None else HTML_ERROR
+        report["skipped"].append({"source": result.url, "reason": reason})
         return
     digest, file = _save(inbox, result.text)
     report["new"].append(
@@ -381,13 +373,27 @@ def _excerpt(text: str) -> str | None:
 
 
 def diff(pages: list[Page], inbox: Path, upstream: list[str], include: list[str]) -> dict:
-    """Download the suite pages and the new ones in its upstream indexes; classify them."""
+    """Download the suite pages and the new ones in its upstream indexes; classify them.
+
+    A ``deprecated`` page is not downloaded: it counts as unchanged. A new page that fails
+    goes to ``skipped`` (it is tried again next run); ``errors`` is for the suite pages and
+    the indexes that cannot be read.
+    """
     prepare_inbox(inbox)
-    report: dict = {"changed": [], "unchanged": 0, "gone": [], "new": [], "errors": []}
+    report: dict = {
+        "changed": [],
+        "unchanged": 0,
+        "gone": [],
+        "new": [],
+        "skipped": [],
+        "errors": [],
+    }
     new = upstream_urls(upstream, include, {p.source for p in pages}, report)
+    active = [p for p in pages if p.status != "deprecated"]
+    report["unchanged"] += len(pages) - len(active)
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        results = pool.map(_fetch_markdown, [p.source for p in pages])
-        for page, result in zip(pages, results, strict=True):
+        results = pool.map(_fetch_markdown, [p.source for p in active])
+        for page, result in zip(active, results, strict=True):
             _classify(page, result, inbox, report)
         for result in pool.map(_fetch_markdown, new):
             _new_entry(result, include, inbox, report)
