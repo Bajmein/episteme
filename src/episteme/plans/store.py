@@ -186,6 +186,54 @@ def _old_meta(engine: Engine, rel: str) -> dict[str, Any]:
     return _read(engine, rel)[0]
 
 
+class _Copy(NamedTuple):
+    """A plan ready to write: where, under which slug, its clipped text and its title."""
+
+    rel: str
+    slug: str
+    body: str
+    title: str
+    source_path: str
+
+
+def _is_unsubstituted(args: SaveArgs) -> bool:
+    return is_placeholder(args.plan) or is_placeholder(args.plan_path)
+
+
+def _copy(base: str, args: SaveArgs) -> _Copy:
+    """Check the plan and its path and build the copy; credentials redacted, text clipped."""
+    raw_path = (args.plan_path or "").strip()
+    if not raw_path:
+        raise invalid("plan_path is empty. Pass the planFilePath of the plan.")
+    text = redact_secrets(args.plan or "").strip()
+    if not text:
+        raise invalid("plan is empty. Pass the text of the plan.")
+    slug = slug_for(raw_path)
+    body = _clip(text)
+    source = hookmode.clean_line(redact_secrets(raw_path), PATH_MAX)
+    return _Copy(f"{base}/{slug}.md", slug, body, redact_secrets(_title(body, slug)), source)
+
+
+def _plan_meta(
+    copy: _Copy, old: dict[str, Any], fresh: dict[str, Any]
+) -> dict[str, Any]:
+    """The frontmatter of a copy; ``fresh`` has its ``project``, ``session_id`` and ``worktree``."""
+    meta: dict[str, Any] = {
+        "type": PLAN_TYPE,
+        "status": ACTIVE,
+        "created": old.get("created") or today(),
+        "tags": [PLAN_TAG],
+        "project": fresh["project"],
+        "slug": copy.slug,
+        "title": copy.title,
+        "saved_at": now(),
+        "session_id": fresh["session_id"] or old.get("session_id"),
+        "worktree": fresh["worktree"] or old.get("worktree"),
+        "source_path": copy.source_path,
+    }
+    return {k: v for k, v in meta.items() if v is not None}
+
+
 def save(
     engine: Engine, project: str, project_dir: str | None, args: SaveArgs
 ) -> dict[str, Any]:
@@ -194,38 +242,24 @@ def save(
     A hook variable left unsubstituted saves nothing. Credentials in the text, title and path
     are redacted, never refused: the plan cannot be lost.
     """
-    if is_placeholder(args.plan) or is_placeholder(args.plan_path):
+    if _is_unsubstituted(args):
         return {"path": None, "saved": False}
-    base = folder(engine, project)
-    raw_path = (args.plan_path or "").strip()
-    if not raw_path:
-        raise invalid("plan_path is empty. Pass the planFilePath of the plan.")
-    text = redact_secrets(args.plan or "").strip()
-    if not text:
-        raise invalid("plan is empty. Pass the text of the plan.")
-    slug = slug_for(raw_path)
-    rel = f"{base}/{slug}.md"
-    worktree = _project_dir(project_dir).as_posix() if project_dir else None
-    old = _old_meta(engine, rel)
-    body = _clip(text)
-    title = redact_secrets(_title(body, slug))
-    meta: dict[str, Any] = {
-        "type": PLAN_TYPE,
-        "status": ACTIVE,
-        "created": old.get("created") or today(),
-        "tags": [PLAN_TAG],
+    copy = _copy(folder(engine, project), args)
+    fresh = {
         "project": project,
-        "slug": slug,
-        "title": title,
-        "saved_at": now(),
-        "session_id": _session_id(args.session_id) or old.get("session_id"),
-        "worktree": worktree or old.get("worktree"),
-        "source_path": hookmode.clean_line(redact_secrets(raw_path), PATH_MAX),
+        "session_id": _session_id(args.session_id),
+        "worktree": _project_dir(project_dir).as_posix() if project_dir else None,
     }
-    meta = {k: v for k, v in meta.items() if v is not None}
-    _write(engine, rel, meta, f"{body}\n")
-    _remember_current(_key(project, project_dir), rel)
-    return {"path": rel, "saved": True, "slug": slug, "title": title, "created": not old}
+    old = _old_meta(engine, copy.rel)
+    _write(engine, copy.rel, _plan_meta(copy, old, fresh), f"{copy.body}\n")
+    _remember_current(_key(project, project_dir), copy.rel)
+    return {
+        "path": copy.rel,
+        "saved": True,
+        "slug": copy.slug,
+        "title": copy.title,
+        "created": not old,
+    }
 
 
 def current_slug(engine: Engine, project: str, project_dir: str | None) -> str | None:

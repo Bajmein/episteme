@@ -245,9 +245,14 @@ def _meta(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> dict[st
         "saved_by": _check_origin(args.origin),
         "worktree": fresh["worktree"] or old.get("worktree"),
         "session_id": args.session_id or old.get("session_id"),
-        "plan": args.plan or old.get("plan") or fresh.get("plan"),
+        "plan": _plan_link(old, fresh, args),
     }
     return {k: v for k, v in meta.items() if v not in (None, [])}
+
+
+def _plan_link(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> str | None:
+    """The plan a save links: the one passed, else the state's own, else the current one."""
+    return args.plan or old.get("plan") or fresh.get("plan")
 
 
 def _create(engine: Engine, project: str, title: str, text: str) -> str:

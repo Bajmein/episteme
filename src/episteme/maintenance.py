@@ -218,32 +218,28 @@ def _rotation_line(engine: Engine, store: Store, every_days: int, rotation: _Rot
     )
 
 
-def _sessions_line(engine: Engine, store: Store, every_days: int) -> str:
-    """Archive the session states unsaved for ``[session] archive_days`` if due; notice line."""
-    from episteme import session
+def _session_days(config: Config) -> int:
+    return config.session.archive_days
 
-    rotation = _Rotation(
-        "archive_sessions",
-        session.has_active,
-        session.rotate,
-        lambda config: config.session.archive_days,
-        "estados de sesión",
+
+def _plan_days(config: Config) -> int:
+    return config.plans.archive_days
+
+
+def _rotations() -> tuple[_Rotation, ...]:
+    """The session states and the plan copies, each archived after its ``archive_days``."""
+    from episteme import plans, session
+
+    return (
+        _Rotation(
+            "archive_sessions",
+            session.has_active,
+            session.rotate,
+            _session_days,
+            "estados de sesión",
+        ),
+        _Rotation("archive_plans", plans.has_active, plans.rotate, _plan_days, "planes"),
     )
-    return _rotation_line(engine, store, every_days, rotation)
-
-
-def _plans_line(engine: Engine, store: Store, every_days: int) -> str:
-    """Archive the plan copies unsaved for ``[plans] archive_days`` if due; notice line."""
-    from episteme import plans
-
-    rotation = _Rotation(
-        "archive_plans",
-        plans.has_active,
-        plans.rotate,
-        lambda config: config.plans.archive_days,
-        "planes",
-    )
-    return _rotation_line(engine, store, every_days, rotation)
 
 
 def _notify_line(engine: Engine, store: Store, project: str, every_days: int) -> str:
@@ -266,8 +262,7 @@ def run(engine: Engine, store: Store, project: str) -> str:
     lines: list[str] = []
     if cfg.archive_expired:
         lines.append(_archive_line(engine, store, cfg.every_days))
-    lines.append(_sessions_line(engine, store, cfg.every_days))
-    lines.append(_plans_line(engine, store, cfg.every_days))
+    lines.extend(_rotation_line(engine, store, cfg.every_days, r) for r in _rotations())
     if cfg.notify:
         lines.append(_notify_line(engine, store, project, cfg.every_days))
     return "\n".join(line for line in lines if line)
