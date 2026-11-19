@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -73,7 +74,7 @@ async def test_save_creates_the_copy_and_overwrites_it_by_slug(
     assert fm["type"] == "plan" and fm["status"] == "active" and fm["tags"] == ["sesion/plan"]
     assert fm["project"] == "fabrik" and fm["slug"] == "plan-azul" and fm["title"] == "Plan azul"
     assert str(fm["saved_at"]).startswith(TODAY) and fm["source_path"] == PATH_A
-    assert fm["worktree"] == here
+    assert fm["worktree"] == Path(os.path.realpath(here)).as_posix()
     assert "Abrir el PR" in (vault / first["path"]).read_text(encoding="utf-8")
 
 
