@@ -21,6 +21,9 @@ PAGES = {
     "/docs/old.md": (410, "gone"),
     "/docs/broken.md": (500, "boom"),
     "/docs/guide/index.md": (200, "# Guide\n"),
+    "/docs/a": (200, "<!DOCTYPE html>\n<html><body>app shell</body></html>"),
+    "/docs/a.md": (200, "# A\n\nMarkdown.\n"),
+    "/docs/b": (200, "# B\n\nPlain.\n"),
 }
 
 
@@ -110,6 +113,74 @@ def test_diff_classifies_pages(
     assert new["source"] == f"{base}/docs/guide/index.md"
     assert new["suggested_path"] == "guide.md"
     assert Path(new["file"]).read_text(encoding="utf-8") == "# Guide\n"
+
+
+def _new_pages(check: ModuleType, base: str, tmp_path: Path, listed: str, known: list) -> dict:
+    _Handler.llms = f"# Docs\n\n- [P]({base}{listed})\n"
+    return check.diff(known, tmp_path / "out", [f"{base}/llms.txt"], [f"{base}/docs/"])
+
+
+def test_diff_uses_the_markdown_variant_of_a_page_listed_without_md(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _new_pages(check, base, tmp_path, "/docs/a", [])
+
+    [new] = report["new"]
+    assert new["source"] == f"{base}/docs/a.md"
+    assert new["suggested_path"] == "a.md"
+    assert Path(new["file"]).read_text(encoding="utf-8") == "# A\n\nMarkdown.\n"
+    assert report["errors"] == []
+
+
+def test_diff_knows_a_page_by_its_markdown_variant(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    known = [check.Page(f"{base}/docs/a.md", "0" * 16, "a.md", "stable")]
+
+    report = _new_pages(check, base, tmp_path, "/docs/a", known)
+
+    assert report["new"] == []
+
+
+def test_diff_falls_back_to_the_listed_url_without_a_markdown_variant(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _new_pages(check, base, tmp_path, "/docs/b", [])
+
+    [new] = report["new"]
+    assert new["source"] == f"{base}/docs/b"
+    assert report["errors"] == []
+
+
+def test_diff_lists_a_page_once_when_the_index_has_both_forms(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    _Handler.llms = f"- [A]({base}/docs/a)\n- [A]({base}/docs/a.md)\n"
+
+    report = check.diff([], tmp_path / "out", [f"{base}/llms.txt"], [f"{base}/docs/"])
+
+    assert [n["source"] for n in report["new"]] == [f"{base}/docs/a.md"]
+
+
+def test_diff_keeps_a_listed_md_url(check: ModuleType, base: str, tmp_path: Path) -> None:
+    report = _new_pages(check, base, tmp_path, "/docs/guide/index.md", [])
+
+    [new] = report["new"]
+    assert new["source"] == f"{base}/docs/guide/index.md"
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://d.io/docs/a", "https://d.io/docs/a.md"),
+        ("https://d.io/docs/a/", "https://d.io/docs/a/index.md"),
+        ("https://d.io/docs/a?x=1#top", "https://d.io/docs/a.md"),
+        ("https://d.io/docs/a.md", None),
+        ("https://d.io/docs/a.md?x=1", None),
+    ],
+)
+def test_md_variant(check: ModuleType, url: str, expected: str | None) -> None:
+    assert check.md_variant(url) == expected
 
 
 @pytest.mark.parametrize(

@@ -174,15 +174,43 @@ def upstream_urls(
 ) -> list[str]:
     """URLs listed in the ``llms.txt`` indexes, under ``include`` and not in the suite yet.
 
+    A URL is known when it or its Markdown variant (``md_variant``) is in ``known``.
     An index that cannot be read goes to ``report["errors"]``, so the suite is not marked synced.
     """
     skip = known | set(upstream)
     found: dict[str, None] = {}
     for index in upstream:
         for url in _listed(index, report):
-            if url not in skip and _included(url, include):
+            if url not in skip and md_variant(url) not in skip and _included(url, include):
                 found[url] = None
-    return list(found)
+    return [url for url in found if md_variant(url) not in found]
+
+
+def md_variant(url: str) -> str | None:
+    """The ``.md`` twin of a page URL, or None when the URL already ends in ``.md``."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.path.endswith(".md"):
+        return None
+    path = parts.path + ("index.md" if parts.path.endswith("/") else ".md")
+    return urllib.parse.urlunsplit(parts._replace(path=path, query="", fragment=""))
+
+
+def _is_markdown(result: Fetched) -> bool:
+    """A successful fetch whose text does not look like an HTML document."""
+    if result.text is None:
+        return False
+    head = result.text.lstrip()[:15].lower()
+    return not head.startswith(("<!doctype", "<html"))
+
+
+def _fetch_new(url: str) -> Fetched:
+    """The Markdown variant of ``url`` when it answers with Markdown; else ``url`` itself."""
+    variant = md_variant(url)
+    if variant is not None:
+        result = fetch(variant)
+        if _is_markdown(result):
+            return result
+    return fetch(url)
 
 
 def _listed(index: str, report: dict) -> list[str]:
@@ -237,7 +265,7 @@ def diff(pages: list[Page], out: Path, upstream: list[str], include: list[str]) 
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for page, result in zip(pages, pool.map(fetch, [p.source for p in pages]), strict=True):
             _classify(page, result, out, report)
-        for result in pool.map(fetch, new):
+        for result in pool.map(_fetch_new, new):
             _new_entry(result, include, out, report)
     return report
 

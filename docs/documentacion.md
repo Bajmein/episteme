@@ -85,7 +85,7 @@ Se calcula al vuelo y no se guarda en el frontmatter: la primera revisión solo 
 | Comando | Qué hace |
 | --- | --- |
 | `docs_check.py context7 <id>…` | Pregunta a la API pública de Context7 la `lastUpdateDate` de cada ID. Si existe `CONTEXT7_API_KEY`, la manda como `Authorization: Bearer` |
-| `docs_check.py diff --pages <tsv> --out <dir> [--upstream <url>…] [--include <prefijo>…]` | Baja cada `source` del TSV (8 a la vez, 30 s de espera, 2 reintentos) y guarda cada página en `<dir>/<sha1 de la url>.md`. Lee los `llms.txt` de `--upstream` y busca las URL bajo `--include` que la suite no tiene. Devuelve `changed`, `unchanged`, `gone` (404 o 410), `new` (con `suggested_path`) y `errors` (5xx, tiempo agotado y demás) |
+| `docs_check.py diff --pages <tsv> --out <dir> [--upstream <url>…] [--include <prefijo>…]` | Baja cada `source` del TSV (8 a la vez, 30 s de espera, 2 reintentos) y guarda cada página en `<dir>/<sha1 de la url>.md`. Lee los `llms.txt` de `--upstream` y busca las URL bajo `--include` que la suite no tiene. Si el `llms.txt` lista páginas sin `.md`, el script prueba `<url>.md` y, si responde Markdown, usa esa (y la reconoce como ya presente en la corrida siguiente). Devuelve `changed`, `unchanged`, `gone` (404 o 410), `new` (con `suggested_path`) y `errors` (5xx, tiempo agotado y demás) |
 
 El flujo tiene tres fases:
 
