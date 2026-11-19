@@ -121,7 +121,7 @@ Un tipo que no está en la tabla suma 1. El documento está vencido con 7 días 
 
 ### agy (opcional)
 
-El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravity-plugin/plugin.json`, las skills de `plugin/skills/` y la regla `plugin/rules/AGENTS.md` (`trigger: always_on`), que le da lo esencial de las instrucciones del servidor, porque en agy no llegan al modelo. El plugin de agy es global; la regla se ignora en los workspaces sin episteme. `setup`, `scaffold`, `docs` y `agy` cargan en agy, pero no hacen nada útil ahí.
+El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravity-plugin/plugin.json`, las skills de `plugin/skills/` y la regla `plugin/rules/AGENTS.md` (`trigger: always_on`), que le da lo esencial de las instrucciones del servidor, porque en agy no llegan al modelo. El plugin de agy es global; la regla se ignora en los workspaces sin episteme. `setup`, `scaffold`, `docs` y `agy` cargan en agy, pero no hacen nada útil ahí. `agy plugin validate` informa 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy), y el resto carga.
 
 `/episteme:agy`, sin argumentos y desde Claude Code, activa agy en el proyecto ya conectado con `/episteme:setup`:
 

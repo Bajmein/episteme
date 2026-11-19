@@ -17,7 +17,7 @@ Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, b
 1. **Precondiciones.**
    - `agy --version` responde. Si no, indica el instalador (`curl -fsSL https://antigravity.google/cli/install.sh | bash`) y detente: no lo instales sin permiso.
    - El proyecto ya está conectado con `/episteme:setup`: `claude mcp get episteme` muestra el registro. Si no, pide correr `/episteme:setup` primero y detente. Anota su `command` y sus `args` tal cual (p. ej. `uvx --from git+https://github.com/Bajmein/episteme@<tag> episteme --project <p>`, o `git+ssh://…` si el registro usa SSH). No los inventes ni cambies el tag.
-2. **Plugin de agy** (es global). `agy plugin list`: si sale `episteme`, sigue. Si no, propón `agy plugin install ${CLAUDE_SKILL_DIR}/../..` (la copia del plugin que tiene Claude Code, de la misma versión) o `agy plugin install https://github.com/Bajmein/episteme`, e instálalo solo si la persona lo aprueba.
+2. **Plugin de agy** (es global). `agy plugin list`: si sale `episteme`, sigue. Si no, propón `agy plugin install ${CLAUDE_SKILL_DIR}/../..` (la copia del plugin que tiene Claude Code, de la misma versión) o `agy plugin install https://github.com/Bajmein/episteme`, e instálalo solo si la persona lo aprueba. `agy plugin validate` da 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy) y el resto carga. Si `agy plugin install` falla por ese error, dilo y detente, sin intentar arreglarlo.
 3. **MCP del proyecto.** `agy mcp add` solo escribe en global, así que escribe a mano `<ws>/.agents/mcp_config.json`. Si existe, léelo y fusiona: conserva los demás servidores y reemplaza solo `episteme`.
 
    ```json
