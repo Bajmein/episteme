@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.15.0] - 2026-11-18
+
 ### Añadido
 
 - Tool `plan` y zona `planes/`: una copia de cada plan de plan mode en `planes/<proyecto>/<slug>.md`, una nota por slug (el nombre del archivo del plan) que se sobrescribe. `save` redacta las credenciales y corta a 200 000 caracteres; `show` lista los planes activos o devuelve uno; `archive` lo archiva sin borrarlo; `restore` apunta a la copia tras «clear context». La zona se añade sola si `episteme.toml` no la declara; solo la escribe `plan` (`revise` y `remember` responden `read_only_zone`), `search` la encuentra (sin las archivadas) y no sale en la bienvenida ni en las notas relacionadas de `context`. Los planes de Claude Code no se leen ni se tocan. Ver `docs/planes.md`.
@@ -320,7 +322,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.14.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/Bajmein/episteme/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Bajmein/episteme/compare/v0.13.2...v0.14.0
 [0.13.2]: https://github.com/Bajmein/episteme/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/Bajmein/episteme/compare/v0.13.0...v0.13.1
