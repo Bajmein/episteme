@@ -7,7 +7,6 @@ dist/
 build/
 *.egg-info/
 .index/
-notas/
 /CLAUDE.local.md
 .claude/settings.local.json
 .serena/
