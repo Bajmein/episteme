@@ -84,7 +84,8 @@ def _register_plan(server: MCPServer, engine: Engine) -> None:
         hook_event="PreToolUse" (the ExitPlanMode hook) it always returns "", errors included.
         show: without slug, {"plans": [...]} active plans of the project, newest first; with
         slug, that plan with its "content".
-        archive: set status archived on slug; never deletes. Returns {"path", "changed"}.
+        archive: set status archived on slug, even when a session state links it; never
+        deletes. Returns {"path", "changed"}.
         Plans more than [plans] archive_days (7) days after their saved_at are archived by the
         maintenance of the first welcome, except the one an active session state links.
         restore (SessionStart hook): only with source="clear", a short pointer to the plan of

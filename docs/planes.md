@@ -54,7 +54,7 @@ episteme guarda una **copia de cada plan** de plan mode de Claude Code. El agent
 | --- | --- |
 | `save` | Escribe la copia de `plan` con el slug de `plan_path` y la fija como plan vigente. Devuelve `path`, `saved`, `slug`, `title` y `created`. Con `hook_event="PreToolUse"`, respuesta vacía |
 | `show` | Sin `slug`, los planes activos del proyecto (`path`, `slug`, `title`, `saved_at`, `worktree`), el más reciente primero. Con `slug`, ese plan con `status` y `content` |
-| `archive` | Pone `status: archived` en el plan `slug`. No borra nada |
+| `archive` | Pone `status: archived` en el plan `slug`, aunque lo enlace un estado de sesión activo (el archivado manual es explícito; la protección del enlace es solo de la rotación automática). No borra nada |
 | `restore` | Hook `SessionStart`: la línea de arriba, solo con `source="clear"` |
 
 ## Enlace con el estado de la sesión
@@ -64,7 +64,8 @@ episteme guarda una **copia de cada plan** de plan mode de Claude Code. El agent
 ## Rotación
 
 - Un plan activo cuyo `saved_at` tiene más de `[plans] archive_days` días (7 por defecto) se archiva en su sitio. No se borra.
-- No se archiva el plan que enlaza un estado de sesión activo del mismo proyecto: tiene trabajo pendiente. Cuando ese estado rota, el plan rota en una pasada siguiente.
+- No se archiva el plan que enlaza un estado de sesión activo del mismo proyecto: tiene trabajo pendiente. La rotación de los estados corre antes que la de los planes en la misma pasada, así que si un estado viejo y su plan viejo vencen a la vez, los dos se archivan juntos.
+- La protección del enlace vale solo para la rotación automática: `plan(action="archive")` archiva el plan aunque lo enlace un estado activo.
 - Lo hace la mantención de la primera bienvenida de cada sesión, como mucho una vez por periodo de `[maintenance] every_days`, y lo dice en la bienvenida (`episteme · mantención: N planes archivados …`).
 - Solo toca las copias de `planes/`: los planes de Claude Code siguen donde estaban.
 
@@ -80,4 +81,4 @@ La tabla es opcional y rechaza claves desconocidas.
 ## Límites
 
 - Varios planes en una misma sesión no se han comprobado con Claude Code: cada slug es su propia nota y el vigente es el último guardado.
-- Que el `additionalContext` de `SessionStart(clear)` llegue al modelo no se ha comprobado aún con Claude Code; si no llega, la copia sigue en `planes/` y `search` la encuentra.
+- Comprobado en vivo el 18-11-2026 (Claude Code 2.1.327, opción «Yes, clear context»): el modelo recibe la línea «Plan de esta tarea en episteme: …» como contexto del hook `SessionStart`. Si una versión futura dejara de entregarlo, la copia sigue en `planes/` y `search` la encuentra.
