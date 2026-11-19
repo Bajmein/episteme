@@ -12,10 +12,10 @@ Por HTTPS, que no pide credenciales:
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+https://github.com/Bajmein/episteme@v0.14.0 episteme --project fabrik
+  uvx --from git+https://github.com/Bajmein/episteme@v0.15.0 episteme --project fabrik
 ```
 
-Quien ya use SSH con GitHub puede usar `git+ssh://git@github.com/Bajmein/episteme@v0.14.0` en su lugar. Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
+Quien ya use SSH con GitHub puede usar `git+ssh://git@github.com/Bajmein/episteme@v0.15.0` en su lugar. Sin `--vault` usa el vault global `~/.episteme` y lo crea, con un `episteme.toml` mínimo (zona `memory`), si no existe.
 
 Actualizar es cambiar el tag (`claude mcp remove --scope local episteme` y otra vez el `add`). Para desarrollo, una entrada aparte que no fija versión:
 
@@ -37,7 +37,7 @@ winget install --id=astral-sh.uv -e
 Se instala por HTTPS, sin iniciar sesión en GitHub:
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.14.0 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.15.0 episteme --project <proyecto>
 ```
 
 En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por defecto es `%USERPROFILE%\.episteme`; `--vault` acepta una ruta absoluta de Windows (`C:\Users\ana\notas`). El bloque de hooks es el mismo. Dentro de WSL, sigue la instalación de Linux.
