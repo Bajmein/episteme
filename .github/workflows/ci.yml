@@ -31,7 +31,40 @@ jobs:
       - run: uv run deptry .
       - run: uv run zizmor .github/workflows
 
+  # Decide si un PR necesita tests: solo Markdown, docs/ o static/ (fuera de src/, tests/,
+  # plugin/ y plugin-docs/) no los necesita. En main corren siempre.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          code=false
+          files=$(gh pr diff "$PR" --repo "$REPO" --name-only)
+          [ -n "$files" ] || code=true
+          while IFS= read -r f; do
+            case "$f" in
+              src/*|tests/*|plugin/*|plugin-docs/*) code=true ;;
+              *.md|docs/*|static/*|LICENSE) ;;
+              *) code=true ;;
+            esac
+          done <<< "$files"
+          echo "Cambia código o config: $code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   test:
+    # Un job saltado cuenta como aprobado en el check obligatorio. Si changes falla, corre igual.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -48,7 +81,7 @@ jobs:
         with:
           cache-python: true   # la caché de uv ya viene activa en runners de GitHub
       - run: uv sync --locked
-      - run: uv run pytest --cov --cov-report=xml
+      - run: uv run pytest -n auto --cov --cov-report=xml   # -n: un proceso por núcleo (pytest-xdist)
       - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           use_oidc: true

@@ -46,7 +46,10 @@ jobs:
         with:
           cache-python: true   # la caché de uv ya viene activa en runners de GitHub
       - run: uv sync --locked
-      - run: uv run pytest --cov --cov-report=xml
+      # Defender escanea cada archivo temporal que crean los tests; en el runner efímero sobra.
+      - run: Set-MpPreference -DisableRealtimeMonitoring $true
+        continue-on-error: true
+      - run: uv run pytest -n auto --cov --cov-report=xml   # -n: un proceso por núcleo (pytest-xdist)
       - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           use_oidc: true
