@@ -97,8 +97,7 @@ def _register_docs(server: MCPServer, engine: Engine) -> None:
         body: Annotated[
             str | None,
             Field(
-                description="write: page text as downloaded, without frontmatter. "
-                "Omit to keep it."
+                description="write: page text as downloaded, without frontmatter. Omit to keep it."
             ),
         ] = None,
         body_ref: Annotated[
