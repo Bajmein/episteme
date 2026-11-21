@@ -328,11 +328,6 @@ def _is_markdown(result: Fetched) -> bool:
     return result.text is not None and _not_markdown_reason(result) is None
 
 
-def _is_html(result: Fetched) -> bool:
-    """A fetch that has text but looks like an HTML document."""
-    return result.text is not None and not _is_markdown(result)
-
-
 def expand_template(template: str, url: str) -> str:
     """``template`` with ``{path}`` (the URL path) and ``{page}`` (it without the leading ``/``
     and the ``.html``/``.htm``/``.md`` extension, ``index`` for a final ``/``), both quoted."""
