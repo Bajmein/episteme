@@ -5,10 +5,13 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from importlib import metadata
 from pathlib import Path
 
 import pytest
 from conftest import mcp_client
+
+import episteme
 
 
 def _start(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -70,3 +73,16 @@ async def test_starts_with_valid_vault(vault: Path) -> None:
     async with mcp_client(vault) as client:
         info = await client.session.list_tools()
         assert isinstance(info.tools, list)
+
+
+def test_package_version_comes_from_the_installed_metadata() -> None:
+    assert episteme.__version__ == metadata.version("episteme")
+
+
+@pytest.mark.anyio
+async def test_server_reports_the_package_version_on_initialize(vault: Path) -> None:
+    async with mcp_client(vault) as client:
+        server_info = client.session.server_info
+
+    assert server_info is not None
+    assert server_info.version == metadata.version("episteme")

@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
 from pydantic import ValidationError
 
-from episteme import maintenance, prompting
+from episteme import __version__, maintenance, prompting
 from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError
@@ -188,7 +188,7 @@ def build_server(vault: Path, project: str | None = None) -> MCPServer:
     engine = Engine(vault, project)
     has_docs = bool(engine.vault.docs_zones)
     instructions = INSTRUCTIONS + DOCS_INSTRUCTIONS if has_docs else INSTRUCTIONS
-    server = EpistemeServer("episteme", instructions=instructions)
+    server = EpistemeServer("episteme", instructions=instructions, version=__version__)
     server.activity = Activity(engine.vault.root)
     store = maintenance.Store(engine.vault.root)
     reading.register(server, engine)
