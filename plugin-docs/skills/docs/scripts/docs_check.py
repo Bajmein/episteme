@@ -1,4 +1,4 @@
-"""Check docs suites against their sources for /episteme:docs. Standard library only.
+"""Check docs suites against their sources for /episteme-docs:docs. Standard library only.
 
     docs_check.py context7 <id>...
         JSON {id: lastUpdateDate | null} from Context7's public search API.
@@ -476,7 +476,7 @@ def diff(
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Check docs suites for /episteme:docs.")
+    parser = argparse.ArgumentParser(description="Check docs suites for /episteme-docs:docs.")
     sub = parser.add_subparsers(dest="command", required=True)
     c7 = sub.add_parser("context7", help="lastUpdateDate of Context7 libraries")
     c7.add_argument("ids", nargs="+")

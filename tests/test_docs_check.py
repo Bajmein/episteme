@@ -1,4 +1,4 @@
-"""plugin/skills/docs/scripts/docs_check.py against a local HTTP server (no real network)."""
+"""plugin-docs/skills/docs/scripts/docs_check.py against a local HTTP server (no real network)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from types import ModuleType
 
 import pytest
 
-SCRIPT = Path(__file__).parents[1] / "plugin/skills/docs/scripts/docs_check.py"
+SCRIPT = Path(__file__).parents[1] / "plugin-docs/skills/docs/scripts/docs_check.py"
 PAGES = {
     "/docs/same.md": (200, "# Same\n\nText.\n"),
     "/docs/changed.md": (200, "# Changed\n\nNew text.\n"),

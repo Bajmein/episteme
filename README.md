@@ -47,7 +47,7 @@ Claude Code es como un colega brillante que cada mañana llega sin recordar nada
 | **Avisa a tiempo** | Antes de editar un archivo, muestra las normas que le aplican; después, lo que ya se sabe de él |
 | **Retoma** | Lleva una nota viva de en qué vas, la pone al día sola después de compactar o de `/clear` y la recupera al seguir |
 | **Guarda tus planes** | Copia cada plan que apruebas en plan mode y, si limpias el contexto al aprobarlo, le dice a Claude dónde está |
-| **Mantiene la documentación al día** | Con `/episteme:docs`, baja las páginas de la documentación de terceros guardada en el vault y actualiza solo las que cambiaron |
+| **Mantiene la documentación al día** | Con `/episteme-docs:docs`, baja las páginas de la documentación de terceros guardada en el vault y actualiza solo las que cambiaron |
 | **Cuida el orden** | Detecta duplicados, memorias vencidas, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
 
 Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
@@ -107,7 +107,7 @@ El plugin trae además estas skills:
 | `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido. Con `corta` hace una ronda rápida de 3 casos; con `huerfanas`, enlaza las memorias que quedaron sueltas |
 | `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
 | `/episteme:scaffold` | Crear o revisar la base del proyecto: `README.md`, `CLAUDE.md`, `CHANGELOG.md`, las reglas para contribuir y el `.gitignore`. Con `auditar` solo revisa, sin cambiar nada. También avisa cuando el README o el `CLAUDE.md` llevan tiempo sin revisar |
-| `/episteme:docs [suite]` | Poner al día la documentación de terceros guardada en `docs/` del vault (todas las suites, o solo la que nombres, como `claude code`): baja las páginas, muestra qué cambió y lo guarda |
+| `/episteme-docs:docs [suite]` | Poner al día la documentación de terceros guardada en `docs/` del vault (todas las suites, o solo la que nombres, como `claude code`): baja las páginas, muestra qué cambió y lo guarda. Viene en un plugin aparte, opcional: `claude plugin install episteme-docs@episteme` |
 | `/episteme:agy [tarea]` | Activar agy (Google Antigravity CLI) en el proyecto y pasarle tareas. Claude revisa lo que agy propone recordar |
 
 El plugin también funciona con agy, sin los automatismos: ni hooks ni bienvenida automática (ver «agy (opcional)» en [Instalación](docs/instalacion.md)).
@@ -194,7 +194,7 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `session` | Guardar y retomar el estado de la sesión (objetivo, lo hecho, el siguiente paso), con una plantilla | ● |
 | `plan` | Guardar una copia de cada plan de plan mode y señalarla tras «clear context» (la usan los hooks) | ● |
 | `docs_status` | Ver las suites de documentación y qué páginas tienen | |
-| `docs_write` | Guardar una página de documentación descargada (lo usa `/episteme:docs`) | ● |
+| `docs_write` | Guardar una página de documentación descargada (lo usa `/episteme-docs:docs`) | ● |
 
 Los parámetros y el comportamiento exacto de cada una están en [Tools y memorias](docs/tools.md).
 
@@ -231,7 +231,7 @@ El detalle técnico vive en [`docs/`](docs/):
 | [Tools y memorias](docs/tools.md) | Las 14 herramientas con sus parámetros, el esquema de las memorias y los errores |
 | [Estado de la sesión](docs/sesion.md) | La nota viva de cada hilo de trabajo en `sesiones/`, su plantilla y cuándo se archiva |
 | [Planes](docs/planes.md) | La copia de cada plan de plan mode en `planes/`, cómo se recupera tras «clear context» y cuándo se archiva |
-| [Suites de documentación](docs/documentacion.md) | La documentación de terceros en `docs/` del vault y cómo se mantiene al día con `/episteme:docs` |
+| [Suites de documentación](docs/documentacion.md) | La documentación de terceros en `docs/` del vault y cómo se mantiene al día con `/episteme-docs:docs` |
 | [Hooks](docs/hooks.md) | El bloque para `settings.json`, los permisos recomendados y cómo comprobar que funcionan |
 | [Mantención](docs/mantencion.md) | Avisos, archivado de memorias vencidas, backup y el ciclo de revisión |
 | [Migración de OMEGA](docs/migracion-omega.md) | Cómo traer las memorias de OMEGA |

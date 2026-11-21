@@ -18,7 +18,7 @@ def _lines(text: str) -> str:
 def body_hash(body: str) -> str:
     """The first 16 hex digits of the SHA-256 of ``body`` with normalised line ends.
 
-    ``docs_check.py`` (plugin/skills/docs/scripts) carries a copy: change both at once.
+    ``docs_check.py`` (plugin-docs/skills/docs/scripts) carries a copy: change both at once.
     """
     text = _lines(body).strip() + "\n"
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:HASH_LEN]

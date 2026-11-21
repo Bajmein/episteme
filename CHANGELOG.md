@@ -7,13 +7,15 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Añadido
 
 - `docs_write` acepta `body_ref`: el cuerpo de la página por su hash, desde la bandeja `.index/docs-inbox/<suite>/<hash>.md` del vault, en vez de `body`. Comprueba el hash, respeta el tope de 2 MiB y borra el archivo tras escribir. `docs_status` devuelve `inbox`, la ruta de la bandeja de cada suite.
-- Claves opcionales del manifiesto de una suite: `suite.markdown`, una plantilla de URL con `{path}` o `{page}` desde la que `docs_check.py diff --markdown` baja cada página en Markdown (la `source` sigue siendo la pública), y `suite.manual: true`, para una suite que se mantiene a mano y `/episteme:docs` salta. `docs_status` devuelve las dos (#32).
+- Claves opcionales del manifiesto de una suite: `suite.markdown`, una plantilla de URL con `{path}` o `{page}` desde la que `docs_check.py diff --markdown` baja cada página en Markdown (la `source` sigue siendo la pública), y `suite.manual: true`, para una suite que se mantiene a mano y `/episteme-docs:docs` salta. `docs_status` devuelve las dos (#32).
 - Notas propias de una suite con `origin: local` en vez de `source`: son válidas, quedan fuera de la comparación con el origen y `docs_status` las cuenta en `local`.
 
 ### Cambiado
 
-- `docs_check.py diff` usa `--inbox <dir>` en vez de `--out`, guarda cada página como `<hash>.md` y devuelve `hash` (y `title` en las nuevas). `/episteme:docs` ya no pasa cuerpos de página por el modelo: sincroniza suites grandes (uv, mise, render) sin copiar cientos de KB en las llamadas.
-- Las entradas `new` de `docs_check.py diff` traen `excerpt`, el primer párrafo de la página: `/episteme:docs` saca de él el `type` y el `summary` sin leer el archivo de la bandeja.
+- `docs_status` y `docs_write` solo existen si `episteme.toml` declara al menos una zona `mode = "docs"` (cambiar las zonas pide reiniciar el servidor); sin ella, las instrucciones del servidor tampoco nombran la skill de documentación.
+- La skill de documentación pasa al plugin aparte `episteme-docs` (`plugin-docs/`, depende de `episteme`): ahora es `/episteme-docs:docs` y se instala con `claude plugin install episteme-docs@episteme`. Ya no carga en agy.
+- `docs_check.py diff` usa `--inbox <dir>` en vez de `--out`, guarda cada página como `<hash>.md` y devuelve `hash` (y `title` en las nuevas). `/episteme-docs:docs` ya no pasa cuerpos de página por el modelo: sincroniza suites grandes (uv, mise, render) sin copiar cientos de KB en las llamadas.
+- Las entradas `new` de `docs_check.py diff` traen `excerpt`, el primer párrafo de la página: `/episteme-docs:docs` saca de él el `type` y el `summary` sin leer el archivo de la bandeja.
 
 ### Eliminado
 

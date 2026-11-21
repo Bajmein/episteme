@@ -48,16 +48,17 @@ En una sola línea: el `\` de bash no parte líneas en PowerShell. El vault por 
 2. Copia el bloque de [Hooks](hooks.md) y los permisos recomendados en `.claude/settings.local.json` del proyecto, o en `.claude/settings.json` si todo el equipo tiene episteme registrado (con el servidor en scope local, a quien no lo tenga le fallarían los hooks). En modo auto, Claude Code no deja que el agente edite estos archivos: lo hace la persona.
 3. Añade al `CLAUDE.md` del proyecto: «Vault `episteme`: solo los tools de episteme; ni CLI, ni Bash, ni Read/Edit/Write sobre el vault. Si los tools `mcp__episteme__*` salen como diferidos, cárgalos con ToolSearch (`select:mcp__episteme__context,mcp__episteme__search,mcp__episteme__read,mcp__episteme__remember,mcp__episteme__revise`) antes de usarlos; si no aparecen ni diferidos, dilo antes de seguir.»
 
-## El plugin
+## Los plugins
 
-El repo es también un marketplace de Claude Code con un plugin, `episteme`, que trae las skills (en [`plugin/skills/`](../plugin/skills/)) y el agente `episteme:extractor` (en [`plugin/agents/`](../plugin/agents/extractor.md)), que pone al día el estado de la sesión tras `/compact` o `/clear` cuando un hook lo pide, y un hook `SessionStart` (en [`plugin/hooks/`](../plugin/hooks/hooks.json)) que despierta al modelo para que lo lance sin esperar al siguiente mensaje (ver [Estado de la sesión](sesion.md)). El servidor no va en el plugin: se sigue registrando en cada proyecto con `claude mcp add` y fijado a un tag.
+El repo es también un marketplace de Claude Code con dos plugins. `episteme` que trae las skills (en [`plugin/skills/`](../plugin/skills/)) y el agente `episteme:extractor` (en [`plugin/agents/`](../plugin/agents/extractor.md)), que pone al día el estado de la sesión tras `/compact` o `/clear` cuando un hook lo pide, y un hook `SessionStart` (en [`plugin/hooks/`](../plugin/hooks/hooks.json)) que despierta al modelo para que lo lance sin esperar al siguiente mensaje (ver [Estado de la sesión](sesion.md)). El servidor no va en el plugin: se sigue registrando en cada proyecto con `claude mcp add` y fijado a un tag. `episteme-docs` (en [`plugin-docs/`](../plugin-docs/)) trae solo la skill `/episteme-docs:docs` y es opcional: sirve si el vault tiene suites de documentación (zonas `mode = "docs"`); depende de `episteme`, que se instala con él.
 
 ```bash
 claude plugin marketplace add Bajmein/episteme
 claude plugin install episteme@episteme
+claude plugin install episteme-docs@episteme   # opcional
 ```
 
-Los mismos dos comandos sirven en PowerShell. Después, reinicia Claude Code.
+Los mismos comandos sirven en PowerShell. Después, reinicia Claude Code.
 
 - **Por máquina y por cuenta.** Los plugins viven en el directorio de configuración de Claude Code. Si usas varias cuentas (`CLAUDE_CONFIG_DIR` o lanzadores que lo cambian), repite la instalación con cada una.
 - **Sin credenciales.** El repo es público, así que el marketplace se clona sin iniciar sesión. El atajo `Bajmein/episteme` puede clonar por SSH: si no tienes clave SSH, usa `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` o la URL completa (`claude plugin marketplace add https://github.com/Bajmein/episteme`). En Windows hace falta Git for Windows en el `PATH`.
@@ -72,7 +73,7 @@ Los mismos dos comandos sirven en PowerShell. Después, reinicia Claude Code.
 | [`/episteme:mantencion`](../plugin/skills/mantencion/SKILL.md) | Claude, cuando la bienvenida avisa de mantención pendiente o se le pide ordenar las memorias; o la persona | Recorre lo que informa `review`, propone grupo por grupo qué unificar, reemplazar o archivar, y aplica solo lo aprobado |
 | [`/episteme:reminder <texto>`](../plugin/skills/reminder/SKILL.md) | La persona | Guarda un recordatorio de prioridad 5 del proyecto: `reminder` si el texto trae fecha, `preference` si no |
 | [`/episteme:scaffold`](../plugin/skills/scaffold/SKILL.md) | La persona; o Claude, cuando el hook `doc-review` avisa | Crea o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/`, `.claude/rules/docs.md` y `.gitignore` desde plantillas, y ofrece módulos locales de desarrollo. No hace commits |
-| [`/episteme:docs [suite]`](../plugin/skills/docs/SKILL.md) | La persona, o Claude cuando se le pide poner al día la documentación | Revisa las suites de documentación de `docs/` del vault contra su fuente y escribe lo que cambió con `docs_write` (ver [Suites de documentación](documentacion.md)) |
+| [`/episteme-docs:docs [suite]`](../plugin-docs/skills/docs/SKILL.md) | La persona, o Claude cuando se le pide poner al día la documentación | Revisa las suites de documentación de `docs/` del vault contra su fuente y escribe lo que cambió con `docs_write` (ver [Suites de documentación](documentacion.md)) |
 | [`/episteme:agy [tarea]`](../plugin/skills/agy/SKILL.md) | La persona, o Claude cuando se le pide «pásale esto a agy» | Activa agy con episteme en el proyecto o le delega una tarea en modo headless (ver «agy (opcional)») |
 
 El plugin sigue a la versión del release y el servidor al tag fijado en cada proyecto: si actualizas uno, actualiza el otro (ver «Actualizar episteme» en `/episteme:setup`).
@@ -121,7 +122,7 @@ Un tipo que no está en la tabla suma 1. El documento está vencido con 7 días 
 
 ### agy (opcional)
 
-El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravity-plugin/plugin.json`, las skills de `plugin/skills/` y la regla `plugin/rules/AGENTS.md` (`trigger: always_on`), que le da lo esencial de las instrucciones del servidor, porque en agy no llegan al modelo. El plugin de agy es global; la regla se ignora en los workspaces sin episteme. `setup`, `scaffold`, `docs` y `agy` cargan en agy, pero no hacen nada útil ahí. `agy plugin validate` informa 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy), y el resto carga.
+El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravity-plugin/plugin.json`, las skills de `plugin/skills/` y la regla `plugin/rules/AGENTS.md` (`trigger: always_on`), que le da lo esencial de las instrucciones del servidor, porque en agy no llegan al modelo. El plugin de agy es global; la regla se ignora en los workspaces sin episteme. La skill de documentación está en el plugin `episteme-docs`, que no tiene manifiesto de agy: no carga en agy. `setup`, `scaffold` y `agy` cargan en agy, pero no hacen nada útil ahí. `agy plugin validate` informa 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy), y el resto carga.
 
 `/episteme:agy`, sin argumentos y desde Claude Code, activa agy en el proyecto ya conectado con `/episteme:setup`:
 
