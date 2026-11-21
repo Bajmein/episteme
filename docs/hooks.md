@@ -22,8 +22,8 @@ Bloque para el `settings.json` del proyecto:
     ],
     "PreToolUse": [
       { "matcher": "Edit|Write|mcp__serena__replace_.*|mcp__serena__insert_.*|mcp__serena__delete_lines|mcp__serena__rename_symbol|mcp__serena__safe_delete_symbol",
-        "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "constraints",
-                    "input": { "file": "${tool_input.file_path}",
+        "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "context",
+                    "input": { "mode": "constraints", "file": "${tool_input.file_path}",
                                "relative_path": "${tool_input.relative_path}",
                                "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}" } }] },
@@ -36,8 +36,8 @@ Bloque para el `settings.json` del proyecto:
     ],
     "PostToolUse": [
       { "matcher": "Read|Edit|Write|mcp__serena__.*",
-        "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "surface",
-                    "input": { "file": "${tool_input.file_path}",
+        "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "context",
+                    "input": { "mode": "surface", "file": "${tool_input.file_path}",
                                "relative_path": "${tool_input.relative_path}",
                                "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}",
@@ -102,7 +102,7 @@ Límites: el rastro «De esta sesión» vive en el proceso del servidor, así qu
 
 Si el servidor va empaquetado en un plugin, `server` pasa a ser el nombre con scope (`plugin:fabrik:episteme`).
 
-Permisos recomendados: `allow` para los tools de consulta (`mcp__episteme__search`, `read`, `links`, `review`, `context`, `surface`, `constraints` y `docs_status`; `context` no es de solo lectura solo porque su primera bienvenida puede correr la mantención), para `session` y `plan` (los usan los hooks) y para el script del extractor (`Bash(uv run --no-project --python 3.14 python -I <ruta absoluta del script> *)`, que `/episteme:setup` escribe con la ruta de la versión instalada del plugin y hay que renovar al actualizarlo), porque el extractor corre en segundo plano y no puede pedir permiso, y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El `deny` de `Read`/`Edit` es una barrera contra el uso accidental, no un aislamiento: no cubre Bash. La mantención de `context` (archivar las memorias vencidas y el backup) solo corre si está activada en el `episteme.toml` del vault. El [`settings.json`](../plugin/skills/setup/settings.json) de la skill `setup` del plugin trae los hooks y los permisos juntos, listos para fusionar. Tras actualizar la skill, pídele la comprobación de configuración: lista lo que falta o está repetido en los tres `settings` sin tocar nada hasta que apruebes el diff.
+Permisos recomendados: `allow` para los tools de consulta (`mcp__episteme__search`, `read`, `links`, `review`, `context` y `docs_status`; `context` no es de solo lectura solo porque su primera bienvenida puede correr la mantención), para `session` y `plan` (los usan los hooks) y para el script del extractor (`Bash(uv run --no-project --python 3.14 python -I <ruta absoluta del script> *)`, que `/episteme:setup` escribe con la ruta de la versión instalada del plugin y hay que renovar al actualizarlo), porque el extractor corre en segundo plano y no puede pedir permiso, y `deny` de `Read` y `Edit` sobre la ruta del vault (`Read(~/.episteme/**)`, `Edit(~/.episteme/**)`; `Edit` ya cubre Write), para que el agente solo use los tools. El `deny` de `Read`/`Edit` es una barrera contra el uso accidental, no un aislamiento: no cubre Bash. La mantención de `context` (archivar las memorias vencidas y el backup) solo corre si está activada en el `episteme.toml` del vault. El [`settings.json`](../plugin/skills/setup/settings.json) de la skill `setup` del plugin trae los hooks y los permisos juntos, listos para fusionar. Tras actualizar la skill, pídele la comprobación de configuración: lista lo que falta o está repetido en los tres `settings` sin tocar nada hasta que apruebes el diff.
 
 ## Comprobar que los hooks llegan al modelo
 

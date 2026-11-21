@@ -18,8 +18,6 @@ TOOLS = {
     "revise",
     "review",
     "context",
-    "surface",
-    "constraints",
     "docs_status",
     "docs_write",
     "session",

@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Cambiado
+
+- Los tools `surface` y `constraints` pasan a `context` como modos: `context(mode="surface", file|relative_path, limit, session)` y `context(mode="constraints", file|relative_path)`, con la misma salida y el mismo modo hook. Sin `file` ni `relative_path`, error `invalid_argument`. Rotura sin alias: vuelve a correr `/episteme:setup` para que los hooks `PreToolUse` y `PostToolUse` llamen a `context` y se quiten `mcp__episteme__surface` y `mcp__episteme__constraints` del `allow`. `scripts/measure_uptake.py` cuenta las entregas nuevas (`context` con `mode=surface|constraints`) y las filas antiguas del registro de actividad.
+
 ## [0.19.0] - 2026-11-21
 
 ### Quitado

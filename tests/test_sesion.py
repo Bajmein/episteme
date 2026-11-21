@@ -77,16 +77,17 @@ async def test_surface_not_repeated_across_files(vault: Path) -> None:
         )
         await c.ok("remember", type="lesson", title="Nota solo otra", body="y" * 50, files=[OTHER])
         a = {"hook_event": "PostToolUse", "session": "sf"}
-        first = hook_text(await c.ok("surface", file=GUARD, **a))
+        first = hook_text(await c.ok("context", mode="surface", file=GUARD, **a))
         assert "Nota compartida" in first
-        second = hook_text(await c.ok("surface", file=OTHER, **a))
+        second = hook_text(await c.ok("context", mode="surface", file=OTHER, **a))
         assert "Nota compartida" not in second
         assert "Nota solo otra" in second
         assert "(+1 ya mostradas)" in second
         # same file again: nothing new
-        assert hook_text(await c.ok("surface", file=OTHER, **a)) == ""
+        assert hook_text(await c.ok("context", mode="surface", file=OTHER, **a)) == ""
         # another session sees everything
-        other = hook_text(await c.ok("surface", file=OTHER, hook_event="PostToolUse", session="s2"))
+        b = {"hook_event": "PostToolUse", "session": "s2"}
+        other = hook_text(await c.ok("context", mode="surface", file=OTHER, **b))
         assert "Nota compartida" in other and "ya mostradas" not in other
 
 
@@ -96,8 +97,8 @@ async def test_surface_limit_counts_only_unshown_memories(vault: Path) -> None:
         await c.ok("remember", type="lesson", title="Segunda nota", body="s" * 50, files=[OTHER])
         a = {"hook_event": "PostToolUse", "session": "lim", "limit": 1}
 
-        first = hook_text(await c.ok("surface", file=OTHER, **a))
-        second = hook_text(await c.ok("surface", file=OTHER, **a))
+        first = hook_text(await c.ok("context", mode="surface", file=OTHER, **a))
+        second = hook_text(await c.ok("context", mode="surface", file=OTHER, **a))
 
         titles = {"Primera nota", "Segunda nota"}
         got_first = {t for t in titles if t in first}
@@ -105,7 +106,7 @@ async def test_surface_limit_counts_only_unshown_memories(vault: Path) -> None:
         assert len(got_first) == 1 and len(got_second) == 1
         assert got_first | got_second == titles
         assert "(+1 ya mostradas)" in second
-        assert hook_text(await c.ok("surface", file=OTHER, **a)) == ""
+        assert hook_text(await c.ok("context", mode="surface", file=OTHER, **a)) == ""
 
 
 async def test_recall_skips_what_welcome_delivered(vault: Path) -> None:

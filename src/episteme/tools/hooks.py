@@ -1,4 +1,4 @@
-"""Hook-facing tools: context, surface and constraints."""
+"""Hook-facing tool: context (welcome, task, surface and constraints modes)."""
 
 from __future__ import annotations
 
@@ -13,19 +13,26 @@ from episteme import session as sessions
 from episteme.engine import Engine
 from episteme.errors import invalid
 from episteme.tools.args import (
-    READ_ONLY,
     FileArg,
     HookEvent,
     ProjectArg,
-    ProjectDir,
     RelativePathArg,
     dump,
 )
 
-_ModeArg = Annotated[str, Field(description='"welcome" (session start) or "task" (needs task).')]
+_ModeArg = Annotated[
+    str,
+    Field(
+        description='"welcome" (session start), "task" (needs task), "surface" or '
+        '"constraints" (both need file or relative_path).'
+    ),
+]
 _WelcomeSessionArg = Annotated[
     str | None,
-    Field(description="welcome: session id; the welcome is sent once per session."),
+    Field(
+        description="welcome: session id; the welcome is sent once per session. surface:"
+        " a memory already delivered in this session is not repeated."
+    ),
 ]
 _TaskArg = Annotated[
     str | None, Field(description="task: what you are about to do, in a few words.")
@@ -47,30 +54,22 @@ _SourceArg = Annotated[
 _WelcomeDirArg = Annotated[
     str | None,
     Field(
-        description="welcome: absolute project directory (hooks pass ${cwd}); picks the "
-        "worktree whose session state a new session is told about."
+        description="Absolute project directory (hooks pass ${cwd}): welcome picks the "
+        "worktree whose session state a new session is told about; surface and "
+        "constraints resolve a relative file against it."
     ),
 ]
 _TranscriptArg = Annotated[
     str | None,
     Field(description="Only for hooks: ${transcript_path}, kept with the session state."),
 ]
-_LimitArg = Annotated[int, Field(description="Maximum memories, 1-50.")]
+_LimitArg = Annotated[int, Field(description="surface: maximum memories, 1-50.")]
 SURFACE_LIMIT = 3  # surface: default number of memories per file
-_SurfaceSessionArg = Annotated[
-    str | None,
-    Field(
-        description="Hooks pass ${session_id}: a memory already shown by surface in"
-        " this session is not repeated."
-    ),
-]
 
 
 def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> None:
     """Register the hook-facing tools on ``server``."""
     _register_context(server, engine, store)
-    _register_surface(server, engine)
-    _register_constraints(server, engine)
 
 
 def _register_context(server: MCPServer, engine: Engine, store: maintenance.Store) -> None:
@@ -88,8 +87,11 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         source: _SourceArg = None,
         project_dir: _WelcomeDirArg = None,
         transcript: _TranscriptArg = None,
+        file: FileArg = "",
+        relative_path: RelativePathArg = None,
+        limit: _LimitArg = SURFACE_LIMIT,
     ) -> str:
-        """Load project memory: the session welcome, or a context pack for a task.
+        """Load project memory: the session welcome, a context pack for a task, or what a file has.
 
         welcome: overdue reminders, the active priority-5 norms, reminders due within 7 days,
         then the 8 highest-scoring active memories (at most 1 from _shared); sent once per
@@ -109,6 +111,13 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         within budget_tokens.
         Returns JSON {"text", "entries": [{"path", "score", "kind"}]}; score is 0-1, or null for
         norms, reminders, recalled and linked memories (welcome adds "already_sent").
+        surface: memories (not constraints) about a file (file or relative_path, plus project_dir),
+        listed in its files or mentioned in the body; a match by mention needs priority >= 4 and
+        at most 2 come in one answer; with a hook_event and a session, memories this session
+        already got are left out; limit caps them. Returns JSON {"file", "memories": [{"path",
+        "title", "type", "priority", "match"}]}.
+        constraints: active constraints whose files match the file; warns before editing, never
+        blocks. Returns JSON {"file", "constraints": [{"path", "title", "priority", "body"}]}.
         The first welcome of a session may run the maintenance configured in episteme.toml
         (notice of pending review items, archiving of expired memories, vault backup), so
         this tool is not read-only.
@@ -121,59 +130,14 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
                 return _welcome(call, prompt, source)
             if mode == "task":
                 return _task(engine, _TaskArgs(task, project, budget_tokens, hook_event))
-            raise invalid(f'mode must be "welcome" or "task", got "{mode}".')
-
-
-def _register_surface(server: MCPServer, engine: Engine) -> None:
-    """Register the surface tool on ``server``."""
-
-    @server.tool(annotations=READ_ONLY, structured_output=False)
-    def surface(
-        file: FileArg = "",
-        project_dir: ProjectDir = None,
-        project: ProjectArg = None,
-        relative_path: RelativePathArg = None,
-        limit: _LimitArg = SURFACE_LIMIT,
-        hook_event: HookEvent = None,
-        session: _SurfaceSessionArg = None,
-    ) -> str:
-        """Memories (not constraints) about a file: listed in its files, or mentioned in the body.
-
-        A match by mention needs priority >= 4, and at most 2 come in one answer. With a
-        hook_event and a session, memories this session already got (welcome, recall, an
-        earlier surface) are left out.
-
-        Returns JSON {"file", "memories": [{"path", "title", "type", "priority", "match"}]}.
-        """
-        hookmode.check(hook_event)
-        st, skip = _surface_skip(session, hook_event)
-        with engine.session():
-            text, data = memory.surface(
-                engine, file, project_dir, project, limit, relative_path, skip
+            if mode in _FILE_MODES:
+                where = _FileArgs(
+                    file, relative_path, project_dir, project, hook_event, session, limit
+                )
+                return _FILE_MODES[mode](engine, where)
+            raise invalid(
+                f'mode must be "welcome", "task", "surface" or "constraints", got "{mode}".'
             )
-        _track_surfaced(st, data)
-        return _reply(hook_event, text, data)
-
-
-def _register_constraints(server: MCPServer, engine: Engine) -> None:
-    """Register the constraints tool on ``server``."""
-
-    @server.tool(annotations=READ_ONLY, structured_output=False)
-    def constraints(
-        file: FileArg = "",
-        project_dir: ProjectDir = None,
-        project: ProjectArg = None,
-        relative_path: RelativePathArg = None,
-        hook_event: HookEvent = None,
-    ) -> str:
-        """Active constraints whose files match a file. Warns before editing; never blocks.
-
-        Returns JSON {"file", "constraints": [{"path", "title", "priority", "body"}]}.
-        """
-        hookmode.check(hook_event)
-        with engine.session():
-            text, data = memory.constraints(engine, file, project_dir, project, relative_path)
-        return _reply(hook_event, text, data)
 
 
 def _reply(hook_event: str | None, text: str, data: Any, notice: str = "") -> str:
@@ -181,6 +145,57 @@ def _reply(hook_event: str | None, text: str, data: Any, notice: str = "") -> st
     if hook_event:
         return hookmode.render(hook_event, text, notice)
     return dump(data)
+
+
+@dataclass(frozen=True)
+class _FileArgs:
+    """Arguments of a context call in surface or constraints mode."""
+
+    file: str
+    relative_path: str | None
+    project_dir: str | None
+    project: str | None
+    hook_event: str | None
+    session: str | None = None
+    limit: int = SURFACE_LIMIT
+
+
+def _surface(engine: Engine, args: _FileArgs) -> str:
+    """Surface mode: memories about a file. Call it inside engine.session()."""
+    if not _need_file(args, "surface"):
+        return ""
+    st, skip = _surface_skip(args.session, args.hook_event)
+    text, data = memory.surface(
+        engine, args.file, args.project_dir, args.project, args.limit, args.relative_path, skip
+    )
+    _track_surfaced(st, data)
+    return _reply(args.hook_event, text, data)
+
+
+def _constraints(engine: Engine, args: _FileArgs) -> str:
+    """Constraints mode: active constraints matching a file. Call it inside engine.session()."""
+    if not _need_file(args, "constraints"):
+        return ""
+    text, data = memory.constraints(
+        engine, args.file, args.project_dir, args.project, args.relative_path
+    )
+    return _reply(args.hook_event, text, data)
+
+
+_FILE_MODES = {"surface": _surface, "constraints": _constraints}
+
+
+def _need_file(args: _FileArgs, mode: str) -> bool:
+    """Say whether a file mode has a file to work on.
+
+    Raises ``invalid`` for an agent call without file or relative_path; a hook call
+    (Serena tools that carry no path) just answers empty, so a hook never fails.
+    """
+    if args.file or args.relative_path:
+        return True
+    if args.hook_event:
+        return False
+    raise invalid(f'mode "{mode}" needs file or relative_path.')
 
 
 def _surface_skip(
