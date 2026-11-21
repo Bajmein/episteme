@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from typing import Any
 
 from episteme.markdown import load_frontmatter, split_frontmatter
 
 HASH_LEN = 16
+PAGE_FRONTMATTER_RE = re.compile(
+    r"---[ \t]*\n(?:(?:[\w.-]+:.*|[ \t].*|- .*|#.*)?\n)*?---[ \t]*(?:\n|\Z)"
+)
 
 
 def _lines(text: str) -> str:
@@ -22,6 +26,18 @@ def body_hash(body: str) -> str:
     """
     text = _lines(body).strip() + "\n"
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:HASH_LEN]
+
+
+def page_body(text: str) -> str:
+    """``text`` without the YAML frontmatter block a downloaded page may start with.
+
+    Only a block whose lines all look like YAML (``key:``, indented, ``- item``, a comment
+    or blank) counts, so a page that opens with a thematic break keeps it. Line ends come
+    back normalised. ``docs_check.py`` carries a copy: change both at once.
+    """
+    text = _lines(text)
+    match = PAGE_FRONTMATTER_RE.match(text)
+    return text[match.end() :].lstrip("\n") if match else text
 
 
 @dataclass(frozen=True)

@@ -12,6 +12,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - La línea de la bienvenida que nombra el estado de una sesión anterior ya no sale sin `project_dir`, no cuenta los estados guardados sin carpeta (`worktree`), que valían para cualquiera, y un `--resume` que vuelve a recibir la bienvenida no nombra su propio estado.
 - `session(action="save")` sin `project_dir`, la llamada habitual del agente, guarda la carpeta (`worktree`) que mandó un hook de esta sesión: el estado ya no vale para cualquier carpeta.
+- Las suites de documentación ya no duplican el frontmatter cuando la página descargada trae el suyo (las de mise desde noviembre de 2026): `docs_check.py` y `docs_write` lo quitan antes de calcular el hash y de escribir. Las notas que quedaron con dos bloques se arreglan solas en la próxima revisión con `/episteme-docs:docs`, que las ve como cambiadas.
 
 ## [0.18.0] - 2026-11-21
 

@@ -57,6 +57,9 @@ PAGE_SUFFIX_RE = re.compile(r"(?:/index)?\.(?:md|html?)$", re.IGNORECASE)
 NON_PAGE_PATH = "/.well-known/"
 NON_PAGE_SUFFIXES = (".json", ".txt")
 FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+PAGE_FRONTMATTER_RE = re.compile(  # same as episteme.docs.hashing
+    r"---[ \t]*\n(?:(?:[\w.-]+:.*|[ \t].*|- .*|#.*)?\n)*?---[ \t]*(?:\n|\Z)"
+)
 NON_PROSE_STARTS = (">", "|", "<", "![", ":::")
 LINK_ITEM_RE = re.compile(r"(?:[-*+]|\d+\.)\s+\[")
 
@@ -65,6 +68,13 @@ def body_hash(body: str) -> str:
     """Same as episteme.docs.body_hash: change both at once."""
     text = body.replace("\r\n", "\n").replace("\r", "\n").strip() + "\n"
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:HASH_LEN]
+
+
+def page_body(text: str) -> str:
+    """Same as episteme.docs.page_body: the page without the YAML frontmatter it brings."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    match = PAGE_FRONTMATTER_RE.match(text)
+    return text[match.end() :].lstrip("\n") if match else text
 
 
 class _HttpOnlyRedirects(urllib.request.HTTPRedirectHandler):
@@ -377,10 +387,10 @@ def _classify(page: Page, result: Fetched, inbox: Path, report: dict) -> None:
         report["errors"].append({"source": page.source, "error": result.error})
     elif (reason := _not_markdown_reason(result)) is not None:
         report["errors"].append({"source": page.source, "error": reason})
-    elif body_hash(result.text) == page.hash:
+    elif body_hash(text := page_body(result.text)) == page.hash:
         report["unchanged"] += 1
     else:
-        digest, file = _save(inbox, result.text)
+        digest, file = _save(inbox, text)
         report["changed"].append(
             {"source": page.source, "path": page.path, "hash": digest, "file": file}
         )
@@ -392,6 +402,7 @@ def _new_entry(result: Fetched, include: list[str], inbox: Path, report: dict) -
     if text is None or reason is not None:
         report["skipped"].append({"source": result.url, "reason": reason})
         return
+    text = page_body(text)
     digest, file = _save(inbox, text)
     report["new"].append(
         {

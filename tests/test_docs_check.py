@@ -29,7 +29,16 @@ PAGES = {
     "/docs/html-only": (200, "<html><body>shell</body></html>"),
     "/docs/api.txt": (200, "plain api text\n"),
     "/docs/spec.json": (200, '{"openapi": "3.1"}'),
+    "/docs/fm.md": (200, "---\ndescription: From the site.\ntags:\n  - a\n---\n\n# FM\n\nBody.\n"),
 }
+PAGE_FRONTMATTER_CASES = [
+    ("---\ndescription: x\n---\n\n# T\n", "# T\n"),
+    ("---\r\ntitle: x\r\nlist:\r\n  - a\r\n---\r\n# T\r\n", "# T\n"),
+    ("# T\n\n---\nkey: x\n---\n", "# T\n\n---\nkey: x\n---\n"),
+    ("---\n\nA rule, then prose.\n\n---\n", "---\n\nA rule, then prose.\n\n---\n"),
+    ("---\ntitle: never closed\n# T\n", "---\ntitle: never closed\n# T\n"),
+    ("# T\n", "# T\n"),
+]
 
 
 @pytest.fixture(scope="module")
@@ -406,6 +415,51 @@ def test_urls_that_are_not_pages_are_not_listed_as_new(
     urls = check.upstream_urls([f"{base}/llms.txt"], [], set(), report)
 
     assert urls == []
+
+
+@pytest.mark.parametrize(("text", "expected"), PAGE_FRONTMATTER_CASES)
+def test_page_body_drops_only_a_leading_frontmatter_like_the_server(
+    check: ModuleType, text: str, expected: str
+) -> None:
+    from episteme.docs import page_body
+
+    assert check.page_body(text) == page_body(text)
+    assert check.body_hash(check.page_body(text)) == check.body_hash(expected)
+
+
+def test_diff_saves_a_changed_page_without_its_own_frontmatter(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    _Handler.llms = ""
+    known = [check.Page(f"{base}/docs/fm.md", "0" * 16, "fm.md", "stable")]
+
+    report = check.diff(known, tmp_path / "inbox", [], [])
+
+    [changed] = report["changed"]
+    assert Path(changed["file"]).read_text(encoding="utf-8") == "# FM\n\nBody.\n"
+    assert changed["hash"] == check.body_hash("# FM\n\nBody.\n")
+
+
+def test_diff_compares_a_page_with_frontmatter_by_its_body(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    _Handler.llms = ""
+    body = check.body_hash("# FM\n\nBody.\n")
+    known = [check.Page(f"{base}/docs/fm.md", body, "fm.md", "stable")]
+
+    report = check.diff(known, tmp_path / "inbox", [], [])
+
+    assert report["unchanged"] == 1 and report["changed"] == []
+
+
+def test_new_page_is_saved_without_its_own_frontmatter(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _new_pages(check, base, tmp_path, "/docs/fm.md", [])
+
+    [new] = report["new"]
+    assert Path(new["file"]).read_text(encoding="utf-8") == "# FM\n\nBody.\n"
+    assert new["title"] == "FM" and new["excerpt"] == "Body."
 
 
 def test_new_entry_has_an_excerpt(check: ModuleType, base: str, tmp_path: Path) -> None:

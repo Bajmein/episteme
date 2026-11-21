@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from episteme.docs.hashing import body_hash, split_note
+from episteme.docs.hashing import body_hash, page_body, split_note
 from episteme.docs.inbox import check_ref, discard, read_body
 from episteme.docs.schema import DATE_KEYS, as_day, is_url, ordered, validate
 from episteme.docs.status import find_zone, manifest_path
@@ -87,10 +87,12 @@ def _check_arguments(
 def _resolve_body(
     engine: Engine, zone: Zone, body: str | None, body_ref: str | None
 ) -> tuple[str | None, Path | None]:
-    """The body to write and the inbox file it came from (None when it was passed inline)."""
-    if body_ref is None:
-        return body, None
-    return read_body(engine.vault, zone, body_ref)
+    """The body to write, without the frontmatter a page brings, and the inbox file it came
+    from (None when it was passed inline)."""
+    file = None
+    if body_ref is not None:
+        body, file = read_body(engine.vault, zone, body_ref)
+    return (None if body is None else page_body(body)), file
 
 
 def _consume(file: Path | None) -> None:
