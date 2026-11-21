@@ -34,14 +34,24 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write   # subida a Codecov por OIDC, sin token
     env:
       PYTHONUTF8: "1"   # los tests leen fixtures UTF-8 con read_text() sin encoding
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2   # Codecov asocia el informe al commit del PR, no al merge sintético
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           cache-python: true   # la caché de uv ya viene activa en runners de GitHub
       - run: uv sync --locked
-      - run: uv run pytest
+      - run: uv run pytest --cov --cov-report=xml
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: coverage.xml
+          disable_search: true
+          flags: linux

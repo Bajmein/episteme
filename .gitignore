@@ -12,3 +12,8 @@ build/
 .serena/
 .env
 .env.*
+
+# Cobertura (pytest --cov)
+.coverage
+.coverage.*
+coverage.xml
