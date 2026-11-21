@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Corregido
+
+- El servidor anuncia su versión al conectarse (`serverInfo.version`, antes vacía), y `episteme.__version__` se lee de los metadatos del paquete en lugar de estar escrita a mano (seguía en 0.11.0). La versión solo se fija en `pyproject.toml`.
+
 ## [0.17.0] - 2026-11-21
 
 ### Añadido

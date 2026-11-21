@@ -1,3 +1,6 @@
 """episteme: an MCP server over an Obsidian-compatible Markdown vault."""
 
-__version__ = "0.11.0"
+from importlib.metadata import version
+
+# Read from the installed package, so pyproject.toml stays the only place that sets it.
+__version__ = version("episteme")
