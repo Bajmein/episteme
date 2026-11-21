@@ -22,6 +22,6 @@ episteme es un servidor local que habla por stdio y no usa la red. El vault y su
 - **Los `deny` de la skill no son un aislamiento.** Reducen errores del agente; no sustituyen a un sandbox. Los `deny` de `Read` y `Edit` sobre el vault no cubren Bash.
 - **El `episteme.toml` de un vault es configuración de confianza**, incluida `backup.dir`. No abras con episteme un vault de origen desconocido.
 
-## Runner propio del CI
+## CI
 
-El CI de Linux corre en un runner propio. Los PR de forks (y los de las actualizaciones de seguridad de Dependabot) se desvían a `ubuntu-latest`, ningún job del runner propio usa secretos ni publica artefactos, y los workflows de colaboradores externos exigen aprobación manual: no se aprueba la ejecución de un PR que toca `.github/` sin leerlo entero.
+Todo el CI corre en runners de GitHub (`ubuntu-latest` y `windows-latest`), nunca en un equipo propio. Los workflows tienen permisos de solo lectura salvo `stale.yml`, y los de colaboradores externos exigen aprobación manual: no se aprueba la ejecución de un PR que toca `.github/` sin leerlo entero.

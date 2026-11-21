@@ -14,14 +14,15 @@ concurrency:
 
 jobs:
   lint:
-    # El código de terceros (forks y Dependabot) no corre en el runner propio.
-    runs-on: ${{ (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')) && 'ubuntu-latest' || fromJSON('["self-hosted","linux"]') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          cache-python: true   # la caché de uv ya viene activa en runners de GitHub
       - run: uv sync --locked
       - run: uv run ruff check
       - run: uv run ty check
@@ -31,8 +32,7 @@ jobs:
       - run: uv run zizmor .github/workflows
 
   test:
-    # Misma regla que en lint (el contexto env no se puede usar en runs-on).
-    runs-on: ${{ (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')) && 'ubuntu-latest' || fromJSON('["self-hosted","linux"]') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       PYTHONUTF8: "1"   # los tests leen fixtures UTF-8 con read_text() sin encoding
@@ -41,9 +41,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          cache-python: true   # la caché de uv ya viene activa en runners de GitHub
       - run: uv sync --locked
-      # Temporales en _work/_temp, que el runner vacía en cada job, y no en el PrivateTmp
-      # del servicio: SELinux no deja a systemd (sd-rmrf) borrar lo que pytest deja en /tmp.
       - run: uv run pytest
-        env:
-          TMPDIR: ${{ runner.temp }}

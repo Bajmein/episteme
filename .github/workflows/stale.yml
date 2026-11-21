@@ -9,7 +9,6 @@ permissions: {}
 
 jobs:
   stale:
-    # Lleva un token con escritura: nunca en el runner propio.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
