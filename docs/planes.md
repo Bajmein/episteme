@@ -26,7 +26,7 @@ episteme guarda una **copia de cada plan** de plan mode de Claude Code. El agent
   | `project` | El proyecto |
   | `slug` | El slug |
   | `title` | La primera línea `# ` del plan, o el slug |
-  | `saved_at` | Fecha y hora local del último guardado, a segundos |
+  | `saved_at` | Fecha y hora local del último guardado, a segundos (sin un `saved_at` legible, la rotación cuenta `created`) |
   | `session_id` | El id de la sesión de Claude Code, solo como dato |
   | `worktree` | La carpeta del proyecto (`${cwd}`) |
   | `source_path` | La ruta del plan en Claude Code, solo como dato |
@@ -63,7 +63,7 @@ episteme guarda una **copia de cada plan** de plan mode de Claude Code. El agent
 
 ## Rotación
 
-- Un plan activo cuyo `saved_at` tiene más de `[plans] archive_days` días (7 por defecto) se archiva en su sitio. No se borra.
+- Un plan activo cuyo `saved_at` (o, si falta o no se lee, su `created`) tiene más de `[plans] archive_days` días (7 por defecto) se archiva en su sitio. No se borra.
 - No se archiva el plan que enlaza un estado de sesión activo del mismo proyecto: tiene trabajo pendiente. La rotación de los estados corre antes que la de los planes en la misma pasada, así que si un estado viejo y su plan viejo vencen a la vez, los dos se archivan juntos.
 - La protección del enlace vale solo para la rotación automática: `plan(action="archive")` archiva el plan aunque lo enlace un estado activo.
 - Lo hace la mantención de la primera bienvenida de cada sesión, como mucho una vez por periodo de `[maintenance] every_days`, y lo dice en la bienvenida (`episteme · mantención: N planes archivados …`).
