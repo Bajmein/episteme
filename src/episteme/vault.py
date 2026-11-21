@@ -41,7 +41,6 @@ SESSION_KEYS = (
     "compact_state",
     "archive_days",
     "nudge_every",
-    "block_manual_compact",  # obsolete since 0.18, accepted and ignored
 )
 PLAN_KEYS = ("archive_days",)
 
@@ -151,8 +150,6 @@ def _load_maintenance(data: dict) -> Maintenance:
 
 def _load_session(data: dict) -> Session:
     table = _table(data, "session", SESSION_KEYS)
-    # Obsolete since 0.18 (compacting saves the state): still validated, then ignored.
-    _flag(table, "session", "block_manual_compact", True)
     return Session(
         extract=_flag(table, "session", "extract", True),
         compact_state=_flag(table, "session", "compact_state", True),

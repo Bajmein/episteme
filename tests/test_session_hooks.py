@@ -456,3 +456,25 @@ def test_from_compact_marks_once_and_stays_bounded() -> None:
         assert store.take_from_compact(None) is False
     finally:
         store.FROM_COMPACT.clear()
+
+
+@pytest.mark.parametrize("raw", ["relative/dir", "/no/such/dir/episteme", "", None])
+def test_track_ids_keeps_only_an_existing_absolute_project_dir(
+    monkeypatch: pytest.MonkeyPatch, raw: str | None
+) -> None:
+    monkeypatch.setattr(store, "IDS", {})
+
+    sessions.track_ids("UserPromptSubmit", "s1", None, raw)
+
+    assert store.IDS == {"session": "s1"}
+
+
+def test_track_ids_keeps_the_resolved_project_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(store, "IDS", {})
+
+    sessions.track_ids("UserPromptSubmit", None, None, str(tmp_path))
+
+    assert store.IDS.get("project_dir") == tmp_path.resolve().as_posix()
+    assert set(store.IDS) == {"project_dir"}

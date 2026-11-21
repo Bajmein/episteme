@@ -198,6 +198,31 @@ def latest(engine: Engine, project: str, project_dir: str | None) -> str | None:
     return _newest(engine, _worktree_rows(engine, project, project_dir))
 
 
+def _left_by_other_session(engine: Engine, row: Any, sid: str | None) -> bool:
+    """True when ``row`` names its worktree and was not saved by session ``sid``."""
+    props = engine.index.props(row["path"])
+    return bool(props.get("worktree")) and (not sid or props.get("session_id") != sid)
+
+
+def previous(
+    engine: Engine, project: str, project_dir: str | None, session: str | None
+) -> str | None:
+    """The newest active state another session left in the worktree of ``project_dir``.
+
+    Needs ``project_dir``. States saved without a ``worktree`` (they would match any) and
+    states of ``session`` (a ``--resume`` past the welcome TTL) never count.
+    """
+    if not project_dir:
+        return None
+    sid = session or IDS.get("session")
+    rows = [
+        r
+        for r in _worktree_rows(engine, project, project_dir)
+        if _left_by_other_session(engine, r, sid)
+    ]
+    return _newest(engine, rows)
+
+
 def mark_from_compact(rel: str) -> None:
     """Note that capture rewrote ``rel`` from the summary block (bounded by FROM_COMPACT_MAX)."""
     if rel in FROM_COMPACT:

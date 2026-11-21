@@ -32,7 +32,12 @@ _FilesArg = Annotated[
 ]
 _DirArg = Annotated[
     str | None,
-    Field(description="Absolute project directory (hooks pass ${cwd}); picks the worktree."),
+    Field(
+        description=(
+            "Absolute project directory (hooks pass ${cwd}); picks the worktree. Default: the"
+            " one a hook of this session passed."
+        )
+    ),
 ]
 _OriginArg = Annotated[
     str | None, Field(description='save: "agent" (default) or "extractor"; goes to saved_by.')
@@ -124,8 +129,9 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
 
         Only this tool writes there (revise and remember refuse it). The state in use is the
         one this process saved or restored, else the active state of this Claude Code session
-        (its session_id) in the same worktree (project_dir); a state of another session is
-        only taken by restore without hook_event.
+        (its session_id) in the same worktree (project_dir, default the one a hook of this
+        session passed); a state of another session is only taken by restore without
+        hook_event.
         save: create or rewrite the whole state. Target: note, else the current state, else a
         new one (needs title); to start another line of work, archive the current state
         first. A note that was archived becomes active again. body replaces the body (a
@@ -159,7 +165,9 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         to launch the episteme:extractor agent, when [session] extract is on.
         """
         hookmode.check(hook_event)
-        sessions.track_ids(hook_event, session, transcript)
+        sessions.track_ids(hook_event, session, transcript, project_dir)
+        # An agent call passes no project_dir: the worktree a hook of this session passed.
+        project_dir = project_dir or sessions.IDS.get("project_dir")
         if action not in ACTIONS:
             raise invalid(f'action must be one of {", ".join(ACTIONS)}, got "{action}".')
         if action == "template":
