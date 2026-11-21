@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.17.0] - 2026-11-21
+
 ### Añadido
 
 - `docs_write` acepta `body_ref`: el cuerpo de la página por su hash, desde la bandeja `.index/docs-inbox/<suite>/<hash>.md` del vault, en vez de `body`. Comprueba el hash, respeta el tope de 2 MiB y borra el archivo tras escribir. `docs_status` devuelve `inbox`, la ruta de la bandeja de cada suite.
@@ -365,7 +367,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.16.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Bajmein/episteme/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Bajmein/episteme/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Bajmein/episteme/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Bajmein/episteme/compare/v0.13.2...v0.14.0
