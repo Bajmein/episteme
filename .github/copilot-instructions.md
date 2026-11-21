@@ -22,7 +22,7 @@ Dependencias solo con `uv` (`uv add`), nunca `pip install`.
 - `server.py`: instrucciones, formato de errores y `build_server`.
 - `tools/`: los 14 tools MCP (`reading`, `memories`, `hooks`, `docs`, `session` y `plans`; `args.py` guarda las anotaciones compartidas); cada módulo define `register(server, engine…)`.
 - `memory/`, `index/`, `docs/`, `session/` y `plans/`: paquetes cuyo `__init__.py` reexporta lo que se usa desde fuera.
-- `vault.py`, `engine.py`, `activity.py`, `prompting.py`, `backup.py`, `maintenance.py`, `hookmode.py`: vault, motor, registro de actividad, inyección por mensaje, copias, mantención y modo hook. `checkpoint.py` está obsoleto (lo reemplaza `session`).
+- `vault.py`, `engine.py`, `activity.py`, `prompting.py`, `backup.py`, `maintenance.py`, `hookmode.py`: vault, motor, registro de actividad, inyección por mensaje, copias, mantención y modo hook. `worktree.py`: resolver `project_dir` y comparar el worktree de estados y planes.
 
 `plugin/` es el plugin de Claude Code (y de agy): skills, el agente `extractor` y la regla `plugin/rules/AGENTS.md`. No trae el servidor.
 

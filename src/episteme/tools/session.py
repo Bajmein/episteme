@@ -137,8 +137,7 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         show: {"found", "path", "task_title", "saved_at", "content"} (plus "extracted_until"
         when the extractor saved last). Never writes.
         restore: the state as context, made current: {"found", "path", "task_title",
-        "saved_at", "content", "source"}. Without a state it falls back to the deprecated
-        checkpoint when [checkpoint] state_glob is set (adds "deprecated").
+        "saved_at", "content", "source"}; without a state, found is false and source null.
         template: {"type", "sections", "skeleton"} of type (default "session").
         archive: set status archived on note (default the current state); never deletes.
         Returns {"path", "changed"}. States more than [session] archive_days (7) days after

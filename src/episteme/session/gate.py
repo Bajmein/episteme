@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from episteme import checkpoint, prompting
+from episteme import prompting
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -36,11 +36,8 @@ def gate(
     """The reason to block this /compact, or None to let it through.
 
     Only a manual /compact with ``[session] block_manual_compact`` can be blocked, and only once
-    per message: repeating /compact goes through. With ``[checkpoint] state_glob`` (deprecated)
-    it first saves the checkpoint, as the PreCompact hook did.
+    per message: repeating /compact goes through.
     """
-    if engine.vault.config.state_glob:
-        checkpoint.save(engine, project_dir, project)
     if not session or not _can_block(engine, trigger):
         return None
     st = prompting.state(session)

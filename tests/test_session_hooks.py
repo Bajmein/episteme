@@ -27,11 +27,9 @@ def _fm(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8").split("---\n")[1])
 
 
-def _config(vault: Path, extra: str = "", drop_state_glob: bool = True) -> None:
+def _config(vault: Path, extra: str = "") -> None:
     toml = vault / "episteme.toml"
     text = toml.read_text(encoding="utf-8")
-    if drop_state_glob:
-        text = text.split("[checkpoint]")[0]
     toml.write_text(text + "\n" + extra + "\n", encoding="utf-8")
 
 
@@ -96,21 +94,6 @@ async def test_gate_lets_through_after_a_save(vault: Path) -> None:
 
     assert text == ""
     assert agent.startswith("invalid_argument:") and "PreCompact" in agent
-
-
-async def test_gate_saves_the_deprecated_checkpoint(vault: Path, project_dir: Path) -> None:
-    sessions = vault / "memory/fabrik/sessions"
-    before = set(sessions.glob("*.md")) if sessions.exists() else set()
-    async with mcp_client(vault) as c:
-        await c.ok(
-            "session",
-            action="gate",
-            trigger="auto",
-            project_dir=str(project_dir),
-            hook_event="PreCompact",
-        )
-
-    assert set(sessions.glob("*.md")) - before
 
 
 async def test_state_nudge_after_12_messages_and_again_after_a_save(vault: Path) -> None:

@@ -153,7 +153,7 @@ def _find_stale(active: list[Any], now: date) -> list[dict[str, Any]]:
 
 
 def _find_expired(active: list[Any], iso: str) -> list[dict[str, Any]]:
-    # Past valid_until, still active. Checkpoints are left out: checkpoint manages them.
+    # Past valid_until, still active. Old checkpoint-* session memories are left out.
     expired = [
         {
             "path": r["path"],

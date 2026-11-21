@@ -14,6 +14,7 @@ from episteme.markdown import compose
 from episteme.memory import redact_secrets
 from episteme.session import store
 from episteme.vault import today
+from episteme.worktree import resolve_project_dir
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -71,7 +72,7 @@ def _new_state(
 ) -> str:
     """Create «Sesión <date>» holding only the summary; it has no ``saved_at`` yet."""
     title = f"Sesión {today().isoformat()}"
-    worktree = store._project_dir(project_dir).as_posix() if project_dir else None
+    worktree = resolve_project_dir(project_dir).as_posix() if project_dir else None
     fresh = {"project": project, "task_title": title, "worktree": worktree}
     meta = store._meta({}, fresh, store.SaveArgs(title, None, session_id=sid))
     del meta["saved_at"]

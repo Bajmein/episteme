@@ -1,4 +1,4 @@
-"""Hardening of backups, the activity log, checkpoints and notes over the size limit."""
+"""Hardening of backups, the activity log and notes over the size limit."""
 
 from __future__ import annotations
 
@@ -104,43 +104,6 @@ def test_activity_redacts_credentials_in_recorded_arguments(tmp_path: Path) -> N
     assert FAKE_TOKEN not in dump
     assert "[redacted: GitHub token]" in dump
     assert '"ok"' in dump
-
-
-@pytest.mark.anyio
-async def test_checkpoint_save_copies_only_listed_frontmatter_keys(
-    vault: Path, project_dir: Path
-) -> None:
-    state = project_dir / ".fabrik/core/001-demo/estado.md"
-    text = state.read_text(encoding="utf-8")
-    extra = "etapa: build\npriority: 5\nfoo: bar\n"
-    state.write_text(text.replace("etapa: build\n", extra), encoding="utf-8")
-
-    async with mcp_client(vault) as c:
-        saved = await c.ok("checkpoint", action="save", project_dir=str(project_dir))
-
-    head = (vault / saved["path"]).read_text(encoding="utf-8").split("---\n")[1]
-    assert "etapa: build" in head
-    assert "foo" not in head
-    assert "priority: 3" in head
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize("where", ["body", "frontmatter"])
-async def test_checkpoint_save_rejects_a_secret(vault: Path, project_dir: Path, where: str) -> None:
-    state = project_dir / ".fabrik/core/001-demo/estado.md"
-    text = state.read_text(encoding="utf-8")
-    if where == "body":
-        text = text.replace("## Plan\n", f"## Plan\nToken: {FAKE_TOKEN}\n")
-    else:
-        text = text.replace("etapa: build\n", f"etapa: build\ntags: [{FAKE_TOKEN}]\n")
-    state.write_text(text, encoding="utf-8")
-
-    async with mcp_client(vault) as c:
-        error = await c.error("checkpoint", action="save", project_dir=str(project_dir))
-
-    assert error.startswith("invalid_argument:")
-    assert "secret" in error
-    assert FAKE_TOKEN not in error
 
 
 HUGE_LINE = "zorbhuge palabra\n"

@@ -118,9 +118,4 @@ La tabla es opcional y rechaza claves desconocidas. `extract` activa la orden de
 
 ## Desde `estado.md` y `checkpoint`
 
-`checkpoint` y `[checkpoint] state_glob` están obsoletos y se eliminan en la próxima versión. Mientras tanto:
-
-- Con `state_glob` configurado, el servidor avisa por stderr al arrancar y las respuestas de `checkpoint` traen `deprecated`.
-- Con `state_glob`, `gate` (en `PreCompact`) sigue guardando el checkpoint del `estado.md` antes de decidir, como hacía el hook de `checkpoint`. Los hooks de `checkpoint` se quitan al volver a correr `/episteme:setup`.
-- `session(action="restore")` cae a `checkpoint` (el `estado.md` activo o el último checkpoint guardado) cuando no hay estado en `sesiones/`, y la respuesta trae `deprecated`.
-- Para migrar, guarda el estado con `session(action="save")` siguiendo la plantilla: desde ese momento `restore` trae ese y no el `estado.md`.
+El tool `checkpoint` y `[checkpoint] state_glob` ya no existen (una tabla `[checkpoint]` en `episteme.toml` se ignora). Para migrar, guarda el estado con `session(action="save")` siguiendo la plantilla, y vuelve a correr `/episteme:setup` si el proyecto tenía hooks que llamaban a `checkpoint`.

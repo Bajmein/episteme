@@ -9,7 +9,6 @@ from __future__ import annotations
 import datetime as dt
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from episteme.checkpoint import _normalized_dir, _project_dir, _same_worktree
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
 from episteme.markdown import body_without_title, compose, parse
 from episteme.memory import check_files, memory_slug, template_hint
@@ -18,6 +17,7 @@ from episteme.memory.secrets import _reject_secrets
 from episteme.memory.templates import missing_sections
 from episteme.plans import SLUG, current_slug
 from episteme.vault import SESSION, today
+from episteme.worktree import normalized_dir, resolve_project_dir, same_worktree
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -69,7 +69,7 @@ def folder(engine: Engine, project: str) -> str:
 
 def _here(project_dir: str | None) -> str:
     """The normalized worktree of the call, or ``""`` when no project_dir is given."""
-    return _normalized_dir(project_dir) if project_dir else ""
+    return normalized_dir(project_dir) if project_dir else ""
 
 
 def _key(project: str, project_dir: str | None) -> tuple[str, str]:
@@ -153,7 +153,7 @@ def current(engine: Engine, project: str, project_dir: str | None) -> str | None
     rows = [
         r
         for r in _active_rows(engine, project)
-        if (not here or _same_worktree(engine, r, here)) and _in_session_zone(engine, r["path"])
+        if (not here or same_worktree(engine, r, here)) and _in_session_zone(engine, r["path"])
     ]
     if not rows:
         return None
@@ -339,7 +339,7 @@ def save(
     """Create or rewrite the state. Returns {"path", "created", "missing_sections", ...}."""
     folder(engine, project)
     title, body = _checked(args)
-    worktree = _project_dir(project_dir).as_posix() if project_dir else None
+    worktree = resolve_project_dir(project_dir).as_posix() if project_dir else None
     rel = _target(engine, project, project_dir, args.note)
     old: dict[str, Any] = _read(engine, rel)[0] if rel else {}
     title = title or str(old.get("task_title") or "").strip()

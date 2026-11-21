@@ -54,7 +54,7 @@ Antes de proponer algo sobre una memoria, léela: `read(notes=[...])` con todas 
 
 - Una propuesta por grupo, con las rutas y la acción exacta; se aplica solo con el sí de la persona. Un «sí a todo» vale para la categoría que se está viendo, no para las siguientes.
 - Nada se borra: `archive` y `supersede` son reversibles con `revise(action="set", fields={"status": "active"})`.
-- No toques las memorias `session` de checkpoints: las gestiona `checkpoint`.
+- No toques las memorias `session` de checkpoints antiguos (`checkpoint-*`): `review` las deja fuera de `expired`.
 - Una norma de prioridad 5 no se archiva ni se reemplaza sin que la persona lo pida de forma explícita.
 - Al terminar, corre `review` otra vez y muestra los totales de antes y de después.
 

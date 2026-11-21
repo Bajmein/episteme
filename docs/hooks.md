@@ -87,7 +87,7 @@ No hay que hacer nada a mano: los tres hooks de `SessionStart` (`compact|clear`)
 
 | Qué vuelve | De dónde sale |
 |---|---|
-| El estado de la sesión | La nota de `sesiones/<proyecto>/` en uso, con la orden de lanzar en segundo plano el agente `episteme:extractor`, que lo pone al día con el transcript (ver [Estado de la sesión](sesion.md)). Sin estado y con `state_glob` (obsoleto), el `estado.md` activo o el último checkpoint |
+| El estado de la sesión | La nota de `sesiones/<proyecto>/` en uso, con la orden de lanzar en segundo plano el agente `episteme:extractor`, que lo pone al día con el transcript (ver [Estado de la sesión](sesion.md)). |
 | La referencia al plan (solo tras `/clear`) | Una línea que apunta a la copia del plan de la tarea en `planes/<proyecto>/` (el plan vigente del proceso, el que enlaza el estado o el más reciente del worktree), para leerla con `read`. La copia la guardó el hook `PreToolUse` con matcher `ExitPlanMode`, que responde siempre vacío y nunca frena `ExitPlanMode` (ver [Planes](planes.md)) |
 | La bienvenida | Normas, recordatorios y las memorias mejor puntuadas del proyecto |
 | «De esta sesión» | Hasta 8 memorias que el agente escribió (`remember`, `revise`) o leyó (`read`) antes, primero las escritas; las que ya salen en la bienvenida no se repiten |

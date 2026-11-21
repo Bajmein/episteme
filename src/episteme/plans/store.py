@@ -14,12 +14,12 @@ import re
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from episteme import hookmode
-from episteme.checkpoint import _normalized_dir, _project_dir, _same_worktree
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
 from episteme.markdown import clip_at_newline, compose, parse
 from episteme.memory import redact_secrets
 from episteme.memory.schema import _PROJECT_NAME
 from episteme.vault import PLAN, SESSION, today
+from episteme.worktree import normalized_dir, resolve_project_dir, same_worktree
 
 if TYPE_CHECKING:
     from episteme.engine import Engine
@@ -98,7 +98,7 @@ def check_slug(slug: str | None) -> str:
 
 
 def _here(project_dir: str | None) -> str:
-    return _normalized_dir(project_dir) if project_dir else ""
+    return normalized_dir(project_dir) if project_dir else ""
 
 
 def _key(project: str, project_dir: str | None) -> tuple[str, str]:
@@ -248,7 +248,7 @@ def save(
     fresh = {
         "project": project,
         "session_id": _session_id(args.session_id),
-        "worktree": _project_dir(project_dir).as_posix() if project_dir else None,
+        "worktree": resolve_project_dir(project_dir).as_posix() if project_dir else None,
     }
     old = _old_meta(engine, copy.rel)
     _write(engine, copy.rel, _plan_meta(copy, old, fresh), f"{copy.body}\n")
@@ -324,7 +324,7 @@ def find_current(engine: Engine, project: str, project_dir: str | None) -> str |
     if rel is not None:
         return rel
     here = key[1]
-    rows = [r for r in _active_rows(engine, project) if not here or _same_worktree(engine, r, here)]
+    rows = [r for r in _active_rows(engine, project) if not here or same_worktree(engine, r, here)]
     return _newest(engine, rows)
 
 

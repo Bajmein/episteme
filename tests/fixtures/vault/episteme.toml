@@ -8,6 +8,3 @@ mode = "memory"        # escritura solo vía remember/revise, con validación de
 
 [zones."plans"]
 mode = "read-write"
-
-[checkpoint]
-state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir
