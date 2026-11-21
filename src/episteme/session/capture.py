@@ -11,6 +11,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from episteme import hookmode
+from episteme.errors import EpistemeError
 from episteme.markdown import compose
 from episteme.memory import redact_secrets
 from episteme.plans import current_slug
@@ -109,16 +110,35 @@ def state_block(summary: str | None) -> tuple[str | None, str] | None:
     return (title, text) if text else None
 
 
-def track_ids(hook_event: str | None, session: str | None, transcript: str | None = None) -> None:
-    """Keep the session id and transcript path a hook passed, for the state this session uses.
+def track_ids(
+    hook_event: str | None,
+    session: str | None,
+    transcript: str | None = None,
+    project_dir: str | None = None,
+) -> None:
+    """Keep the session id, transcript path and worktree a hook passed, for this session.
 
     Agent calls (no ``hook_event``) and SessionEnd (its transcript is the one closing) change
-    nothing.
+    nothing. ``project_dir`` is kept only when it is an existing absolute directory.
     """
     if not hook_event or hook_event == "SessionEnd":
         return
-    found = {"session": session_id(session), "transcript": transcript_path(transcript)}
+    found = {
+        "session": session_id(session),
+        "transcript": transcript_path(transcript),
+        "project_dir": _existing_dir(project_dir),
+    }
     store.IDS.update({key: value for key, value in found.items() if value})
+
+
+def _existing_dir(project_dir: str | None) -> str | None:
+    """``project_dir`` resolved, or ``None`` when it is missing or not an existing absolute dir."""
+    if not project_dir:
+        return None
+    try:
+        return resolve_project_dir(project_dir).as_posix()
+    except EpistemeError:
+        return None
 
 
 def session_id(value: str | None) -> str | None:

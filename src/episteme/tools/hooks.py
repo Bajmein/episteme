@@ -114,7 +114,7 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         this tool is not read-only.
         """
         hookmode.check(hook_event)
-        sessions.track_ids(hook_event, session, transcript)
+        sessions.track_ids(hook_event, session, transcript, project_dir)
         with engine.session():
             if mode == "welcome":
                 call = _Call(engine, store, session, project, hook_event, project_dir)
@@ -277,7 +277,7 @@ def _welcome(call: _Call, prompt: str | None, source: str | None) -> str:
     if welcomed:
         _head_block(engine, project, turn, out, brief=resend and source == "compact")
         if turn.fresh and not resend:
-            out.blocks.append(_previous_state_line(engine, project, call.project_dir))
+            out.blocks.append(_previous_state_line(engine, project, call))
     elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:
         out.add(*prompting.overdue_block(engine, project), st)
         st.reminded_at = st.prompts
@@ -322,9 +322,12 @@ def _head_block(engine: Engine, project: str, turn: _Turn, out: _Blocks, brief: 
         out.blocks.append(turn.note)
 
 
-def _previous_state_line(engine: Engine, project: str, project_dir: str | None) -> str:
-    """One line naming the newest active state of the worktree, or ``""``; never its content."""
-    rel = sessions.latest(engine, project, project_dir)
+def _previous_state_line(engine: Engine, project: str, call: _Call) -> str:
+    """One line naming the state a previous session left in the worktree, or ``""``.
+
+    Never its content; see ``sessions.previous`` for which states count.
+    """
+    rel = sessions.previous(engine, project, call.project_dir, call.session)
     if rel is None:
         return ""
     props = engine.index.props(rel)

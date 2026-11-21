@@ -314,12 +314,11 @@ def test_session_zone_is_implicit(vault: Path) -> None:
     assert cfg.session.extract is True and cfg.session.compact_state is True
 
 
-def test_obsolete_block_manual_compact_still_loads(vault: Path) -> None:
-    _config(vault, "[session]\nblock_manual_compact = false\nnudge_every = 0")
+def test_removed_block_manual_compact_is_an_unknown_key(vault: Path) -> None:
+    _config(vault, "[session]\nblock_manual_compact = false")
 
-    cfg = load_config(vault)
-
-    assert cfg.session.nudge_every == 0 and not hasattr(cfg.session, "block_manual_compact")
+    with pytest.raises(StartupError, match='unknown key "block_manual_compact"'):
+        load_config(vault)
 
 
 @pytest.mark.parametrize("value", ["-1", "true", '"3"'])

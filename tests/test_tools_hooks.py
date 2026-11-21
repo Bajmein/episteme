@@ -213,6 +213,66 @@ async def test_first_welcome_names_the_state_a_previous_session_left(
     assert PREVIOUS not in resent
 
 
+async def test_first_welcome_names_no_state_without_project_dir(
+    vault: Path, tmp_path: Path
+) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok(
+            "session", action="save", title="Hilo", body=STATE_BODY, project_dir=str(tmp_path)
+        )
+    async with mcp_client(vault) as c:
+        first = await c.ok("context", mode="welcome", session="s2")
+
+    assert PREVIOUS not in first["text"]
+
+
+async def test_first_welcome_skips_a_state_saved_without_worktree(
+    vault: Path, tmp_path: Path
+) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok("session", action="save", title="Sin worktree", body=STATE_BODY)
+    async with mcp_client(vault) as c:
+        first = await c.ok("context", mode="welcome", session="s2", project_dir=str(tmp_path))
+
+    assert PREVIOUS not in first["text"]
+
+
+async def test_first_welcome_skips_the_state_of_its_own_session(
+    vault: Path, tmp_path: Path
+) -> None:
+    async with mcp_client(vault) as c:
+        await c.ok(
+            "session",
+            action="save",
+            title="Mío",
+            body=STATE_BODY,
+            session="s1",
+            project_dir=str(tmp_path),
+        )
+    async with mcp_client(vault) as c:
+        first = await c.ok("context", mode="welcome", session="s1", project_dir=str(tmp_path))
+
+    assert PREVIOUS not in first["text"]
+
+
+async def test_agent_save_takes_the_worktree_a_hook_passed(vault: Path, tmp_path: Path) -> None:
+    async with mcp_client(vault) as c:
+        await c.call(
+            "context",
+            mode="welcome",
+            session="s1",
+            project_dir=str(tmp_path),
+            hook_event="UserPromptSubmit",
+        )
+        saved = await c.ok("session", action="save", title="Del agente", body=STATE_BODY)
+        note = await c.ok("read", note=saved["path"], content=False)
+    async with mcp_client(vault) as c:
+        first = await c.ok("context", mode="welcome", session="s2", project_dir=str(tmp_path))
+
+    assert note["frontmatter"]["worktree"] == tmp_path.resolve().as_posix()
+    assert PREVIOUS in first["text"] and "«Del agente»" in first["text"]
+
+
 async def test_first_welcome_says_nothing_without_a_previous_state(vault: Path) -> None:
     async with mcp_client(vault) as c:
         first = await c.ok("context", mode="welcome", session="s1")

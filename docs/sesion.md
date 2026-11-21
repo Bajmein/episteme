@@ -24,7 +24,7 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
   | `saved_by` | `agent`, `extractor` o `compact` (lo último que lo escribió fue el hook `PostCompact`, con el bloque del resumen o con el resumen entero) |
   | `extracted_until` | Solo si lo último fue un guardado del extractor: hasta qué hora local (a segundos) leyó el transcript (el `until` de `save`). Cualquier otro guardado lo quita |
   | `compacted_at` | Fecha y hora del último resumen de compactación, si lo hubo |
-  | `worktree` | La carpeta del proyecto (`project_dir`), si se pasa |
+  | `worktree` | La carpeta del proyecto: el `project_dir` que se pasa o, si el agente no lo pasa, el que mandó un hook de esta sesión |
   | `session_id` | El id de la sesión de Claude Code que lo guardó (el que pasa el hook, o el que el servidor aprendió de los hooks): tras reiniciar el servidor, el estado en uso es el de ese id |
 | `transcript` | La ruta del transcript de esa sesión, que pasan los hooks: `/episteme:sesion retomar` en otra sesión la usa para extraer lo que quedó pendiente |
   | `plan` | El slug del plan de la tarea en `planes/<proyecto>/` (ver [Planes](planes.md)): el que se pasa a `save`; si no, el que ya tenía el estado; si no, el plan vigente del proceso. Mientras el estado esté activo, ese plan no rota |
@@ -52,9 +52,9 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
 
 `restore` con `source` (`compact` o `clear`) y un transcript conocido añade `extract`, la orden de extracción (ver más abajo). En modo hook va debajo del estado. Tras una compactación cuyo bloque guardó `capture`, `restore` responde una sola línea (el bloque ya está en el resumen) y no pide extracción; sin bloque, devuelve el estado sin su sección `## Resumen de compactación` (ese resumen también está ya en el contexto).
 
-**El estado en uso** es el que este proceso guardó o recuperó para ese proyecto y esa carpeta. Si el servidor acaba de arrancar (o con `--resume`), es el estado activo del mismo `worktree` cuyo `session_id` es el de esta sesión, que el servidor aprende de los hooks; los que no tienen `worktree` valen para cualquiera. El de otra sesión (una nueva, u otra ventana en la misma carpeta) nunca es el estado en uso: `save` sin `note` crea uno aparte, `show` y `archive` sin `note` no lo encuentran, y solo `restore` pedido por el agente (`/episteme:sesion retomar`) lo toma. Tras `/clear` el proceso es el mismo y el estado en uso sigue.
+**El estado en uso** es el que este proceso guardó o recuperó para ese proyecto y esa carpeta. Si el servidor acaba de arrancar (o con `--resume`), es el estado activo del mismo `worktree` cuyo `session_id` es el de esta sesión, que el servidor aprende de los hooks; los que no tienen `worktree` (de versiones anteriores, o guardados sin que ningún hook pasara la carpeta) valen para cualquiera. El de otra sesión (una nueva, u otra ventana en la misma carpeta) nunca es el estado en uso: `save` sin `note` crea uno aparte, `show` y `archive` sin `note` no lo encuentran, y solo `restore` pedido por el agente (`/episteme:sesion retomar`) lo toma. Tras `/clear` el proceso es el mismo y el estado en uso sigue.
 
-Una sesión nueva no carga el estado anterior: su primera bienvenida añade una línea que lo nombra, por ejemplo «episteme · hay un estado de sesión de una sesión anterior: «…» (guardado …; `sesiones/…`). No está cargado: para seguir con él, /episteme:sesion retomar.»
+Una sesión nueva no carga el estado anterior: su primera bienvenida añade una línea que lo nombra, por ejemplo «episteme · hay un estado de sesión de una sesión anterior: «…» (guardado …; `sesiones/…`). No está cargado: para seguir con él, /episteme:sesion retomar.» Solo cuenta un estado activo de la misma carpeta, guardado con su `worktree` y por otra sesión: sin `project_dir` la línea no sale, y un `--resume` que vuelve a recibir la bienvenida (pasado el plazo) no nombra su propio estado.
 
 Para empezar otro hilo de trabajo, archiva el estado en uso y guarda uno nuevo con su `title`.
 
@@ -121,7 +121,7 @@ archive_days = 7              # días sin guardar antes de archivar el estado (e
 nudge_every = 0               # mensajes sin guardar antes del aviso (entero >= 0; 0 lo apaga)
 ```
 
-La tabla es opcional y rechaza claves desconocidas. `extract` activa la orden de extracción, `compact_state` las instrucciones de `gate` y `nudge_every` el aviso periódico. `block_manual_compact` está obsoleta desde 0.18: se acepta (tiene que ser `true` o `false`) y se ignora; se quitará en la versión menor siguiente.
+La tabla es opcional y rechaza claves desconocidas. `extract` activa la orden de extracción, `compact_state` las instrucciones de `gate` y `nudge_every` el aviso periódico. `block_manual_compact` se quitó en 0.19 (desde 0.18 se ignoraba): si sigue en el `episteme.toml`, el servidor no arranca hasta borrarla.
 
 ## Desde `estado.md` y `checkpoint`
 

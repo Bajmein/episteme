@@ -4,6 +4,15 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Quitado
+
+- `[session] block_manual_compact`, que se ignoraba desde 0.18. Si sigue en el `episteme.toml`, el servidor no arranca («unknown key»): bórrala.
+
+### Corregido
+
+- La línea de la bienvenida que nombra el estado de una sesión anterior ya no sale sin `project_dir`, no cuenta los estados guardados sin carpeta (`worktree`), que valían para cualquiera, y un `--resume` que vuelve a recibir la bienvenida no nombra su propio estado.
+- `session(action="save")` sin `project_dir`, la llamada habitual del agente, guarda la carpeta (`worktree`) que mandó un hook de esta sesión: el estado ya no vale para cualquier carpeta.
+
 ## [0.18.0] - 2026-11-21
 
 ### Cambiado
