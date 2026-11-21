@@ -7,8 +7,6 @@
       "mcp__episteme__links",
       "mcp__episteme__review",
       "mcp__episteme__context",
-      "mcp__episteme__surface",
-      "mcp__episteme__constraints",
       "mcp__episteme__docs_status",
       "mcp__episteme__session",
       "mcp__episteme__plan",
@@ -48,8 +46,9 @@
           {
             "type": "mcp_tool",
             "server": "episteme",
-            "tool": "constraints",
+            "tool": "context",
             "input": {
+              "mode": "constraints",
               "file": "${tool_input.file_path}",
               "relative_path": "${tool_input.relative_path}",
               "project_dir": "${cwd}",
@@ -84,8 +83,9 @@
           {
             "type": "mcp_tool",
             "server": "episteme",
-            "tool": "surface",
+            "tool": "context",
             "input": {
+              "mode": "surface",
               "file": "${tool_input.file_path}",
               "relative_path": "${tool_input.relative_path}",
               "project_dir": "${cwd}",

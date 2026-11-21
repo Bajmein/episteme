@@ -10,7 +10,7 @@ Tarea: $ARGUMENTS
 
 Sin tarea, ve a «Activar». Con tarea, ve a «Delegar»; si falta `<ws>/.agents/mcp_config.json` con `episteme`, dilo y ofrece «Activar» antes: no lo actives sin que la persona lo pida.
 
-Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, bienvenida automática, `surface`, `constraints`, extractor ni copia de planes: el contexto le llega por la regla `always_on` del plugin (`rules/AGENTS.md`).
+Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, bienvenida automática, los modos `surface` y `constraints` de `context`, extractor ni copia de planes: el contexto le llega por la regla `always_on` del plugin (`rules/AGENTS.md`).
 
 ## Activar
 

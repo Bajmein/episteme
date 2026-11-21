@@ -20,15 +20,11 @@ HookEvent = Annotated[
     Field(description="Only for Claude Code hooks: ${hook_event_name}. Omit otherwise."),
 ]
 ProjectArg = Annotated[str | None, Field(description="Project; defaults to --project.")]
-ProjectDir = Annotated[
-    str | None,
-    Field(description="Absolute project directory (hooks pass ${cwd}); used to relativize file."),
-]
 FileArg = Annotated[
     str,
     Field(
         description="File being edited: absolute or relative to the project. "
-        "Empty (with no relative_path) returns an empty result."
+        "Needs this or relative_path; a hook call with neither returns an empty result."
     ),
 ]
 RelativePathArg = Annotated[

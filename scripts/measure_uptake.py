@@ -10,7 +10,9 @@ Per memory (``memory/...``) it counts, over the last ``--days`` days:
 
 - deliveries by hook (rows with ``hook_event``, ``ok=1``): ``context`` (the welcome and the
   task recall; a row does not tell them apart, so they are counted together, and ``welcome``
-  is the subset with ``args.mode=welcome``), ``surface`` and ``constraints``;
+  is the subset with ``args.mode=welcome``), ``surface`` and ``constraints`` (``context`` rows
+  with ``args.mode=surface|constraints``, or the old rows whose tool is ``surface`` or
+  ``constraints``);
 - agent reads (``tool=read`` without ``hook_event``; path in ``args.note``, ``args.notes`` or
   ``paths``), and how many happened in the same session after a delivery of that memory;
   agent calls carry no session, so each one takes the last session a hook reported from the
@@ -215,11 +217,20 @@ def _in_zone(scan: _Scan, paths: list[str]) -> list[str]:
     return [p for p in dict.fromkeys(paths) if p.startswith(scan.zone + "/")]
 
 
+def _delivery_kind(tool: str, args: dict) -> str:
+    """The column a delivery counts in: old rows have tool surface/constraints, new ones mode."""
+    mode = args.get("mode")
+    if tool == "context" and mode in ("surface", "constraints"):
+        return mode
+    return tool
+
+
 def _record_delivery(scan: _Scan, call: _Call) -> None:
     row, i = call.row, call.index
     for p in _in_zone(scan, call.paths):
-        scan.stats[p][row.tool] += 1
-        if row.tool == "context" and call.args.get("mode") == "welcome":
+        kind = _delivery_kind(row.tool, call.args)
+        scan.stats[p][kind] += 1
+        if kind == "context" and call.args.get("mode") == "welcome":
             scan.stats[p]["welcome"] += 1
         scan.deliveries.append((row.session, p, i))
         if row.session:

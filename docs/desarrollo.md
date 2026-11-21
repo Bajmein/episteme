@@ -128,7 +128,7 @@ uv run scripts/bench_calls.py ab --vault ~/.episteme --project <proyecto> --prom
 
 ## Medir si las memorias entregadas se leen
 
-Para saber si lo que los hooks entregan (`context`, `surface`, `constraints`) llega a leerse, el script cruza el registro de actividad con las lecturas del agente. Es de solo lectura: abre `.index/activity.db` con `mode=ro` y lee la fecha `created` de las memorias desde las notas; no abre ni crea el índice.
+Para saber si lo que los hooks entregan (`context` en sus modos `welcome`, `task`, `surface` y `constraints`) llega a leerse, el script cruza el registro de actividad con las lecturas del agente. Es de solo lectura: abre `.index/activity.db` con `mode=ro` y lee la fecha `created` de las memorias desde las notas; no abre ni crea el índice.
 
 ```bash
 uv run scripts/measure_uptake.py --vault ~/.episteme [--project <proyecto>] [--days 30] [--min-deliveries 3] [--old-days 90]

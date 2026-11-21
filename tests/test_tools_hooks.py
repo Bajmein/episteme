@@ -70,22 +70,22 @@ async def test_case10_surface_and_constraints(vault: Path) -> None:
             body=f"Se revisó `{GUARD}` en el change 005.",
             priority=4,
         )
-        surf = await c.ok("surface", file=GUARD)
+        surf = await c.ok("context", mode="surface", file=GUARD)
         got = [(m["path"], m["match"]) for m in surf["memories"]]
         assert got == [(mem["path"], "files"), (mention["path"], "mention")]
         assert CONSTRAINT not in {m["path"] for m in surf["memories"]}
-        cons = await c.ok("constraints", file=GUARD)
+        cons = await c.ok("context", mode="constraints", file=GUARD)
         assert [x["path"] for x in cons["constraints"]] == [CONSTRAINT]
         assert "no intentes expandir variables" in cons["constraints"][0]["body"]
-        none = await c.ok("constraints", file="src/data.py")
+        none = await c.ok("context", mode="constraints", file="src/data.py")
         assert none["constraints"] == []
 
 
 async def test_case15_hook_output(vault: Path) -> None:
     async with mcp_client(vault) as c:
         await c.ok("remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD])
-        for tool, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
-            is_error, text = await c.call(tool, file=GUARD, hook_event=event)
+        for mode, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
+            is_error, text = await c.call("context", mode=mode, file=GUARD, hook_event=event)
             assert not is_error
             data = json.loads(text)
             assert list(data) == ["hookSpecificOutput"]
@@ -93,8 +93,9 @@ async def test_case15_hook_output(vault: Path) -> None:
             assert out["hookEventName"] == event
             assert 0 < len(out["additionalContext"]) <= 10_000
             assert "decision" not in data and "decision" not in out
-            assert await c.call(tool, file="nothing/here.py", hook_event=event) == (False, "")
-        text = await c.error("surface", file=GUARD, hook_event="Stop")
+            where = {"file": "nothing/here.py", "hook_event": event}
+            assert await c.call("context", mode=mode, **where) == (False, "")
+        text = await c.error("context", mode="surface", file=GUARD, hook_event="Stop")
         assert text.startswith("invalid_argument:")
 
 
@@ -102,10 +103,11 @@ async def test_case16_absolute_file_with_project_dir(vault: Path, tmp_path: Path
     project = tmp_path / "proyecto"
     (project / ".claude/hooks").mkdir(parents=True)
     async with mcp_client(vault) as c:
-        res = await c.ok("constraints", file=str(project / GUARD), project_dir=str(project))
+        where = {"mode": "constraints", "project_dir": str(project)}
+        res = await c.ok("context", file=str(project / GUARD), **where)
         assert res["file"] == GUARD
         assert [x["path"] for x in res["constraints"]] == [CONSTRAINT]
-        res = await c.ok("constraints", file=str(project / "data.py"), project_dir=str(project))
+        res = await c.ok("context", file=str(project / "data.py"), **where)
         assert res["constraints"] == []
 
 
@@ -114,14 +116,14 @@ async def test_surface_relative_path_and_empty_file(vault: Path) -> None:
         mem = await c.ok(
             "remember", type="lesson", title="Nota del guard", body="x" * 50, files=[GUARD]
         )
-        res = await c.ok("surface", relative_path=GUARD)
+        res = await c.ok("context", mode="surface", relative_path=GUARD)
         assert [m["path"] for m in res["memories"]] == [mem["path"]]
-        cons = await c.ok("constraints", file="", relative_path=GUARD)
+        cons = await c.ok("context", mode="constraints", file="", relative_path=GUARD)
         assert [x["path"] for x in cons["constraints"]] == [CONSTRAINT]
-        assert await c.ok("surface", file="") == {"file": "", "memories": []}
-        assert await c.ok("constraints") == {"file": "", "constraints": []}
-        for tool, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
-            assert await c.call(tool, file="", hook_event=event) == (False, "")
+        for mode, event in (("surface", "PostToolUse"), ("constraints", "PreToolUse")):
+            text = await c.error("context", mode=mode)
+            assert text.startswith("invalid_argument:") and "file or relative_path" in text
+            assert await c.call("context", mode=mode, file="", hook_event=event) == (False, "")
 
 
 async def test_surface_excludes_session_and_reminder(vault: Path) -> None:
@@ -134,7 +136,7 @@ async def test_surface_excludes_session_and_reminder(vault: Path) -> None:
             due="2026-10-25",
         )
         await c.ok("remember", type="session", title="Sesion guard", body=f"Toca `{GUARD}`.")
-        res = await c.ok("surface", file=GUARD)
+        res = await c.ok("context", mode="surface", file=GUARD)
         assert {m["type"] for m in res["memories"]}.isdisjoint({"session", "reminder"})
 
 
@@ -147,12 +149,12 @@ async def test_surface_basename_only_when_unambiguous(vault: Path) -> None:
             body="Cuidado con `util.py` al editar.",
             priority=4,
         )
-        res = await c.ok("surface", file="src/a/util.py")
+        res = await c.ok("context", mode="surface", file="src/a/util.py")
         assert [m["match"] for m in res["memories"]] == ["mention"]
         await c.ok(
             "remember", type="lesson", title="Otro util", body="x" * 50, files=["src/b/util.py"]
         )
-        res = await c.ok("surface", file="src/a/util.py")
+        res = await c.ok("context", mode="surface", file="src/a/util.py")
         assert res["memories"] == []
 
 
@@ -174,11 +176,11 @@ async def test_surface_and_constraints_skip_expired(vault: Path) -> None:
             files=["src/v.py"],
             valid_until="2026-10-30",
         )
-        assert len((await c.ok("surface", file="src/v.py"))["memories"]) == 1
-        assert len((await c.ok("constraints", file="src/v.py"))["constraints"]) == 1
+        assert len((await c.ok("context", mode="surface", file="src/v.py"))["memories"]) == 1
+        assert len((await c.ok("context", mode="constraints", file="src/v.py"))["constraints"]) == 1
     async with mcp_client(vault, today="2026-11-05") as c:
-        assert (await c.ok("surface", file="src/v.py"))["memories"] == []
-        assert (await c.ok("constraints", file="src/v.py"))["constraints"] == []
+        assert (await c.ok("context", mode="surface", file="src/v.py"))["memories"] == []
+        assert (await c.ok("context", mode="constraints", file="src/v.py"))["constraints"] == []
 
 
 PREVIOUS = "episteme · hay un estado de sesión de una sesión anterior"
@@ -278,3 +280,27 @@ async def test_first_welcome_says_nothing_without_a_previous_state(vault: Path) 
         first = await c.ok("context", mode="welcome", session="s1")
 
     assert PREVIOUS not in first["text"]
+
+
+@pytest.mark.parametrize("mode", ["surface", "constraints"])
+async def test_file_modes_do_not_change_the_tracked_session_ids(
+    vault: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    from episteme.server import build_server
+    from episteme.session import store
+
+    monkeypatch.setattr(store, "IDS", {"session": "s1", "project_dir": "/before"})
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    server = build_server(vault, "fabrik")
+    args = {
+        "mode": mode,
+        "file": GUARD,
+        "hook_event": "PostToolUse",
+        "session": "s2",
+        "project_dir": str(elsewhere),
+    }
+
+    await server.call_tool("context", args)
+
+    assert store.IDS == {"session": "s1", "project_dir": "/before"}

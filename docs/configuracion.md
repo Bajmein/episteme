@@ -7,7 +7,7 @@
 | Argumento | Qué hace |
 | --- | --- |
 | `--vault <ruta absoluta>` | Opcional (o la variable `EPISTEME_VAULT`; manda el argumento). Por defecto, `~/.episteme`, que se crea si falta. Una ruta explícita que no es absoluta, no existe o no tiene `episteme.toml` impide arrancar: el servidor sale con código ≠ 0 sin crear nada |
-| `--project <nombre>` | Opcional. Proyecto por defecto de `remember`, `context`, `surface`, `constraints`, `session`, `plan` y `review` |
+| `--project <nombre>` | Opcional. Proyecto por defecto de `remember`, `context`, `session`, `plan` y `review` |
 
 Variables:
 

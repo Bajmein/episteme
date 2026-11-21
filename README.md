@@ -139,7 +139,7 @@ Luego faltan los hooks, los permisos y la regla del `CLAUDE.md`: los pasos está
 No hay comandos que aprender: se usa conversando con Claude. Cada memoria pasa por un ciclo: se guarda, se encuentra cuando hace falta, avisa a tiempo y, cuando queda vieja, se corrige o se ordena.
 
 <p align="center">
-  <img src="static/diagrams/ciclo-memoria.png" alt="Ciclo de una memoria en episteme, alrededor del vault: guardar con remember, encontrar con search y read, avisar a tiempo con context, constraints y surface, corregir con revise y ordenar con /episteme:mantencion" width="720">
+  <img src="static/diagrams/ciclo-memoria.png" alt="Ciclo de una memoria en episteme, alrededor del vault: guardar con remember, encontrar con search y read, avisar a tiempo con context, corregir con revise y ordenar con /episteme:mantencion" width="720">
 </p>
 
 | Tú | episteme |
@@ -185,9 +185,7 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `search` | Buscar en las notas y las memorias | |
 | `read` | Leer una nota, una sección o varias notas a la vez | |
 | `links` | Ver qué notas enlazan con otra | |
-| `context` | Dar la bienvenida de la sesión y reunir lo relevante para una tarea | ● |
-| `surface` | Mostrar lo que se sabe de un archivo | |
-| `constraints` | Mostrar las normas que aplican a un archivo | |
+| `context` | Dar la bienvenida de la sesión, reunir lo relevante para una tarea y mostrar lo que se sabe de un archivo y las normas que le aplican | ● |
 | `remember` | Guardar una memoria nueva; avisa si le faltan palabras clave o enlaces | ● |
 | `revise` | Corregir, reemplazar o archivar una nota | ● |
 | `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |

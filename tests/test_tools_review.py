@@ -20,7 +20,7 @@ async def test_tool_list_is_complete(vault: Path) -> None:
         tools = {t.name: t for t in (await c.session.list_tools()).tools}
         assert set(tools) == TOOLS - DOCS_TOOLS
         read_only = {n for n, t in tools.items() if t.annotations and t.annotations.read_only_hint}
-        assert read_only == {"search", "read", "links", "review", "surface", "constraints"}
+        assert read_only == {"search", "read", "links", "review"}
         assert all(t.description for t in tools.values())
         info = c.session.initialize_result
         assert info.instructions.startswith("episteme is the project memory")

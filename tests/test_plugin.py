@@ -192,7 +192,7 @@ def test_constraints_hook_runs_only_before_editing_tools(tool: str, matches: boo
     [matcher] = [
         e["matcher"]
         for e in settings["hooks"]["PreToolUse"]
-        if any(h.get("tool") == "constraints" for h in e["hooks"])
+        if any(h.get("input", {}).get("mode") == "constraints" for h in e["hooks"])
     ]
 
     assert matcher == EDIT_MATCHER
@@ -215,7 +215,8 @@ def test_setup_copies_the_plan_on_exit_plan_mode_and_restores_it() -> None:
         "project_dir": "${cwd}",
         "hook_event": "${hook_event_name}",
     }
-    assert constraints["tool"] == "constraints"
+    assert constraints["tool"] == "context"
+    assert constraints["input"]["mode"] == "constraints"
     assert restore["input"] == {
         "action": "restore",
         "source": "${source}",
