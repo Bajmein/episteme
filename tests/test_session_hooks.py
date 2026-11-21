@@ -425,3 +425,34 @@ def test_state_block_is_the_last_block_not_a_quoted_tag(before: str) -> None:
     title, body = block
     assert title == "Hilo del resumen" and body.startswith("## Objetivo")
     assert "al final" not in body and "Cita" not in body
+
+
+@pytest.mark.parametrize(
+    ("summary", "expected"),
+    [
+        ("Fin. <estado-sesion>## Objetivo\nX.</estado-sesion>", (None, "## Objetivo\nX.")),
+        ("<estado-sesion>\n## Objetivo\nX.\n</estado-sesion>", (None, "## Objetivo\nX.")),
+        ("<estado-sesion>\n# T\n</estado-sesion>", None),
+        ("Sin bloque </estado-sesion>", None),
+    ],
+)
+def test_state_block_inline_untitled_or_empty(
+    summary: str, expected: tuple[str | None, str] | None
+) -> None:
+    assert state_block(summary) == expected
+
+
+def test_from_compact_marks_once_and_stays_bounded() -> None:
+    store.FROM_COMPACT.clear()
+    try:
+        for i in range(store.FROM_COMPACT_MAX + 2):
+            store.mark_from_compact(f"s{i}.md")
+        store.mark_from_compact("s5.md")
+
+        assert len(store.FROM_COMPACT) == store.FROM_COMPACT_MAX
+        assert store.FROM_COMPACT[-1] == "s5.md"
+        assert store.take_from_compact("s5.md") is True
+        assert store.take_from_compact("s5.md") is False
+        assert store.take_from_compact(None) is False
+    finally:
+        store.FROM_COMPACT.clear()
