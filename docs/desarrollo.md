@@ -28,7 +28,7 @@ Los diagramas del README y de `docs/` están en `static/diagrams/`: cada uno es 
 
 ## Salud del código
 
-CodeScene Cloud analiza `main` cada día y revisa cada PR: el check «CodeScene Code Health Review (main)» aplica el perfil de quality gates «The Bare Minimum» y deja un comentario con el code health de cada archivo tocado, antes y después. El check de CodeScene del PR (quality gate «The Bare Minimum») tiene que pasar. La meta es 9 o más por archivo de `src/` y `scripts/`; un archivo nuevo o tocado no baja de 9 ni baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué. Si el code health baja, se corrige en el mismo PR.
+CodeScene Cloud analiza `main` cada día y revisa cada PR: el check «CodeScene Code Health Review (main)» aplica el perfil de quality gates «The Bare Minimum» y deja un comentario con el code health de cada archivo tocado, antes y después. Ese check tiene que pasar. La meta es 9 o más por archivo de `src/` y `scripts/`; un archivo nuevo o tocado no baja de 9 ni baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué. Si el code health baja, se corrige en el mismo PR.
 
 Para bajar la complejidad sin cambiar lo que ve el agente:
 
@@ -81,7 +81,7 @@ El MCP `codescene` deja medir el code health en local, sin esperar al check del 
 - Antes de terminar, `pre_commit_code_health_safeguard` en verde.
 - Sin el MCP, basta el check del PR.
 
-Instalación (opcional, es de cada persona: el MCP no es una dependencia del repo): el binario `cs-mcp` se instala siguiendo la documentación de [codehealth-mcp](https://github.com/codescene-oss/codehealth-mcp); en la máquina de kenno lo gestiona `mise`. Se registra una vez, para todos los proyectos, con `claude mcp add --scope user codescene -e CS_DISABLE_VERSION_CHECK=1 -- cs-mcp`. La primera vez hay que iniciar sesión con la tool `login`, que abre el navegador. Las instrucciones originales (en inglés) están en [AGENTS-standalone.md](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/AGENTS-standalone.md).
+Instalación (opcional, es de cada persona: el MCP no es una dependencia del repo): el binario `cs-mcp` se instala siguiendo la documentación de [codehealth-mcp](https://github.com/codescene-oss/codehealth-mcp). Se registra una vez, para todos los proyectos, con `claude mcp add --scope user codescene -e CS_DISABLE_VERSION_CHECK=1 -- cs-mcp`. La primera vez hay que iniciar sesión con la tool `login`, que abre el navegador. Las instrucciones originales (en inglés) están en [AGENTS-standalone.md](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/AGENTS-standalone.md).
 
 ## Medir variantes de búsqueda
 
