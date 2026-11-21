@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from episteme.engine import Engine
 
-RANKED_MAX = 10  # welcome: most entries in "Memorias"
+RANKED_MAX = 8  # welcome: most entries in "Memorias"
 
 WELCOME_RESERVE = 160  # welcome: minimum chars of the 4000 held back for the "no caben aquí" line
 
@@ -111,7 +111,7 @@ def welcome_notice(project: str, norms: int, reminders: int) -> str:
     )
 
 
-SHARED_MAX = 3  # welcome: most `_shared` memories listed ahead of the project's own
+SHARED_MAX = 1  # welcome: most `_shared` memories listed ahead of the project's own
 
 
 class _Buckets(NamedTuple):
@@ -152,8 +152,13 @@ def _bucket(rows: list[Any], now: dt.date, upcoming_days: int) -> _Buckets:
     return _Buckets(overdue, upcoming, norms, scored)
 
 
-def _fill_page(page: _Page, buckets: _Buckets, project: str, upcoming_days: int) -> None:
-    """List the groups: overdue, norms, then (reserve released) upcoming and memories."""
+def _fill_page(
+    page: _Page, buckets: _Buckets, project: str, upcoming_days: int, brief: bool = False
+) -> None:
+    """List the groups: overdue, norms, then (reserve released) upcoming and memories.
+
+    ``brief`` stops after the norms.
+    """
     page.missed["reminders"] = page.add_group(
         [(r, None) for r in buckets.overdue], "Recordatorios vencidos:", "reminder", _reminder_line
     )
@@ -161,6 +166,8 @@ def _fill_page(page: _Page, buckets: _Buckets, project: str, upcoming_days: int)
         [(r, None) for r in buckets.norms], "Normas:", "norm", entry_line
     )
     page.release_reserve()
+    if brief:
+        return
     page.add_group(
         [(r, None) for r in buckets.upcoming],
         f"Vencen pronto ({upcoming_days} días):",
@@ -173,13 +180,17 @@ def _fill_page(page: _Page, buckets: _Buckets, project: str, upcoming_days: int)
 
 
 def welcome(
-    engine: Engine, project: str | None, upcoming_days: int = UPCOMING_DAYS
+    engine: Engine,
+    project: str | None,
+    upcoming_days: int = UPCOMING_DAYS,
+    brief: bool = False,
 ) -> tuple[str, list[dict[str, Any]]]:
     """The welcome text (4000 chars max).
 
     Sections, in order: overdue reminders, "Normas" (every active priority-5 memory, whatever
     its age), "Vencen pronto" (reminders due within ``upcoming_days``) and "Memorias" (the
-    10 best by score, without the norms already listed). At most ``SHARED_MAX`` of those are
+    ``RANKED_MAX`` best by score, without the norms already listed); ``brief`` (the resend
+    after a compaction) keeps only the first two. At most ``SHARED_MAX`` of those are
     ``_shared`` ones (when the project is not ``_shared``); the extra ``_shared`` memories only
     fill the slots left once the others are listed. A reserve of ``max(WELCOME_RESERVE, longest
     notice for the project)`` characters is held back: if an overdue reminder or a priority-5
@@ -193,7 +204,7 @@ def welcome(
     header = f"episteme · memoria de {project}"
     reserve = max(WELCOME_RESERVE, len(welcome_notice(project, 99999, 99999)) + 1)
     page = _Page(header, 4000 - len(header) - 1 - reserve, reserve)
-    _fill_page(page, buckets, project, upcoming_days)
+    _fill_page(page, buckets, project, upcoming_days, brief)
     missed = any(page.missed.values())
     if not page.entries and not missed:
         return "", []

@@ -68,6 +68,7 @@ async def test_case10_surface_and_constraints(vault: Path) -> None:
             type="insight",
             title="Guard de Serena revisado",
             body=f"Se revisó `{GUARD}` en el change 005.",
+            priority=4,
         )
         surf = await c.ok("surface", file=GUARD)
         got = [(m["path"], m["match"]) for m in surf["memories"]]
@@ -140,7 +141,11 @@ async def test_surface_excludes_session_and_reminder(vault: Path) -> None:
 async def test_surface_basename_only_when_unambiguous(vault: Path) -> None:
     async with mcp_client(vault) as c:
         await c.ok(
-            "remember", type="insight", title="Sobre util", body="Cuidado con `util.py` al editar."
+            "remember",
+            type="insight",
+            title="Sobre util",
+            body="Cuidado con `util.py` al editar.",
+            priority=4,
         )
         res = await c.ok("surface", file="src/a/util.py")
         assert [m["match"] for m in res["memories"]] == ["mention"]

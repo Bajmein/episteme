@@ -43,7 +43,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|mcp__serena__.*",
+        "matcher": "Edit|Write|mcp__serena__replace_.*|mcp__serena__insert_.*|mcp__serena__delete_lines|mcp__serena__rename_symbol|mcp__serena__safe_delete_symbol",
         "hooks": [
           {
             "type": "mcp_tool",

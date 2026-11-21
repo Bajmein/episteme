@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import runpy
 import tomllib
 from pathlib import Path
@@ -167,12 +168,43 @@ def test_setup_hooks_drive_the_session_state_without_checkpoint() -> None:
     assert "checkpoint" not in tools
 
 
+EDIT_MATCHER = (
+    "Edit|Write|mcp__serena__replace_.*|mcp__serena__insert_.*|mcp__serena__delete_lines"
+    "|mcp__serena__rename_symbol|mcp__serena__safe_delete_symbol"
+)
+
+
+@pytest.mark.parametrize(
+    ("tool", "matches"),
+    [
+        ("Edit", True),
+        ("Write", True),
+        ("mcp__serena__replace_symbol_body", True),
+        ("mcp__serena__insert_after_symbol", True),
+        ("mcp__serena__rename_symbol", True),
+        ("Read", False),
+        ("mcp__serena__find_symbol", False),
+        ("mcp__serena__get_symbols_overview", False),
+    ],
+)
+def test_constraints_hook_runs_only_before_editing_tools(tool: str, matches: bool) -> None:
+    settings = _json(SKILLS / "setup" / "settings.json")
+    [matcher] = [
+        e["matcher"]
+        for e in settings["hooks"]["PreToolUse"]
+        if any(h.get("tool") == "constraints" for h in e["hooks"])
+    ]
+
+    assert matcher == EDIT_MATCHER
+    assert bool(re.fullmatch(matcher, tool)) is matches
+
+
 def test_setup_copies_the_plan_on_exit_plan_mode_and_restores_it() -> None:
     settings = _json(SKILLS / "setup" / "settings.json")
     entries = {e.get("matcher"): e["hooks"] for e in settings["hooks"]["PreToolUse"]}
 
     [save] = entries["ExitPlanMode"]
-    [constraints] = entries["Edit|Write|mcp__serena__.*"]
+    [constraints] = entries[EDIT_MATCHER]
     restore = _hook(settings, "SessionStart")[1]
     assert save["type"] == "mcp_tool" and save["tool"] == "plan"
     assert save["input"] == {

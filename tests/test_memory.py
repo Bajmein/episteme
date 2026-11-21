@@ -209,9 +209,56 @@ def test_welcome_caps(engine: Engine) -> None:
             force=True,
         )  # fmt: skip
     text, entries = memory.welcome(engine, "fabrik")
-    assert sum(e["kind"] == "memory" for e in entries) == 10
+    assert sum(e["kind"] == "memory" for e in entries) == 8
     assert len(text) <= 4000
     assert all(len(line) < 400 for line in text.splitlines())
+
+
+def _mentioning(engine: Engine, title: str, priority: int) -> str:
+    return memory.remember(
+        engine, "insight", title, f"{title}: ojo con `src/zeta/borde.py` al tocarlo.",
+        priority=priority, force=True,
+    )["path"]  # fmt: skip
+
+
+def test_surface_mention_needs_priority_4(engine: Engine) -> None:
+    low = _mentioning(engine, "Mención baja del borde", 3)
+    high = _mentioning(engine, "Mención alta del borde", 4)
+
+    _, data = memory.surface(engine, "src/zeta/borde.py", None, "fabrik", 3)
+
+    assert [(m["path"], m["match"]) for m in data["memories"]] == [(high, "mention")]
+    assert low not in {m["path"] for m in data["memories"]}
+
+
+def test_surface_lists_at_most_two_mentions_after_the_files_matches(engine: Engine) -> None:
+    by_files = memory.remember(
+        engine, "lesson", "Lección con archivo borde", "x" * 50, files=["src/zeta/borde.py"]
+    )["path"]
+    for i in range(4):
+        _mentioning(engine, f"Mención {i} del borde", 4)
+
+    _, data = memory.surface(engine, "src/zeta/borde.py", None, "fabrik", 10)
+
+    matches = [m["match"] for m in data["memories"]]
+    assert data["memories"][0]["path"] == by_files
+    assert matches == ["files", "mention", "mention"]
+
+
+def test_task_context_leaves_out_the_norms_already_delivered(engine: Engine) -> None:
+    norm = memory.remember(
+        engine, "decision", "Norma del borde zeta", "Siempre revisar el borde zeta.", priority=5
+    )["path"]
+    other = memory.remember(
+        engine, "decision", "Decisión del borde zeta", "El borde zeta usa otro formato.", priority=4
+    )["path"]
+
+    _, full = memory.task_context(engine, "borde zeta", "fabrik", 2000)
+    _, skipped = memory.task_context(engine, "borde zeta", "fabrik", 2000, skip={norm, other})
+
+    assert {norm, other} <= {e["path"] for e in full}
+    assert norm not in {e["path"] for e in skipped}
+    assert other in {e["path"] for e in skipped}
 
 
 def test_review_reports_memory_without_project(engine: Engine, vault: Path) -> None:

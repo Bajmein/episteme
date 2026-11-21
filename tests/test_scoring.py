@@ -65,8 +65,8 @@ def test_welcome_caps_shared(vault: Path, engine: Engine) -> None:
     engine.index.refresh()
     _, entries = memory.welcome(engine, "fabrik")
     paths = _memory_paths(entries)
-    assert len(paths) == 10
-    assert sum(p.startswith("memory/_shared/") for p in paths) == 3
+    assert len(paths) == 8
+    assert sum(p.startswith("memory/_shared/") for p in paths) == 1
 
 
 def test_welcome_shared_fills_gaps(vault: Path, engine: Engine) -> None:
@@ -77,8 +77,8 @@ def test_welcome_shared_fills_gaps(vault: Path, engine: Engine) -> None:
     engine.index.refresh()
     _, entries = memory.welcome(engine, "fabrik")
     paths = _memory_paths(entries)
-    assert sum(p.startswith("memory/_shared/") for p in paths) > 3
-    assert len(paths) == 10
+    assert sum(p.startswith("memory/_shared/") for p in paths) > 1
+    assert len(paths) == 8
 
 
 def test_task_needs_two_terms_of_four(vault: Path, engine: Engine) -> None:

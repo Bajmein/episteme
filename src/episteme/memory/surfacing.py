@@ -24,6 +24,9 @@ from episteme.vault import MEMORY, today
 if TYPE_CHECKING:
     from episteme.engine import Engine
 
+MENTION_MIN_PRIORITY = 4  # surface: a memory matched only by mentioning the file needs this
+MENTION_MAX = 2  # surface: most memories matched by mention in one answer
+
 
 def _file_memories(
     engine: Engine, project: str, type_clause: str
@@ -66,7 +69,15 @@ def _mention_matches(
         snippets=False,
     )
     hit_paths = {h.path for h in hits}
-    return _by_priority([r for r in rows if r["path"] in hit_paths and r["path"] not in seen])
+    return _by_priority(
+        [
+            r
+            for r in rows
+            if r["path"] in hit_paths
+            and r["path"] not in seen
+            and r["priority"] >= MENTION_MIN_PRIORITY
+        ]
+    )
 
 
 def _surface_text(rel: str, picked: list[tuple[Any, str]], omitted: int) -> str:
@@ -83,9 +94,12 @@ def _pick(
     """Up to ``limit`` of ``ranked`` not in ``skip``, and how many ``skip`` left out.
 
     Skipping before cutting: if the first ``limit`` were already shown, the next ones come.
+    At most ``MENTION_MAX`` of them are matches by mention.
     """
     fresh = [(r, m) for r, m in ranked if r["path"] not in (skip or ())]
-    return fresh[:limit], len(ranked) - len(fresh)
+    by_files = [(r, m) for r, m in fresh if m != "mention"]
+    by_mention = [(r, m) for r, m in fresh if m == "mention"][:MENTION_MAX]
+    return (by_files + by_mention)[:limit], len(ranked) - len(fresh)
 
 
 def _surface_data(rel: str, chosen: list[tuple[Any, str]]) -> dict[str, Any]:
@@ -129,10 +143,8 @@ def surface(
     by_mention = _mention_matches(engine, rel, project, rows, files, by_files)
     ranked = [(r, "files") for r in by_files] + [(r, "mention") for r in by_mention]
     picked, omitted = _pick(ranked, skip, limit)
-    # With skip (a hook with a session) the data is what the text shows, so that the
-    # session records those as shown; without it, the first ``limit``.
-    data = _surface_data(rel, picked if skip is not None else ranked[:limit])
-    return _surface_text(rel, picked, omitted), data
+    # The data is what the text shows, so that a hook session records those as shown.
+    return _surface_text(rel, picked, omitted), _surface_data(rel, picked)
 
 
 def constraints(

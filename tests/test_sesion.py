@@ -152,6 +152,23 @@ async def test_welcome_after_compact_or_clear_brings_the_session_trail(vault: Pa
         assert "systemMessage" not in nxt and "De esta sesión" not in nxt
 
 
+@pytest.mark.parametrize(("source", "full"), [("compact", False), ("clear", True)])
+async def test_welcome_is_brief_after_compact_and_full_after_clear(
+    vault: Path, source: str, full: bool
+) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        first = await c.ok("context", mode="welcome", session="s")
+        assert "Normas:" in first["text"] and "Memorias:" in first["text"]
+
+        raw = await c.ok(
+            "context", mode="welcome", session="s", hook_event="SessionStart", source=source
+        )
+
+        text = json.loads(raw)["hookSpecificOutput"]["additionalContext"]
+        assert "Normas:" in text
+        assert ("Memorias:" in text) is full
+
+
 def test_recovered_notice_wording() -> None:
     assert prompting.recovered_notice("compact", 12, 2) == (
         "episteme · contexto recuperado tras compactar: 12 memorias del proyecto y 2 de esta sesión"
