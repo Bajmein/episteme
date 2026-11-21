@@ -31,17 +31,60 @@ jobs:
       - run: uv run deptry .
       - run: uv run zizmor .github/workflows
 
+  # Decide si un PR necesita tests: solo Markdown, docs/ o static/ (fuera de src/, tests/,
+  # plugin/ y plugin-docs/) no los necesita. En main corren siempre.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          code=false
+          files=$(gh pr diff "$PR" --repo "$REPO" --name-only)
+          [ -n "$files" ] || code=true
+          while IFS= read -r f; do
+            case "$f" in
+              src/*|tests/*|plugin/*|plugin-docs/*) code=true ;;
+              *.md|docs/*|static/*|LICENSE) ;;
+              *) code=true ;;
+            esac
+          done <<< "$files"
+          echo "Cambia código o config: $code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   test:
+    # Un job saltado cuenta como aprobado en el check obligatorio. Si changes falla, corre igual.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write   # subida a Codecov por OIDC, sin token
     env:
       PYTHONUTF8: "1"   # los tests leen fixtures UTF-8 con read_text() sin encoding
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2   # Codecov asocia el informe al commit del PR, no al merge sintético
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           cache-python: true   # la caché de uv ya viene activa en runners de GitHub
       - run: uv sync --locked
-      - run: uv run pytest
+      - run: uv run pytest -n auto --cov --cov-report=xml   # -n: un proceso por núcleo (pytest-xdist)
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: coverage.xml
+          disable_search: true
+          flags: linux

@@ -58,6 +58,8 @@ dev = [
     "bandit>=1.9.4",
     "deptry>=0.25.1",
     "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.17.5",
     "snowballstemmer>=3.1.1",
     "ty>=0.0.103",
@@ -97,3 +99,15 @@ paths = ["src", "scripts", "tests", "plugin", "plugin-docs"]
 ignore_names = [
     "row_factory", "anyio_backend", "pytestmark", "do_GET", "log_message", "ignore_aliases"
 ]
+
+[tool.coverage.run]
+source = ["episteme"]
+branch = true
+# Los tests de integración arrancan el servidor en un subproceso: medirlo también.
+patch = ["subprocess"]
+# El cliente MCP termina el servidor con SIGTERM si no sale solo: guardar los datos igual.
+sigterm = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

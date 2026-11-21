@@ -65,7 +65,12 @@ async def mcp_client(
     params = StdioServerParameters(
         command=sys.executable,
         args=args,
-        env={"EPISTEME_TODAY": today, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
+        env={
+            "EPISTEME_TODAY": today,
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            # With --cov, coverage's subprocess patch measures the server through these.
+            **{k: v for k, v in os.environ.items() if k.startswith("COVERAGE_")},
+        },
     )
     with open(os.devnull, "w") as errlog:
         async with (

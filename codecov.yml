@@ -1,0 +1,18 @@
+# Codecov informa, no bloquea: los checks obligatorios son lint y test (ruleset de main).
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# Linux y Windows suben su parte por separado (flags linux y windows); se combinan.
+flag_management:
+  default_rules:
+    carryforward: false
+
+comment:
+  layout: "condensed_header, diff, flags, condensed_files"
+  require_changes: true
