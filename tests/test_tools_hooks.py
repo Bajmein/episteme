@@ -280,3 +280,27 @@ async def test_first_welcome_says_nothing_without_a_previous_state(vault: Path) 
         first = await c.ok("context", mode="welcome", session="s1")
 
     assert PREVIOUS not in first["text"]
+
+
+@pytest.mark.parametrize("mode", ["surface", "constraints"])
+async def test_file_modes_do_not_change_the_tracked_session_ids(
+    vault: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    from episteme.server import build_server
+    from episteme.session import store
+
+    monkeypatch.setattr(store, "IDS", {"session": "s1", "project_dir": "/before"})
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    server = build_server(vault, "fabrik")
+    args = {
+        "mode": mode,
+        "file": GUARD,
+        "hook_event": "PostToolUse",
+        "session": "s2",
+        "project_dir": str(elsewhere),
+    }
+
+    await server.call_tool("context", args)
+
+    assert store.IDS == {"session": "s1", "project_dir": "/before"}

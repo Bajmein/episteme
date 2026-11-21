@@ -123,7 +123,8 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         this tool is not read-only.
         """
         hookmode.check(hook_event)
-        sessions.track_ids(hook_event, session, transcript, project_dir)
+        if mode not in _FILE_MODES:  # file modes fire on every tool use: never retarget the ids
+            sessions.track_ids(hook_event, session, transcript, project_dir)
         with engine.session():
             if mode == "welcome":
                 call = _Call(engine, store, session, project, hook_event, project_dir)
