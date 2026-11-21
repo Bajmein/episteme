@@ -375,3 +375,31 @@ async def test_a_link_from_the_session_zone_to_a_memory_is_never_a_state(vault: 
     assert saved["created"] is True and saved["path"] != "sesiones/fabrik/zz-link.md"
     assert "session zone" in archived
     assert (vault / memory["path"]).read_text(encoding="utf-8") == before
+
+
+async def test_restore_after_clear_finds_the_state_the_agent_saved_without_project_dir(
+    vault: Path, tmp_path: Path
+) -> None:
+    here = _worktree(tmp_path, "a")
+    async with mcp_client(vault) as c:
+        await _hook_prompt(c, "s-1", OLD_TRANSCRIPT)
+        saved = await c.ok("session", action="save", title="Hilo", body=BODY)
+        await c.ok(
+            "session",
+            action="end",
+            transcript=OLD_TRANSCRIPT,
+            reason="clear",
+            hook_event="SessionEnd",
+        )
+        text = await c.ok(
+            "session",
+            action="restore",
+            source="clear",
+            transcript=NEW_TRANSCRIPT,
+            session="s-2",
+            project_dir=here,
+            hook_event="SessionStart",
+        )
+
+    context = json.loads(text)["hookSpecificOutput"]["additionalContext"]
+    assert "«Hilo»" in context and f"estado={saved['path']}" in context

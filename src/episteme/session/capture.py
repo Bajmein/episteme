@@ -32,7 +32,9 @@ _HEADING = re.compile(r"^(#{1,4})(?=\s)", re.MULTILINE)
 _SECTION = re.compile(rf"^{re.escape(COMPACT_HEADING)}[ \t]*$", re.MULTILINE)
 _NEXT_SECTION = re.compile(r"^#{1,2}\s", re.MULTILINE)
 # The state block gate asks the summary for; the last one wins.
-_STATE_BLOCK = re.compile(r"<estado-sesion>(.*?)</estado-sesion>", re.DOTALL)
+_BLOCK_OPEN = "<estado-sesion>"
+_BLOCK_CLOSE = "</estado-sesion>"
+_BLOCK_OPEN_LINE = re.compile(rf"^[ \t]*{_BLOCK_OPEN}[ \t]*$", re.MULTILINE)
 _SESSION_ID = re.compile(r"[\w-]{1,128}")
 # A hook variable Claude Code did not substitute, e.g. "${compact_summary}" on an older version.
 _PLACEHOLDER = re.compile(r"\$\{\w+\}")
@@ -74,15 +76,31 @@ def without_summary(body: str) -> str:
     return (body[: found.start()].rstrip() + (f"\n\n{tail}" if tail else "")).strip()
 
 
+def _last_block(text: str) -> str | None:
+    """What lies between the last ``</estado-sesion>`` and the opening tag before it.
+
+    The summary may quote the tags earlier (repeating the instructions), so the opening tag
+    is the last one alone on its line before the closing one, else the last one at all.
+    """
+    end = text.rfind(_BLOCK_CLOSE)
+    if end < 0:
+        return None
+    alone = [m.end() for m in _BLOCK_OPEN_LINE.finditer(text, 0, end)]
+    if alone:
+        return text[alone[-1] : end]
+    start = text.rfind(_BLOCK_OPEN, 0, end)
+    return text[start + len(_BLOCK_OPEN) : end] if start >= 0 else None
+
+
 def state_block(summary: str | None) -> tuple[str | None, str] | None:
     """The last ``<estado-sesion>`` block of the summary as (title or None, body), or None.
 
     The title is its leading ``# `` line; credentials in it are redacted (generated text).
     """
-    blocks = _STATE_BLOCK.findall(clean_summary(summary))
-    if not blocks:
+    block = _last_block(clean_summary(summary))
+    if block is None:
         return None
-    text = redact_secrets(blocks[-1]).strip()
+    text = redact_secrets(block).strip()
     title: str | None = None
     first, _, rest = text.partition("\n")
     if first.startswith("# "):

@@ -13,6 +13,7 @@ from conftest import TODAY, mcp_client
 from episteme import session as sessions
 from episteme.engine import Engine
 from episteme.session import store
+from episteme.session.capture import state_block
 
 pytestmark = pytest.mark.anyio
 
@@ -403,3 +404,24 @@ async def test_capture_ignores_an_unsubstituted_placeholder(vault: Path) -> None
         res = await c.ok("session", action="capture", summary="${compact_summary}")
 
     assert res == {"path": None, "created": False}
+
+
+@pytest.mark.parametrize(
+    "before",
+    [
+        "Pidió el formato con el bloque `<estado-sesion>` al final.\n\n",
+        "Cita: `<estado-sesion>` y `</estado-sesion>`.\n\n",
+        "",
+    ],
+)
+def test_state_block_is_the_last_block_not_a_quoted_tag(before: str) -> None:
+    summary = f"<analysis>x</analysis>\n{before}9. Next:\n   Seguir.\n\n" + _summary()[
+        len("<analysis>\nborrador\n</analysis>\n\n") :
+    ]
+
+    block = state_block(summary)
+
+    assert block is not None
+    title, body = block
+    assert title == "Hilo del resumen" and body.startswith("## Objetivo")
+    assert "al final" not in body and "Cita" not in body

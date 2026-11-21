@@ -93,9 +93,13 @@ def _remember_current(key: tuple[str, str], rel: str) -> None:
 
 
 def _current_of(key: tuple[str, str]) -> str | None:
-    """``CURRENT`` of ``key``; without a worktree, the one this project set last."""
+    """``CURRENT`` of ``key``; without a worktree, the one this project set last.
+
+    With a worktree and no entry for it, the one set without a worktree (an agent call that
+    passed no project_dir, e.g. a save before /clear): it is still this process's state.
+    """
     if key[1]:
-        return CURRENT.get(key)
+        return CURRENT.get(key) or CURRENT.get((key[0], ""))
     mine = [rel for (project, _), rel in CURRENT.items() if project == key[0]]
     return mine[-1] if mine else None
 
