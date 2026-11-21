@@ -24,7 +24,7 @@ Recibes un encargo de una línea: `desde=<fecha ISO o inicio> estado=<ruta o nue
    uv run --no-project --python 3.14 python -I ${CLAUDE_PLUGIN_ROOT}/skills/sesion/scripts/transcript_digest.py '<transcript>' --since <desde> --max-chars 80000
    ```
 
-   No corras ningún otro comando. Si sale `sin novedades`, responde eso y termina. Si sale con error, responde el error en una línea y termina. Si se niega el permiso, responde «permiso del script denegado: vuelve a correr /episteme:setup (la ruta del plugin cambia al actualizarlo)» y termina.
+   No corras ningún otro comando. Si sale `sin novedades`, responde eso y termina. Si sale con error, responde el error en una línea y termina. Si se niega el permiso, responde «permiso del script denegado: reinicia Claude Code tras actualizar el plugin, y quita las reglas `deny` o `ask` que cubran el comando» y termina.
    Si el encargo no trae `desde` o no es una fecha ISO, omite `--since`.
    Anota la línea `- hasta: <fecha>` de la cabecera del resumen: es hasta dónde leíste y la pasas al guardar.
 3. **Lee el estado y la plantilla**: `session(action="show", project=<proyecto>)` y `session(action="template")`.
