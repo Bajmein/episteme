@@ -33,10 +33,6 @@ RECALL_FEW_TERMS = 3
 WRITES: int = 0  # memories written in this process by agent calls (remember, revise); see server
 STATE_SAVES: int = 0  # session states saved in this process by agent calls; see server
 
-NUDGE_STATE_EVERY = 12  # messages without saving the session state before the nudge
-GATE_MIN_PROMPTS = 5  # messages a session needs before a manual /compact can be blocked
-GATE_STALE = 5  # messages since the last state save that make the state stale for the gate
-
 
 @dataclass
 class SessionState:
@@ -49,7 +45,6 @@ class SessionState:
     state_baseline: int | None = None
     state_saved_at: int = 0
     state_nudged_at: int = 0
-    gate_blocked_at: int | None = None
 
 
 _SESSIONS: dict[str, SessionState] = {}
@@ -356,8 +351,13 @@ def sync_state_saves(st: SessionState) -> None:
         st.state_saved_at = st.prompts
 
 
-def state_nudge(st: SessionState, every: int = NUDGE_STATE_EVERY) -> str:
-    """A reminder to update the session state after ``every`` messages without saving it."""
+def state_nudge(st: SessionState, every: int) -> str:
+    """A reminder to update the session state after ``every`` messages without saving it.
+
+    ``every == 0`` turns it off (the default of ``[session] nudge_every``).
+    """
+    if every == 0:
+        return ""
     stale = st.prompts - st.state_saved_at
     if stale < every or st.prompts - st.state_nudged_at < every:
         return ""

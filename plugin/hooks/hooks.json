@@ -1,9 +1,9 @@
 {
-  "description": "Despierta a Claude tras /compact o /clear para que lance el extractor de episteme sin esperar al siguiente mensaje.",
+  "description": "Despierta a Claude tras /clear para que lance el extractor de episteme sin esperar al siguiente mensaje.",
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "compact|clear",
+        "matcher": "clear",
         "hooks": [
           {
             "type": "command",

@@ -1,5 +1,5 @@
-"""Output format per ``hook_event``: a hookSpecificOutput JSON object, or nothing for the
-silent events (PreCompact, PostCompact, SessionEnd)."""
+"""Output format per ``hook_event``: a hookSpecificOutput JSON object, plain compaction
+instructions for PreCompact, or nothing for the silent events (PostCompact, SessionEnd)."""
 
 from __future__ import annotations
 
@@ -66,14 +66,22 @@ def paint(text: str) -> str:
     return f"{NOTICE_STYLE}{text}{NOTICE_RESET}"
 
 
-def render_block(reason: str) -> str:
-    """The one output with ``decision``: block a manual ``/compact`` once, saying why.
+def render_instructions(text: str) -> str:
+    """Plain text for ``PreCompact``: Claude Code adds it to the compaction instructions.
 
-    Only ``session(action="gate")`` uses it, on ``PreCompact``; Claude Code shows the reason
-    to the person.
+    Each line is cleaned like ``clean_line`` (no escape sequences or control characters) but
+    not shortened, and the whole is cut at ``CAP`` like ``render``. It never starts with
+    ``{``, which Claude Code would parse as JSON. Nothing to say is an empty string.
     """
-    out = {"decision": "block", "reason": clean_line(reason, NOTICE_MAX)}
-    return json.dumps(out, ensure_ascii=False)
+    lines = (clean_line(line, len(line) + 1).rstrip() for line in str(text).splitlines())
+    text = "\n".join(lines).strip("\n")
+    if not text.strip():
+        return ""
+    if text.startswith("{"):
+        text = f"episteme · {text}"
+    if len(text) > CAP:
+        text = clip_at_newline(text, CAP - len(CUT_MARK)) + CUT_MARK
+    return text
 
 
 def render(event: str, text: str, notice: str = "") -> str:

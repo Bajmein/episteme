@@ -1,6 +1,6 @@
 ---
 name: sesion
-description: Guarda, retoma o muestra el estado de la sesión en episteme (la nota viva de la tarea en sesiones/<proyecto>/). Úsala con /episteme:sesion, cuando pidan «guarda el estado de la sesión», «retoma donde quedé» o «¿en qué estábamos?», y cuando un aviso o un bloqueo de /compact de episteme diga que el estado no se guarda.
+description: Guarda, retoma o muestra el estado de la sesión en episteme (la nota viva de la tarea en sesiones/<proyecto>/). Úsala con /episteme:sesion, cuando pidan «guarda el estado de la sesión», «retoma donde quedé» o «¿en qué estábamos?», y cuando un aviso de episteme diga que el estado no se guarda o nombre el estado de una sesión anterior.
 argument-hint: "[guardar [nota] | retomar | plantilla [tipo]]"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "[guardar [nota] | retomar | plantilla [tipo]]"
 
 Argumentos: $ARGUMENTS (en agy, lo que se escribió después del comando)
 
-El estado de la sesión es una nota por línea de trabajo en `sesiones/<proyecto>/` del vault, que solo cambia el tool `session`. Sobrevive a `/compact` y `/clear`: el hook `SessionStart` lo devuelve al contexto y, tras compactar o limpiar, el agente `episteme:extractor` lo pone al día con el transcript.
+El estado de la sesión es una nota por línea de trabajo en `sesiones/<proyecto>/` del vault, que solo cambia el tool `session`. Sobrevive a `/compact` y `/clear`. Al compactar, el propio resumen escribe el estado al día y episteme lo guarda. El hook `SessionStart` lo devuelve al contexto. El agente `episteme:extractor` lo pone al día con el transcript en tres casos: tras `/clear`, tras una compactación cuyo resumen no trajo el estado y al retomar el estado de otra sesión. Una sesión nueva no lo carga: su bienvenida solo lo nombra.
 
 Solo se usan los tools de episteme. En Claude Code, si salen como diferidos, cárgalos con `ToolSearch select:mcp__episteme__session,mcp__episteme__search,mcp__episteme__remember`. Si no aparecen ni diferidos, dilo y detente: no guardes el estado en otro sitio.
 
@@ -30,7 +30,7 @@ Según el primer argumento: `retomar` va a «Retomar», `plantilla` a «Plantill
 
 ## Retomar
 
-1. `session(action="restore")`. Si `found` es falso, dilo y no inventes un estado.
+1. `session(action="restore")`. Si `found` es falso, dilo y no inventes un estado. Si la respuesta trae `extract` (el estado lo guardó otra sesión y quedó parte de su transcript sin leer), lanza en segundo plano el agente `episteme:extractor` con ese encargo y sigue sin esperarlo.
 2. Comprueba contra el repo lo que dice (rama, archivos, commits): pudo cambiar desde que se guardó. Si algo no coincide, dilo antes de seguir.
 3. Resume en pocas líneas dónde quedó y sigue por «Siguiente paso», salvo que la persona diga otra cosa.
 

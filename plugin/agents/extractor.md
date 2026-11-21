@@ -1,6 +1,6 @@
 ---
 name: extractor
-description: Extrae el estado de la sesión del transcript tras /compact o /clear y lo guarda en episteme. Lánzalo solo cuando un hook de episteme lo pida.
+description: Extrae el estado de la sesión del transcript (tras /clear, tras un /compact cuyo resumen no trajo el estado o al retomar el de otra sesión) y lo guarda en episteme. Lánzalo solo cuando episteme lo pida con una orden de extracción.
 model: sonnet
 effort: low
 tools:

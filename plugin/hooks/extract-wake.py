@@ -1,13 +1,17 @@
-"""SessionStart (compact|clear) hook: wake Claude so it launches the extractor right away.
+"""SessionStart (clear) hook: wake Claude so it launches the extractor right away.
 
-After /compact or /clear the model takes no turn on its own, so the extraction order that
+After /clear the model takes no turn on its own, so the extraction order that
 ``session restore`` puts in the context would wait for the next user message. Run as an
 ``asyncRewake`` command hook, this script exits 2 and Claude Code wakes the model with the
 stderr text as a system reminder.
 
-It does not read the vault. It only wakes the model when the event is a compaction or a
-/clear with a transcript, and the project (or the user) has episteme's ``session`` restore
-hook, the one that adds the extraction order: elsewhere it stays silent.
+After a compaction it stays silent: the compaction summary already ends with the session
+state (episteme's PreCompact hook asks for it), and when it does not, the extraction order
+waits for the next message.
+
+It does not read the vault. It only wakes the model after a /clear with a transcript, when
+the project (or the user) has episteme's ``session`` restore hook, the one that adds the
+extraction order: elsewhere it stays silent.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-SOURCES = ("compact", "clear")
+SOURCES = ("clear",)
 WAKE = 2
 MESSAGE = (
     "episteme · despertar tras /{source}: si el contexto de SessionStart trae "
@@ -59,7 +63,7 @@ def _has_restore_hook(path: Path) -> bool:
 
 
 def should_wake(data: dict[str, Any]) -> bool:
-    """True after a compaction or /clear with a transcript, in a project wired to episteme."""
+    """True after a /clear with a transcript, in a project wired to episteme."""
     if data.get("source") not in SOURCES or not data.get("transcript_path"):
         return False
     project_dir = data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or ""

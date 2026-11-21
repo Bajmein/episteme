@@ -4,6 +4,22 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Cambiado
+
+- **Al compactar, el resumen escribe el estado de la sesión.** El hook `PreCompact` (`session(action="gate")`) ya no frena el `/compact` manual: devuelve instrucciones para que el resumen termine con el estado al día entre `<estado-sesion>` y `</estado-sesion>`, y `PostCompact` (`capture`) lo guarda como el estado. Si lo último lo guardó el extractor, las instrucciones llevan su cuerpo. Tras compactar, `restore` responde una línea en lugar de repetir el estado, y no hace falta extractor. Si el resumen no trae el bloque, todo sigue como antes, pero el estado vuelve sin el resumen, que ya está en el contexto. `[session] compact_state = false` lo apaga.
+- **Un estado por sesión.** El estado en uso es el del proceso o el de esta sesión de Claude Code (`session_id`), nunca «el más reciente de la carpeta»: una sesión nueva, o una segunda ventana en la misma carpeta, ya no reescribe el estado de otra. `/episteme:sesion retomar` toma el más reciente a propósito.
+- **Una sesión nueva no carga el estado anterior.** Su primera bienvenida lo nombra en una línea, con su ruta y cuándo se guardó, y dice cómo retomarlo.
+- **Extracción al retomar.** El estado guarda la ruta de su transcript (`transcript`). Si se retoma en otra sesión, `restore` pide extraer lo que esa sesión dijo después del último guardado, aunque se cerrara sin compactar ni limpiar.
+- El hook de despertar del plugin (`extract-wake.py`) solo actúa tras `/clear`.
+- El aviso «el estado de la sesión no se actualiza desde hace N mensajes» está apagado por defecto (`[session] nudge_every = 0`; con 1 o más vuelve).
+- El registro de actividad anota la sesión también en las llamadas del agente (la que pasaron los hooks).
+
+### Obsoleto
+
+- `[session] block_manual_compact` se acepta y se ignora; se quitará en la versión menor siguiente. El parámetro `trigger` de `session` también se ignora.
+
+**Tras actualizar el plugin, vuelve a correr `/episteme:setup`**: los hooks `UserPromptSubmit` y `PostCompact` pasan `${cwd}` y `${transcript_path}`, y `PreCompact` ya no pasa `${trigger}`.
+
 ### Corregido
 
 - El servidor anuncia su versión al conectarse (`serverInfo.version`, antes vacía), y `episteme.__version__` se lee de los metadatos del paquete en lugar de estar escrita a mano (seguía en 0.11.0). La versión solo se fija en `pyproject.toml`.

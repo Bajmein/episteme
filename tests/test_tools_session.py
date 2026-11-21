@@ -91,7 +91,20 @@ async def test_save_refuses_bad_arguments(vault: Path, arguments: dict, needle: 
     assert not list((vault / "sesiones").rglob("*.md")) if (vault / "sesiones").exists() else True
 
 
-async def test_show_after_restart_finds_the_newest_state_of_the_same_worktree(
+async def _hook_prompt(c, session: str, transcript: str | None = None, **extra: str) -> None:
+    """One UserPromptSubmit hook call: the server learns the session id and transcript."""
+    args = {"transcript": transcript} if transcript else {}
+    await c.ok(
+        "context",
+        mode="welcome",
+        session=session,
+        hook_event="UserPromptSubmit",
+        **args,
+        **extra,
+    )
+
+
+async def test_after_restart_only_an_explicit_restore_takes_another_sessions_state(
     vault: Path, tmp_path: Path
 ) -> None:
     here, other = _worktree(tmp_path, "a"), _worktree(tmp_path, "b")
@@ -104,11 +117,62 @@ async def test_show_after_restart_finds_the_newest_state_of_the_same_worktree(
         restored = await c.ok("session", action="restore", project_dir=here)
         saved = await c.ok("session", action="save", body=BODY + "Sigue.", project_dir=here)
 
-    assert shown["found"] is True and shown["path"] == mine["path"]
-    assert shown["task_title"] == "Mío" and "## Objetivo" in shown["content"]
+    assert shown["found"] is False
     assert restored["source"] == "session" and restored["path"] == mine["path"]
     assert restored["content"].startswith("Estado de la sesión «Mío» (guardado ")
     assert saved["path"] == mine["path"]
+
+
+async def test_after_restart_the_same_session_id_finds_its_state(
+    vault: Path, tmp_path: Path
+) -> None:
+    here = _worktree(tmp_path, "a")
+    async with mcp_client(vault) as c:
+        await _hook_prompt(c, "s-1")
+        mine = await c.ok("session", action="save", title="Mío", body=BODY, project_dir=here)
+
+    async with mcp_client(vault) as c:
+        await _hook_prompt(c, "s-1")
+        shown = await c.ok("session", action="show", project_dir=here)
+
+    assert _fm(vault / mine["path"])["session_id"] == "s-1"
+    assert shown["found"] is True and shown["path"] == mine["path"]
+
+
+async def test_a_new_session_saves_a_state_of_its_own(vault: Path, tmp_path: Path) -> None:
+    here = _worktree(tmp_path, "a")
+    async with mcp_client(vault) as c:
+        await _hook_prompt(c, "s-1")
+        first = await c.ok("session", action="save", title="Primera", body=BODY, project_dir=here)
+    async with mcp_client(vault) as c:
+        await _hook_prompt(c, "s-2")
+        second = await c.ok("session", action="save", title="Segunda", body=BODY, project_dir=here)
+
+    assert second["created"] is True and second["path"] != first["path"]
+    assert "Primera" in (vault / first["path"]).read_text(encoding="utf-8")
+
+
+OLD_TRANSCRIPT = "/home/u/.claude/projects/-repo/old.jsonl"
+NEW_TRANSCRIPT = "/home/u/.claude/projects/-repo/new.jsonl"
+
+
+@pytest.mark.parametrize(("now", "extracts"), [(NEW_TRANSCRIPT, True), (OLD_TRANSCRIPT, False)])
+async def test_explicit_restore_orders_the_extraction_of_another_sessions_transcript(
+    vault: Path, tmp_path: Path, now: str, extracts: bool
+) -> None:
+    here = _worktree(tmp_path, "a")
+    async with mcp_client(vault) as c:
+        await _hook_prompt(c, "s-1", OLD_TRANSCRIPT)
+        saved = await c.ok("session", action="save", title="Hilo", body=BODY, project_dir=here)
+    async with mcp_client(vault) as c:
+        await _hook_prompt(c, "s-2", now)
+        restored = await c.ok("session", action="restore", project_dir=here)
+
+    assert _fm(vault / saved["path"])["transcript"] == OLD_TRANSCRIPT
+    assert restored["path"] == saved["path"]
+    assert ("extract" in restored) is extracts
+    if extracts:
+        assert restored["extract"].endswith(f"transcript={OLD_TRANSCRIPT}")
 
 
 async def test_save_without_project_dir_rewrites_the_state_restored_with_it(
@@ -195,7 +259,7 @@ async def test_first_welcome_archives_states_unsaved_for_archive_days(
 
     async with mcp_client(vault, today="2026-10-09") as c:
         await c.ok("context", mode="welcome", session="s1")
-        shown = await c.ok("session", action="show")
+        shown = await c.ok("session", action="restore")
 
     status = _fm(vault / saved["path"])["status"]
     assert status == ("archived" if archived else "active")
@@ -246,8 +310,24 @@ def test_session_zone_is_implicit(vault: Path) -> None:
     cfg = load_config(vault)
 
     assert Zone("sesiones", SESSION) in cfg.zones
-    assert cfg.session.archive_days == 7 and cfg.session.nudge_every == 12
-    assert cfg.session.extract is True and cfg.session.block_manual_compact is True
+    assert cfg.session.archive_days == 7 and cfg.session.nudge_every == 0
+    assert cfg.session.extract is True and cfg.session.compact_state is True
+
+
+def test_obsolete_block_manual_compact_still_loads(vault: Path) -> None:
+    _config(vault, "[session]\nblock_manual_compact = false\nnudge_every = 0")
+
+    cfg = load_config(vault)
+
+    assert cfg.session.nudge_every == 0 and not hasattr(cfg.session, "block_manual_compact")
+
+
+@pytest.mark.parametrize("value", ["-1", "true", '"3"'])
+def test_nudge_every_below_zero_is_refused(vault: Path, value: str) -> None:
+    _config(vault, f"[session]\nnudge_every = {value}")
+
+    with pytest.raises(StartupError, match="nudge_every must be an integer >= 0"):
+        load_config(vault)
 
 
 def test_declared_session_zone_replaces_the_implicit_one(vault: Path) -> None:

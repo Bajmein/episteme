@@ -13,6 +13,7 @@ from mcp.types import CallToolResult, TextContent
 from pydantic import ValidationError
 
 from episteme import __version__, maintenance, prompting
+from episteme import session as sessions
 from episteme.activity import Activity
 from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError
@@ -180,6 +181,8 @@ class EpistemeServer(MCPServer):
         if self.activity is not None:
             ms = round((time.perf_counter() - start) * 1000)
             client, session = caller
+            # Agent calls carry no session id; the one the hooks of this process passed is it.
+            session = session or sessions.IDS.get("session")
             self.activity.record(name, arguments, text, ms, ok, client=client, session=session)
 
 

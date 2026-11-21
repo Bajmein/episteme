@@ -9,6 +9,7 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
 from episteme import hookmode, maintenance, memory, prompting
+from episteme import session as sessions
 from episteme.engine import Engine
 from episteme.errors import invalid
 from episteme.tools.args import (
@@ -43,6 +44,17 @@ _SourceArg = Annotated[
     str | None,
     Field(description="Only for the SessionStart hook: ${source} (compact or clear)."),
 ]
+_WelcomeDirArg = Annotated[
+    str | None,
+    Field(
+        description="welcome: absolute project directory (hooks pass ${cwd}); picks the "
+        "worktree whose session state a new session is told about."
+    ),
+]
+_TranscriptArg = Annotated[
+    str | None,
+    Field(description="Only for hooks: ${transcript_path}, kept with the session state."),
+]
 _LimitArg = Annotated[int, Field(description="Maximum memories, 1-50.")]
 _SurfaceSessionArg = Annotated[
     str | None,
@@ -73,6 +85,8 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         budget_tokens: _BudgetArg = 2000,
         hook_event: HookEvent = None,
         source: _SourceArg = None,
+        project_dir: _WelcomeDirArg = None,
+        transcript: _TranscriptArg = None,
     ) -> str:
         """Load project memory: the session welcome, or a context pack for a task.
 
@@ -81,6 +95,8 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         (not repeated on --resume, whose context already has it; resent on SessionStart
         compact|clear, followed by up to 8 memories the agent wrote or read before it, kind
         "trail", and with a coloured systemMessage telling the person what was recovered).
+        The first welcome of a session also names, in one line, the newest active session
+        state a previous session left in the worktree of project_dir, without loading it.
         With session, later calls add: overdue reminders every 10 messages; with
         prompt, up to 5 memories whose title, tags or keywords hold a rare word of the message;
         and a nudge to save when the session has written no memory.
@@ -95,9 +111,10 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         this tool is not read-only.
         """
         hookmode.check(hook_event)
+        sessions.track_ids(hook_event, session, transcript)
         with engine.session():
             if mode == "welcome":
-                call = _Call(engine, store, session, project, hook_event)
+                call = _Call(engine, store, session, project, hook_event, project_dir)
                 return _welcome(call, prompt, source)
             if mode == "task":
                 return _task(engine, _TaskArgs(task, project, budget_tokens, hook_event))
@@ -200,6 +217,7 @@ class _Turn(NamedTuple):
     welcomed: bool
     resend: bool
     note: str
+    fresh: bool = False
 
 
 @dataclass(frozen=True)
@@ -211,6 +229,7 @@ class _Call:
     session: str | None
     project: str | None
     hook_event: str | None
+    project_dir: str | None = None
 
 
 @dataclass(frozen=True)
@@ -227,7 +246,7 @@ def _turn(call: _Call, project: str) -> _Turn:
     """Advance the session counters and say whether this call carries the welcome."""
     engine, session, hook_event = call.engine, call.session, call.hook_event
     if not session:
-        return _Turn(prompting.SessionState(), welcomed=True, resend=False, note="")
+        return _Turn(prompting.SessionState(), welcomed=True, resend=False, note="", fresh=False)
     resend = hook_event == "SessionStart"
     fresh = engine.index.mark_welcomed(session)
     st = prompting.reset(session) if resend else prompting.state(session)
@@ -240,7 +259,7 @@ def _turn(call: _Call, project: str) -> _Turn:
     if welcomed:
         st.reminded_at = st.prompts
     note = _maintenance_note(engine, call.store, project) if fresh else ""
-    return _Turn(st, welcomed, resend, note)
+    return _Turn(st, welcomed, resend, note, fresh)
 
 
 def _welcome(call: _Call, prompt: str | None, source: str | None) -> str:
@@ -256,6 +275,8 @@ def _welcome(call: _Call, prompt: str | None, source: str | None) -> str:
     out = _Blocks()
     if welcomed:
         _head_block(engine, project, turn, out)
+        if turn.fresh and not resend:
+            out.blocks.append(_previous_state_line(engine, project, call.project_dir))
     elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:
         out.add(*prompting.overdue_block(engine, project), st)
         st.reminded_at = st.prompts
@@ -298,6 +319,20 @@ def _head_block(engine: Engine, project: str, turn: _Turn, out: _Blocks) -> None
     out.add(*memory.welcome(engine, project), turn.state)
     if turn.note:
         out.blocks.append(turn.note)
+
+
+def _previous_state_line(engine: Engine, project: str, project_dir: str | None) -> str:
+    """One line naming the newest active state of the worktree, or ``""``; never its content."""
+    rel = sessions.latest(engine, project, project_dir)
+    if rel is None:
+        return ""
+    props = engine.index.props(rel)
+    title = hookmode.clean_line(props.get("task_title") or rel)
+    saved = hookmode.clean_line(props.get("saved_at") or props.get("compacted_at") or "?")
+    return (
+        f"episteme · hay un estado de sesión de una sesión anterior: «{title}» (guardado "
+        f"{saved}; `{rel}`). No está cargado: para seguir con él, /episteme:sesion retomar."
+    )
 
 
 def _trail_block(

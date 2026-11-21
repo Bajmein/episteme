@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from episteme.session.actions import restore, template
-from episteme.session.capture import capture, end
+from episteme.session.actions import from_compact_text, restore, template
+from episteme.session.capture import capture, end, track_ids
 from episteme.session.gate import gate
 from episteme.session.store import (
+    FROM_COMPACT,
+    IDS,
     SaveArgs,
     archive,
     current,
     has_active,
+    latest,
     note_path,
     rotate,
     save,
@@ -17,17 +20,22 @@ from episteme.session.store import (
 )
 
 __all__ = [
+    "FROM_COMPACT",
+    "IDS",
     "SaveArgs",
     "archive",
     "capture",
     "current",
     "end",
+    "from_compact_text",
     "gate",
     "has_active",
+    "latest",
     "note_path",
     "restore",
     "rotate",
     "save",
     "show",
     "template",
+    "track_ids",
 ]

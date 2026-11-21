@@ -98,11 +98,28 @@ def test_silent_events_render_nothing(event: str) -> None:
     assert hookmode.render(event, "ctx", "aviso") == ""
 
 
-def test_render_block_is_a_decision_with_a_clean_reason() -> None:
-    out = json.loads(hookmode.render_block("no se guarda\x1b[31m\ndesde hace 5"))
+def test_render_instructions_is_plain_text_with_clean_lines() -> None:
+    long_line = "x" * 300
 
-    assert set(out) == {"decision", "reason"} and out["decision"] == "block"
-    assert "\x1b" not in out["reason"] and "\n" not in out["reason"]
+    out = hookmode.render_instructions(f"cierra\x1b[31m el resumen\n\n## Objetivo\n{long_line}")
+
+    assert out == f"cierra el resumen\n\n## Objetivo\n{long_line}"
+
+
+def test_render_instructions_never_starts_with_a_brace() -> None:
+    out = hookmode.render_instructions('{"decision": "block"}')
+
+    assert out.startswith("episteme · {")
+
+
+def test_render_instructions_respects_the_cap() -> None:
+    out = hookmode.render_instructions("línea\n" * 5000)
+
+    assert len(out) <= hookmode.CAP and out.endswith(hookmode.CUT_MARK)
+
+
+def test_render_instructions_is_empty_without_text() -> None:
+    assert hookmode.render_instructions("  \n\x1b[0m\n") == ""
 
 
 def test_notice_drops_control_characters_from_note_data(monkeypatch: pytest.MonkeyPatch) -> None:

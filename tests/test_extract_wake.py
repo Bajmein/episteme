@@ -1,4 +1,4 @@
-"""The plugin's wake hook after /compact or /clear (plugin/hooks/extract-wake.py)."""
+"""The plugin's wake hook after /clear (plugin/hooks/extract-wake.py)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ TRANSCRIPT = "/home/u/.claude/projects/-repo/abc.jsonl"
 
 def _settings(path: Path, hook: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    entry = {"matcher": "compact|clear", "hooks": [hook]}
+    entry = {"matcher": "clear", "hooks": [hook]}
     path.write_text(json.dumps({"hooks": {"SessionStart": [entry]}}), encoding="utf-8")
 
 
@@ -65,9 +65,10 @@ def test_wakes_after_clear_when_the_restore_hook_is_set(tmp_path: Path, where: s
 
 
 @pytest.mark.parametrize(
-    ("source", "transcript"), [("startup", TRANSCRIPT), ("resume", TRANSCRIPT), ("compact", "")]
+    ("source", "transcript"),
+    [("startup", TRANSCRIPT), ("resume", TRANSCRIPT), ("compact", TRANSCRIPT), ("clear", "")],
 )
-def test_stays_silent_outside_a_compaction_or_clear_with_transcript(
+def test_stays_silent_outside_a_clear_with_transcript(
     tmp_path: Path, source: str, transcript: str
 ) -> None:
     project = tmp_path / "repo"
@@ -108,6 +109,6 @@ def test_plugin_registers_the_wake_hook_as_async_rewake() -> None:
 
     (entry,) = hooks["hooks"]["SessionStart"]
     (hook,) = entry["hooks"]
-    assert entry["matcher"] == "compact|clear"
+    assert entry["matcher"] == "clear"
     assert hook["type"] == "command" and hook["asyncRewake"] is True
     assert "${CLAUDE_PLUGIN_ROOT}/hooks/extract-wake.py" in hook["command"]

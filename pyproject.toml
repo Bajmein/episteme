@@ -95,9 +95,11 @@ skips = ["B101"]  # assert is used to narrow types
 paths = ["src", "scripts", "tests", "plugin", "plugin-docs"]
 # sqlite3.Connection.row_factory is set, not read; anyio_backend and pytestmark are pytest hooks;
 # do_GET and log_message are http.server hooks (tests/test_docs_check.py); ignore_aliases is a
-# yaml.SafeDumper hook (markdown._FrontmatterDumper).
+# yaml.SafeDumper hook (markdown._FrontmatterDumper); trigger is a session tool parameter kept
+# (and ignored) since 0.18 so hooks installed before still validate.
 ignore_names = [
-    "row_factory", "anyio_backend", "pytestmark", "do_GET", "log_message", "ignore_aliases"
+    "row_factory", "anyio_backend", "pytestmark", "do_GET", "log_message", "ignore_aliases",
+    "trigger",
 ]
 
 [tool.coverage.run]

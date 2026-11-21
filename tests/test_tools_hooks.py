@@ -174,3 +174,42 @@ async def test_surface_and_constraints_skip_expired(vault: Path) -> None:
     async with mcp_client(vault, today="2026-11-05") as c:
         assert (await c.ok("surface", file="src/v.py"))["memories"] == []
         assert (await c.ok("constraints", file="src/v.py"))["constraints"] == []
+
+
+PREVIOUS = "episteme · hay un estado de sesión de una sesión anterior"
+STATE_BODY = "## Objetivo\n\nSeguir.\n\n## Siguiente paso\n\nNada.\n"
+
+
+async def test_first_welcome_names_the_state_a_previous_session_left(
+    vault: Path, tmp_path: Path
+) -> None:
+    here = tmp_path / "repo"
+    here.mkdir()
+    async with mcp_client(vault) as c:
+        saved = await c.ok(
+            "session", action="save", title="Hilo viejo", body=STATE_BODY, project_dir=str(here)
+        )
+    async with mcp_client(vault) as c:
+        first = await c.ok("context", mode="welcome", session="s2", project_dir=str(here))
+        again = await c.ok("context", mode="welcome", session="s2", project_dir=str(here))
+        resent = await c.ok(
+            "context",
+            mode="welcome",
+            session="s2",
+            project_dir=str(here),
+            hook_event="SessionStart",
+            source="compact",
+        )
+
+    assert PREVIOUS in first["text"] and "«Hilo viejo»" in first["text"]
+    assert f"`{saved['path']}`" in first["text"] and "/episteme:sesion retomar" in first["text"]
+    assert "Seguir." not in first["text"]
+    assert PREVIOUS not in again["text"]
+    assert PREVIOUS not in resent
+
+
+async def test_first_welcome_says_nothing_without_a_previous_state(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        first = await c.ok("context", mode="welcome", session="s1")
+
+    assert PREVIOUS not in first["text"]
