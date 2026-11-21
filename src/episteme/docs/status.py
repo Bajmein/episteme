@@ -8,7 +8,14 @@ from typing import TYPE_CHECKING, Any
 
 from episteme.docs.hashing import body_hash, split_note
 from episteme.docs.inbox import inbox_dir
-from episteme.docs.schema import MANIFEST, SUITE_KEYS, is_url, manifest_errors, note_errors
+from episteme.docs.schema import (
+    MANIFEST,
+    SUITE_KEYS,
+    is_local,
+    is_url,
+    manifest_errors,
+    note_errors,
+)
 from episteme.errors import AMBIGUOUS, NOT_FOUND, READ_ONLY_ZONE, EpistemeError, invalid
 from episteme.vault import Vault, Zone
 
@@ -83,11 +90,12 @@ def _manifest_fields(fm: dict[str, Any] | None) -> dict[str, Any]:
     suite = fm.get("suite") if fm else None
     if not isinstance(suite, dict):
         suite = {}
-    return {key: suite.get(key) for key in SUITE_KEYS}
+    fields = {key: suite.get(key) for key in SUITE_KEYS}
+    return fields | {"markdown": suite.get("markdown"), "manual": suite.get("manual") is True}
 
 
 def _has_source(fm: dict[str, Any]) -> bool:
-    return is_url(fm.get("source"))
+    return not is_local(fm) and is_url(fm.get("source"))
 
 
 def _is_deprecated(fm: dict[str, Any]) -> bool:
@@ -107,6 +115,7 @@ def _summary(vault: Vault, zone: Zone, notes: dict[str, dict[str, Any] | None]) 
         "inbox": os.fspath(inbox_dir(vault, zone)),
         "notes": len(notes),
         "with_source": len(list(filter(_has_source, pages))),
+        "local": len(list(filter(is_local, pages))),
         "deprecated": len(list(filter(_is_deprecated, pages))),
         "invalid": len(list(filter(_is_invalid, notes.values()))),
         "manifest_valid": _manifest_valid(manifest),
@@ -128,7 +137,7 @@ def _page_line(engine: Engine, zone: Zone, rel: str, fm: dict[str, Any]) -> str 
 def _pages(engine: Engine, zone: Zone, notes: dict[str, dict[str, Any] | None]) -> str:
     lines = []
     for rel, fm in notes.items():
-        if fm and is_url(fm.get("source")):
+        if fm and _has_source(fm):
             line = _page_line(engine, zone, rel, fm)
             if line is not None:
                 lines.append(line)

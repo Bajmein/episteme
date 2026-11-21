@@ -15,6 +15,10 @@ STATUSES = ("stable", "deprecated")
 REQUIRED = ("title", "type", "status", "lang", "created", "updated", "tags")
 DATE_KEYS = ("created", "updated")
 SUITE_KEYS = ("upstream", "include", "context7", "synced")
+OPTIONAL_SUITE_KEYS = ("markdown", "manual")
+LOCAL_ORIGIN = "local"
+PLACEHOLDERS = ("{path}", "{page}")
+PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
 # The order of the keys of a note created by docs_write; the rest go after, as given.
 KEY_ORDER = (
     "title",
@@ -27,6 +31,7 @@ KEY_ORDER = (
     "status",
     "lang",
     "source",
+    "origin",
     "created",
     "updated",
     "up",
@@ -93,8 +98,17 @@ def _lang_ok(value: Any) -> bool:
     return isinstance(value, str) and LANG_RE.fullmatch(value) is not None
 
 
+def is_local(fm: dict[str, Any]) -> bool:
+    """A note written for the suite itself (``origin: local``), with no upstream page."""
+    return fm.get("origin") == LOCAL_ORIGIN
+
+
 def _source_error(fm: dict[str, Any]) -> str | None:
     source = fm.get("source")
+    if is_local(fm):
+        return None if source is None else "origin: local notes cannot have a source"
+    if "origin" in fm:
+        return "origin must be local (or left out)"
     if source is None and fm.get("type") == INDEX_TYPE:
         return None
     if not is_url(source):
@@ -119,11 +133,38 @@ def _context7_error(value: Any) -> str | None:
     return "suite.context7 must be a Context7 ID such as /astral-sh/uv, or null"
 
 
+def is_markdown_template(value: Any) -> bool:
+    """An http(s) URL template with ``{path}`` or ``{page}`` and no other placeholder."""
+    if not is_url(value):
+        return False
+    found = PLACEHOLDER_RE.findall(value)
+    return bool(found) and all(p in PLACEHOLDERS for p in found)
+
+
+def _markdown_error(value: Any) -> str | None:
+    if value is None or is_markdown_template(value):
+        return None
+    return "suite.markdown must be an http(s) URL template with {path} or {page}, or null"
+
+
+def _manual_error(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return None
+    return "suite.manual must be true or false"
+
+
+def _optional_errors(suite: dict[str, Any]) -> list[str | None]:
+    return [
+        _markdown_error(suite["markdown"]) if "markdown" in suite else None,
+        _manual_error(suite["manual"]) if "manual" in suite else None,
+    ]
+
+
 def suite_errors(suite: Any) -> list[str]:
     """What is wrong with the ``suite`` key of a manifest; empty when it is valid."""
     if not isinstance(suite, dict):
         return ["suite must be a mapping with upstream, include, context7 and synced"]
-    unknown = [str(k) for k in suite if k not in SUITE_KEYS]
+    unknown = [str(k) for k in suite if k not in SUITE_KEYS + OPTIONAL_SUITE_KEYS]
     missing = [k for k in SUITE_KEYS if k not in suite]
     errors = [
         f"suite has unknown keys: {', '.join(unknown)}" if unknown else None,
@@ -131,6 +172,7 @@ def suite_errors(suite: Any) -> list[str]:
         _url_list_error(suite, "upstream"),
         _url_list_error(suite, "include"),
         _context7_error(suite.get("context7")),
+        *_optional_errors(suite),
     ]
     synced = suite.get("synced")
     if synced is not None and as_day(synced) is None:

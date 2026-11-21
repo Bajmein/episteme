@@ -7,6 +7,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Añadido
 
 - `docs_write` acepta `body_ref`: el cuerpo de la página por su hash, desde la bandeja `.index/docs-inbox/<suite>/<hash>.md` del vault, en vez de `body`. Comprueba el hash, respeta el tope de 2 MiB y borra el archivo tras escribir. `docs_status` devuelve `inbox`, la ruta de la bandeja de cada suite.
+- Claves opcionales del manifiesto de una suite: `suite.markdown`, una plantilla de URL con `{path}` o `{page}` desde la que `docs_check.py diff --markdown` baja cada página en Markdown (la `source` sigue siendo la pública), y `suite.manual: true`, para una suite que se mantiene a mano y `/episteme:docs` salta. `docs_status` devuelve las dos (#32).
+- Notas propias de una suite con `origin: local` en vez de `source`: son válidas, quedan fuera de la comparación con el origen y `docs_status` las cuenta en `local`.
 
 ### Cambiado
 
@@ -16,6 +18,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Corregido
 
 - `docs_check.py diff` ya no da por «cambiadas» las páginas cuya fuente se guardó sin `.md`: las baja por su variante Markdown, como las nuevas, y si solo hay HTML lo cuenta como error (`HTML instead of Markdown`) sin guardar nada. Reconoce `X`, `X/`, `X.md`, `X/index.md` y `X#sec` como la misma página (adiós a los duplicados) y ya no ofrece como nuevas las plantillas con `{…}`, `/.well-known/`, los `.json` ni los `.txt`. Una página nueva del `llms.txt` que falla va a `skipped` y no a `errors` (un enlace roto de un tercero ya no impide poner `synced`), y las páginas `deprecated` no se descargan.
+- `docs_check.py diff` reconoce mejor lo que no es Markdown: HTML con BOM, con un comentario antes del doctype o que empieza por `<head>`, `<body>`, `<?xml` o `<svg`, JSON (`JSON instead of Markdown`) y páginas vacías (`empty page`). Ya no rechaza Markdown que empieza por una etiqueta como `<html-tag-in-md>` o `<div>`.
 
 ## [0.16.0] - 2026-11-19
 
