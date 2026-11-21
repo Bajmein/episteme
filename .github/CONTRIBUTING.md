@@ -25,7 +25,7 @@ uv run deptry .
 uv run zizmor .github/workflows
 ```
 
-CodeScene revisa además cada PR: no debe bajar el code health de ningún archivo.
+CodeScene revisa además cada PR. El check de CodeScene del PR (quality gate «The Bare Minimum») tiene que pasar. La meta es 9 o más por archivo de `src/` y `scripts/`; un archivo nuevo o tocado no baja de 9 ni baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué.
 
 ## Commits y ramas
 
