@@ -1,7 +1,7 @@
 {
   "name": "episteme-docs",
   "version": "0.19.0",
-  "description": "Skill de episteme para poner al día las suites de documentación de terceros en docs/ del vault (docs_status, docs_write y un script que descarga las páginas). Requiere el plugin episteme.",
+  "description": "Skill de episteme para poner al día las suites de documentación de terceros en docs/ del vault (el tool docs y un script que descarga las páginas). Requiere el plugin episteme.",
   "author": { "name": "Bajmein" },
   "license": "MIT",
   "homepage": "https://github.com/Bajmein/episteme",

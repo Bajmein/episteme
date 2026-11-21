@@ -1,4 +1,4 @@
-"""docs_status and docs_write through MCP: docs zones, the suite schema and the manifest."""
+"""The docs tool (status and write) through MCP: docs zones, the suite schema and the manifest."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def suite(vault: Path) -> Path:
 
 async def test_docs_status_lists_docs_zones_with_counts(suite: Path) -> None:
     async with mcp_client(suite) as c:
-        res = await c.ok("docs_status")
+        res = await c.ok("docs", action="status")
 
     inbox = res["suites"][0].pop("inbox")
     assert Path(inbox).parts[-4:] == (".index", "docs-inbox", "docs", "mise")
@@ -105,7 +105,7 @@ async def test_docs_status_lists_docs_zones_with_counts(suite: Path) -> None:
 
 async def test_docs_status_pages_is_a_tsv_with_the_body_hash(suite: Path) -> None:
     async with mcp_client(suite) as c:
-        res = await c.ok("docs_status", suite="mise", pages=True)
+        res = await c.ok("docs", action="status", suite="mise", pages=True)
 
     assert res["suite"] == SUITE
     assert res["pages"].splitlines() == [
@@ -126,8 +126,11 @@ async def test_docs_tools_refuse_zones_that_are_not_docs(
     suite: Path, suite_arg: str, code: str
 ) -> None:
     async with mcp_client(suite) as c:
-        status = await c.error("docs_status", suite=suite_arg)
-        write = await c.error("docs_write", suite=suite_arg, path="x.md", fields=NEW_FIELDS)
+        status = await c.error("docs", action="status", suite=suite_arg)
+
+        write = await c.error(
+            "docs", action="write", suite=suite_arg, path="x.md", fields=NEW_FIELDS
+        )
 
     assert status.startswith(code) and write.startswith(code)
 
@@ -137,7 +140,9 @@ async def test_docs_write_same_body_changes_nothing(suite: Path) -> None:
     before = page.stat().st_mtime_ns
 
     async with mcp_client(suite) as c:
-        res = await c.ok("docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body=BODY)
+        res = await c.ok(
+            "docs", action="write", suite=SUITE, source=f"{URL}/getting-started.md", body=BODY
+        )
 
     assert res == {
         "path": f"{SUITE}/{PAGE}", "created": False, "changed": False, "hash": _hash(BODY)
@@ -149,8 +154,11 @@ async def test_docs_write_new_body_replaces_it_and_sets_updated(suite: Path) -> 
     new = "# Getting started\n\nInstall mise with `curl`.\n"
 
     async with mcp_client(suite) as c:
-        res = await c.ok("docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body=new)
-        status = await c.ok("docs_status", suite=SUITE, pages=True)
+        res = await c.ok(
+            "docs", action="write", suite=SUITE, source=f"{URL}/getting-started.md", body=new
+        )
+
+        status = await c.ok("docs", action="status", suite=SUITE, pages=True)
 
     page = suite / SUITE / PAGE
     assert res["changed"] is True and res["hash"] == _hash(new)
@@ -162,7 +170,8 @@ async def test_docs_write_new_body_replaces_it_and_sets_updated(suite: Path) -> 
 async def test_docs_write_creates_a_note_with_path(suite: Path) -> None:
     async with mcp_client(suite) as c:
         res = await c.ok(
-            "docs_write",
+            "docs",
+            action="write",
             suite="mise",
             path="tasks/running.md",
             source=f"{URL}/tasks/running.md",
@@ -198,7 +207,7 @@ async def test_docs_write_creates_a_note_with_path(suite: Path) -> None:
 )
 async def test_docs_write_rejects_bad_creations(suite: Path, args: dict, code: str) -> None:
     async with mcp_client(suite) as c:
-        text = await c.error("docs_write", suite=SUITE, body="# X\n", **args)
+        text = await c.error("docs", action="write", suite=SUITE, body="# X\n", **args)
 
     assert text.startswith(code), text
     assert not (suite / SUITE / "x.md").exists()
@@ -207,14 +216,15 @@ async def test_docs_write_rejects_bad_creations(suite: Path, args: dict, code: s
 async def test_docs_write_normalises_the_path(suite: Path) -> None:
     async with mcp_client(suite) as c:
         res = await c.ok(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             path=".//tasks/./new.md",
             source=f"{URL}/tasks/new.md",
             fields=NEW_FIELDS,
         )
         bad = await c.error(
-            "docs_write", suite=SUITE, path="./README.index.md", fields={"suite": {}}
+            "docs", action="write", suite=SUITE, path="./README.index.md", fields={"suite": {}}
         )
 
     assert res["path"] == f"{SUITE}/tasks/new.md"
@@ -231,10 +241,12 @@ async def test_docs_write_created_note_reads_back_valid_and_unchanged(suite: Pat
     }
 
     async with mcp_client(suite) as c:
-        first = await c.ok("docs_write", **args)
+        first = await c.ok("docs", action="write", **args)
+
         note = await c.ok("read", note=f"{SUITE}/tasks/again.md", content=False)
-        second = await c.ok("docs_write", **args)
-        status = await c.ok("docs_status", suite=SUITE, pages=True)
+        second = await c.ok("docs", action="write", **args)
+
+        status = await c.ok("docs", action="status", suite=SUITE, pages=True)
 
     text = (suite / SUITE / "tasks/again.md").read_text(encoding="utf-8")
     assert first["created"] is True and "&id" not in text and "*id" not in text
@@ -248,7 +260,7 @@ async def test_docs_write_created_note_reads_back_valid_and_unchanged(suite: Pat
 async def test_docs_write_refuses_hidden_folders(suite: Path, path: str) -> None:
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, path=path, source=f"{URL}/x.md", fields=NEW_FIELDS
+            "docs", action="write", suite=SUITE, path=path, source=f"{URL}/x.md", fields=NEW_FIELDS
         )
 
     assert text.startswith("invalid_argument:"), text
@@ -271,7 +283,8 @@ async def test_remember_refuses_a_memory_folder_linked_into_a_docs_zone(suite: P
 async def test_docs_write_refuses_a_source_another_note_has(suite: Path) -> None:
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             path="dev-tools/backends.md",
             fields={"source": f"{URL}/getting-started.md"},
@@ -283,7 +296,7 @@ async def test_docs_write_refuses_a_source_another_note_has(suite: Path) -> None
 async def test_docs_write_refuses_source_and_path_of_different_notes(suite: Path) -> None:
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", path="draft.md"
+            "docs", action="write", suite=SUITE, source=f"{URL}/getting-started.md", path="draft.md"
         )
 
     assert text.startswith("invalid_argument:")
@@ -294,10 +307,11 @@ async def test_docs_write_scans_fields_but_not_the_body_for_secrets(suite: Path)
 
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, path=PAGE, fields={"summary": f"usa {key}"}
+            "docs", action="write", suite=SUITE, path=PAGE, fields={"summary": f"usa {key}"}
         )
         res = await c.ok(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             source=f"{URL}/getting-started.md",
             body=f"# Getting started\n\nexport AWS_ACCESS_KEY_ID={key}\n",
@@ -313,7 +327,8 @@ async def test_docs_write_deprecates_with_fields_only(suite: Path) -> None:
 
     async with mcp_client(suite) as c:
         res = await c.ok(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             source=f"{URL}/getting-started.md",
             fields={"status": "deprecated"},
@@ -328,11 +343,18 @@ async def test_docs_write_replaces_the_manifest_suite_mapping(suite: Path) -> No
     new_suite = {"upstream": [], "include": [f"{URL}/"], "context7": None, "synced": TODAY}
 
     async with mcp_client(suite) as c:
-        await c.ok("docs_write", suite=SUITE, path="README.index.md", fields={"suite": new_suite})
-        bad = await c.error(
-            "docs_write", suite=SUITE, path="README.index.md", fields={"suite": {"upstream": []}}
+        await c.ok(
+            "docs", action="write", suite=SUITE, path="README.index.md", fields={"suite": new_suite}
         )
-        res = await c.ok("docs_status", suite=SUITE)
+
+        bad = await c.error(
+            "docs",
+            action="write",
+            suite=SUITE,
+            path="README.index.md",
+            fields={"suite": {"upstream": []}},
+        )
+        res = await c.ok("docs", action="status", suite=SUITE)
 
     assert bad.startswith("invalid_schema:")
     assert res["manifest_valid"] is True
@@ -347,8 +369,11 @@ async def test_docs_status_returns_the_optional_suite_keys(suite: Path) -> None:
     }  # fmt: skip
 
     async with mcp_client(suite) as c:
-        await c.ok("docs_write", suite=SUITE, path="README.index.md", fields={"suite": new_suite})
-        res = await c.ok("docs_status", suite=SUITE)
+        await c.ok(
+            "docs", action="write", suite=SUITE, path="README.index.md", fields={"suite": new_suite}
+        )
+
+        res = await c.ok("docs", action="status", suite=SUITE)
 
     assert res["manifest_valid"] is True
     assert res["markdown"] == template and res["manual"] is True
@@ -369,7 +394,7 @@ async def test_docs_write_refuses_bad_optional_suite_keys(suite: Path, extra: di
 
     async with mcp_client(suite) as c:
         err = await c.error(
-            "docs_write", suite=SUITE, path="README.index.md", fields={"suite": bad}
+            "docs", action="write", suite=SUITE, path="README.index.md", fields={"suite": bad}
         )
 
     assert err.startswith("invalid_schema:")
@@ -383,7 +408,7 @@ async def test_docs_status_marks_a_manifest_with_a_bad_template_invalid(suite: P
     )
 
     async with mcp_client(suite) as c:
-        res = await c.ok("docs_status", suite=SUITE)
+        res = await c.ok("docs", action="status", suite=SUITE)
 
     assert res["manifest_valid"] is False
 
@@ -391,21 +416,23 @@ async def test_docs_status_marks_a_manifest_with_a_bad_template_invalid(suite: P
 async def test_docs_write_creates_a_local_note_kept_out_of_pages(suite: Path) -> None:
     async with mcp_client(suite) as c:
         await c.ok(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             path="notas/uso.md",
             body="# Uso propio\n",
             fields={**NEW_FIELDS, "origin": "local"},
         )
         both = await c.error(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             path="notas/otra.md",
             source=f"{URL}/otra.md",
             body="# Otra\n",
             fields={**NEW_FIELDS, "origin": "local"},
         )
-        res = await c.ok("docs_status", suite=SUITE, pages=True)
+        res = await c.ok("docs", action="status", suite=SUITE, pages=True)
 
     assert both.startswith("invalid_schema:")
     assert res["local"] == 1 and res["invalid"] == 1 and res["with_source"] == 2
@@ -420,7 +447,7 @@ async def test_docs_status_reports_an_invalid_manifest(vault: Path) -> None:
     )
 
     async with mcp_client(vault) as c:
-        res = await c.ok("docs_status", suite="claude-code")
+        res = await c.ok("docs", action="status", suite="claude-code")
 
     assert res["suite"] == "docs/claude-code" and res["manifest_valid"] is False
     assert res["notes"] > 0 and res["invalid"] >= res["notes"] - res["with_source"]
@@ -430,7 +457,7 @@ async def test_revise_refuses_a_docs_zone(suite: Path) -> None:
     async with mcp_client(suite) as c:
         text = await c.error("revise", note=f"{SUITE}/{PAGE}", action="append", text="x")
 
-    assert text == f"read_only_zone: {SUITE}/{PAGE} is in a docs zone. Use docs_write."
+    assert text == f'read_only_zone: {SUITE}/{PAGE} is in a docs zone. Use docs(action="write").'
 
 
 @pytest.mark.parametrize(("changed", "trail"), [(True, {"docs/mise/a.md": "written"}), (False, {})])
@@ -443,8 +470,8 @@ def test_docs_write_enters_the_trail_but_not_the_write_count(
     monkeypatch.setattr(prompting, "WRITES", 0)
     text = json.dumps({"path": "docs/mise/a.md", "created": False, "changed": changed})
 
-    server._track_result("docs_write", {"suite": "mise"}, text)
-    server._track_docs_write("docs_write", text)
+    server._track_result("docs", {"suite": "mise", "action": "write"}, text)
+    server._track_docs_write("docs", {"action": "write"}, text)
 
     assert trail == prompting.TRAIL and prompting.WRITES == 0
 
@@ -464,7 +491,8 @@ async def test_docs_write_drops_the_frontmatter_a_page_brings(suite: Path) -> No
 
     async with mcp_client(suite) as c:
         res = await c.ok(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             source=f"{URL}/getting-started.md",
             body="---\ndescription: From the site.\n---\n\n" + new,
@@ -493,7 +521,11 @@ async def test_docs_write_body_ref_replaces_the_body_and_consumes_the_file(suite
 
     async with mcp_client(suite) as c:
         res = await c.ok(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=_hash(new)
+            "docs",
+            action="write",
+            suite=SUITE,
+            source=f"{URL}/getting-started.md",
+            body_ref=_hash(new),
         )
 
     page = suite / SUITE / PAGE
@@ -510,7 +542,11 @@ async def test_docs_write_body_ref_of_the_current_body_changes_nothing_and_consu
 
     async with mcp_client(suite) as c:
         res = await c.ok(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=_hash(BODY)
+            "docs",
+            action="write",
+            suite=SUITE,
+            source=f"{URL}/getting-started.md",
+            body_ref=_hash(BODY),
         )
 
     assert res["changed"] is False
@@ -522,7 +558,8 @@ async def test_docs_write_body_ref_creates_a_note(suite: Path) -> None:
 
     async with mcp_client(suite) as c:
         res = await c.ok(
-            "docs_write",
+            "docs",
+            action="write",
             suite=SUITE,
             path="tasks/running.md",
             source=f"{URL}/tasks/running.md",
@@ -541,7 +578,7 @@ async def test_docs_write_refuses_body_together_with_body_ref(suite: Path) -> No
 
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md",
+            "docs", action="write", suite=SUITE, source=f"{URL}/getting-started.md",
             body="# X\n", body_ref=_hash("# X\n"),
         )  # fmt: skip
 
@@ -553,7 +590,7 @@ async def test_docs_write_refuses_body_together_with_body_ref(suite: Path) -> No
 async def test_docs_write_refuses_a_malformed_body_ref(suite: Path, ref: str) -> None:
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=ref
+            "docs", action="write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=ref
         )
 
     assert text.startswith("invalid_argument:"), text
@@ -562,7 +599,11 @@ async def test_docs_write_refuses_a_malformed_body_ref(suite: Path, ref: str) ->
 async def test_docs_write_body_ref_without_a_file_is_not_found(suite: Path) -> None:
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref="0" * 16
+            "docs",
+            action="write",
+            suite=SUITE,
+            source=f"{URL}/getting-started.md",
+            body_ref="0" * 16,
         )
 
     assert text.startswith("not_found:") and "docs_check.py diff" in text, text
@@ -574,7 +615,11 @@ async def test_docs_write_body_ref_whose_content_differs_keeps_the_file(suite: P
 
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref="1" * 16
+            "docs",
+            action="write",
+            suite=SUITE,
+            source=f"{URL}/getting-started.md",
+            body_ref="1" * 16,
         )
 
     assert text.startswith("invalid_argument:"), text
@@ -588,7 +633,11 @@ async def test_docs_write_refuses_a_body_ref_file_over_the_note_limit(suite: Pat
 
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md", body_ref=_hash(big)
+            "docs",
+            action="write",
+            suite=SUITE,
+            source=f"{URL}/getting-started.md",
+            body_ref=_hash(big),
         )
 
     assert text.startswith("invalid_argument:"), text
@@ -607,7 +656,7 @@ async def test_docs_write_refuses_an_inbox_symlink_that_leaves_the_inbox(
 
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, source=f"{URL}/getting-started.md",
+            "docs", action="write", suite=SUITE, source=f"{URL}/getting-started.md",
             body_ref=_hash("# Out\n"),
         )  # fmt: skip
 
@@ -620,9 +669,28 @@ async def test_docs_write_invalid_schema_keeps_the_body_ref_file(suite: Path) ->
 
     async with mcp_client(suite) as c:
         text = await c.error(
-            "docs_write", suite=SUITE, path="x.md", source=f"{URL}/x.md",
+            "docs", action="write", suite=SUITE, path="x.md", source=f"{URL}/x.md",
             body_ref=_hash("# X\n"), fields={"title": "X"},
         )  # fmt: skip
 
     assert text.startswith("invalid_schema:"), text
     assert file.exists()
+
+
+@pytest.mark.parametrize(
+    ("args", "needle"),
+    [
+        ({"action": "nope"}, 'invalid_argument: unknown action "nope"'),
+        ({"action": "status", "body": "x"}, "body does not apply to action"),
+        ({"action": "status", "path": "a.md", "source": "u"}, "path, source does not apply"),
+        ({"action": "write", "pages": True, "suite": SUITE}, "pages does not apply"),
+        ({"action": "write"}, 'action="write" needs suite'),
+    ],
+)
+async def test_docs_refuses_arguments_that_do_not_fit_the_action(
+    suite: Path, args: dict, needle: str
+) -> None:
+    async with mcp_client(suite) as c:
+        text = await c.error("docs", **args)
+
+    assert needle in text

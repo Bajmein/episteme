@@ -113,11 +113,11 @@ def test_docs_check_body_hash_matches_episteme() -> None:
         assert script["body_hash"](text) == body_hash(text)
 
 
-def test_setup_allows_docs_status_but_not_docs_write() -> None:
+def test_setup_does_not_allow_docs_because_it_writes() -> None:
     allow = _json(SKILLS / "setup" / "settings.json")["permissions"]["allow"]
 
-    assert "mcp__episteme__docs_status" in allow
-    assert "mcp__episteme__docs_write" not in allow
+    assert "mcp__episteme__docs" not in allow
+    assert "mcp__episteme__docs_status" not in allow
 
 
 def test_extractor_agent_frontmatter() -> None:

@@ -191,8 +191,7 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
 | `session` | Guardar y retomar el estado de la sesión (objetivo, lo hecho, el siguiente paso), con una plantilla | ● |
 | `plan` | Guardar una copia de cada plan de plan mode y señalarla tras «clear context» (la usan los hooks) | ● |
-| `docs_status` | Ver las suites de documentación y qué páginas tienen | |
-| `docs_write` | Guardar una página de documentación descargada (lo usa `/episteme-docs:docs`) | ● |
+| `docs` | Ver las suites de documentación y guardar una página descargada (lo usa `/episteme-docs:docs`) | ● |
 
 Los parámetros y el comportamiento exacto de cada una están en [Tools y memorias](docs/tools.md).
 

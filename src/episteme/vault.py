@@ -26,7 +26,7 @@ SESSION = "session"
 PLAN = "plan"
 MODES = (READ_ONLY, READ_WRITE, MEMORY, DOCS, SESSION, PLAN)
 # Zones that only their own tool writes: mode -> that tool. revise refuses them.
-TOOL_MODES: dict[str, str] = {DOCS: "docs_write", SESSION: "session", PLAN: "plan"}
+TOOL_MODES: dict[str, str] = {DOCS: 'docs(action="write")', SESSION: "session", PLAN: "plan"}
 # The session and plan zones load_config adds when episteme.toml declares none.
 SESSION_ZONE = "sesiones"
 PLAN_ZONE = "planes"

@@ -35,7 +35,7 @@ async def test_docs_zone_adds_docs_tools_and_instructions(vault: Path) -> None:
     async with mcp_client(vault) as c:
         tools = {t.name: t for t in (await c.session.list_tools()).tools}
         assert set(tools) == TOOLS
-        assert tools["docs_status"].annotations.read_only_hint is True
+        assert tools["docs"].annotations is None  # it writes: no read_only_hint
         text = c.session.initialize_result.instructions
         assert "/episteme-docs:docs" in text
         assert len(text) <= 2000

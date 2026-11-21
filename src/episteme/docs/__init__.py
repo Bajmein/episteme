@@ -1,4 +1,4 @@
-"""Docs suites: zones of third-party pages that only ``docs_write`` changes."""
+"""Docs suites: zones of third-party pages that only the ``docs`` tool (action write) changes."""
 
 from __future__ import annotations
 
