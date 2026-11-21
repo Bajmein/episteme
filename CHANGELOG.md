@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.19.0] - 2026-11-21
+
 ### Quitado
 
 - `[session] block_manual_compact`, que se ignoraba desde 0.18. Si sigue en el `episteme.toml`, el servidor no arranca («unknown key»): bórrala.
@@ -401,7 +403,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.18.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/Bajmein/episteme/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Bajmein/episteme/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Bajmein/episteme/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Bajmein/episteme/compare/v0.15.0...v0.16.0
