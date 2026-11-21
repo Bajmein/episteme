@@ -114,6 +114,11 @@ def _is_positive_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 1
 
 
+def _is_non_negative_int(value: object) -> bool:
+    """True for an int >= 0; ``bool`` is excluded."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 def _int_min1(table: dict, name: str, key: str, default: int) -> int:
     value = table.get(key, default)
     if not _is_positive_int(value):
@@ -123,7 +128,7 @@ def _int_min1(table: dict, name: str, key: str, default: int) -> int:
 
 def _int_min0(table: dict, name: str, key: str, default: int) -> int:
     value = table.get(key, default)
-    if not (_is_positive_int(value) or (value == 0 and type(value) is int)):
+    if not _is_non_negative_int(value):
         raise StartupError(f"[{name}] {key} must be an integer >= 0.")
     return value
 
