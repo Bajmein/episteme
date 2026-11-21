@@ -23,10 +23,10 @@ episteme guarda el **estado de la sesión**: una nota viva por hilo de trabajo y
   | `saved_at` | Fecha y hora local del último guardado, a segundos: del agente, del extractor o del bloque `<estado-sesion>` de un resumen de compactación |
   | `saved_by` | `agent`, `extractor` o `compact` (lo último que lo escribió fue el hook `PostCompact`, con el bloque del resumen o con el resumen entero) |
   | `extracted_until` | Solo si lo último fue un guardado del extractor: hasta qué hora local (a segundos) leyó el transcript (el `until` de `save`). Cualquier otro guardado lo quita |
-  | `compacted_at` | Fecha y hora del último resumen de compactación, si lo hubo |
+  | `compacted_at` | Fecha y hora del resumen de compactación que escribió el estado; solo mientras lo último fue una compactación (otro `save` lo quita) |
   | `worktree` | La carpeta del proyecto: el `project_dir` que se pasa o, si el agente no lo pasa, el que mandó un hook de esta sesión |
   | `session_id` | El id de la sesión de Claude Code que lo guardó (el que pasa el hook, o el que el servidor aprendió de los hooks): tras reiniciar el servidor, el estado en uso es el de ese id |
-| `transcript` | La ruta del transcript de esa sesión, que pasan los hooks: `/episteme:sesion retomar` en otra sesión la usa para extraer lo que quedó pendiente |
+  | `transcript` | La ruta del transcript de esa sesión, que pasan los hooks: `/episteme:sesion retomar` en otra sesión la usa para extraer lo que quedó pendiente |
   | `plan` | El slug del plan de la tarea en `planes/<proyecto>/` (ver [Planes](planes.md)): el que se pasa a `save`; si no, el que ya tenía el estado; si no, el plan vigente del proceso. Mientras el estado esté activo, ese plan no rota |
 
   No lleva `kind`, `priority`, `helpful` ni `valid_until`: no es una memoria.
