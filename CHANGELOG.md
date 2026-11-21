@@ -13,6 +13,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - El hook de despertar del plugin (`extract-wake.py`) solo actúa tras `/clear`.
 - El aviso «el estado de la sesión no se actualiza desde hace N mensajes» está apagado por defecto (`[session] nudge_every = 0`; con 1 o más vuelve).
 - El registro de actividad anota la sesión también en las llamadas del agente (la que pasaron los hooks).
+- **Menos memorias repetidas.** La bienvenida lista hasta 8 memorias (antes 10), con una sola de `_shared` (antes 3) salvo que sobre sitio; tras compactar se reenvía breve, solo con los recordatorios vencidos y las normas. `surface` trae 3 por defecto (antes 5), solo cuenta una mención del archivo si la memoria tiene prioridad 4 o más (como mucho 2 así) y no repite lo que la sesión ya recibió por la bienvenida o por mensaje. `context(mode="task")` ya no repite las normas entregadas.
+- El hook `constraints` solo corre antes de las tools que editan (`Edit`, `Write` y las de edición de Serena), no antes de las de lectura de Serena.
 
 ### Obsoleto
 

@@ -21,7 +21,7 @@ Bloque para el `settings.json` del proyecto:
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PreToolUse": [
-      { "matcher": "Edit|Write|mcp__serena__.*",
+      { "matcher": "Edit|Write|mcp__serena__replace_.*|mcp__serena__insert_.*|mcp__serena__delete_lines|mcp__serena__rename_symbol|mcp__serena__safe_delete_symbol",
         "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "constraints",
                     "input": { "file": "${tool_input.file_path}",
                                "relative_path": "${tool_input.relative_path}",

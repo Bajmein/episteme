@@ -235,8 +235,17 @@ def _notes_group(
     ]
 
 
+def _already_delivered_norm(row: Any, skip: set[str] | None) -> bool:
+    """Whether ``row`` is a priority-5 norm this session already got."""
+    return bool(skip) and row["priority"] == 5 and row["path"] in skip
+
+
 def task_context(
-    engine: Engine, task: str, project: str | None, budget_tokens: int
+    engine: Engine,
+    task: str,
+    project: str | None,
+    budget_tokens: int,
+    skip: set[str] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """A context pack for ``task``: relevant memories, linked memories, then related notes.
 
@@ -247,7 +256,8 @@ def task_context(
     0.2*recency`` is at least ``MIN_CONTEXT_SCORE``. "Memorias enlazadas:" adds up to
     ``LINKED_MAX`` active memories one ``related`` link away from the first five listed. Notes
     need relevance >= 0.5 (relative to the best note) and ``need`` terms; their score is
-    ``0.5*relevance``; at most 5.
+    ``0.5*relevance``; at most 5. Priority-5 memories whose path is in ``skip`` (the norms the
+    session already got) are left out.
     """
     if budget_tokens < 1:
         raise invalid(f"budget_tokens must be positive, got {budget_tokens}.")
@@ -256,6 +266,8 @@ def task_context(
     pack = _Pack(f"episteme · contexto para: {' '.join(task.split())}", budget_tokens * 4)
     chosen: list[str] = []
     for score, row in _relevant_memories(engine, query, terms, project):
+        if _already_delivered_norm(row, skip):
+            continue
         entry = {"path": row["path"], "score": round(score, 4), "kind": "memory"}
         if pack.add_memory(_memory_block(row), entry):
             chosen.append(row["path"])

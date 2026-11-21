@@ -41,7 +41,6 @@ class SessionState:
     nudged_at: int = NUDGE_AFTER - NUDGE_EVERY
     baseline: int | None = None
     delivered: set[str] = field(default_factory=set)
-    surfaced: set[str] = field(default_factory=set)
     state_baseline: int | None = None
     state_saved_at: int = 0
     state_nudged_at: int = 0

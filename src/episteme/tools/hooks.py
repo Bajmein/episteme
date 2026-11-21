@@ -56,6 +56,7 @@ _TranscriptArg = Annotated[
     Field(description="Only for hooks: ${transcript_path}, kept with the session state."),
 ]
 _LimitArg = Annotated[int, Field(description="Maximum memories, 1-50.")]
+SURFACE_LIMIT = 3  # surface: default number of memories per file
 _SurfaceSessionArg = Annotated[
     str | None,
     Field(
@@ -91,10 +92,11 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         """Load project memory: the session welcome, or a context pack for a task.
 
         welcome: overdue reminders, the active priority-5 norms, reminders due within 7 days,
-        then the highest-scoring active memories (at most 3 from _shared); sent once per session
-        (not repeated on --resume, whose context already has it; resent on SessionStart
-        compact|clear, followed by up to 8 memories the agent wrote or read before it, kind
-        "trail", and with a coloured systemMessage telling the person what was recovered).
+        then the 8 highest-scoring active memories (at most 1 from _shared); sent once per
+        session (not repeated on --resume, whose context already has it; resent on SessionStart
+        compact|clear, only overdue reminders and norms after compact, followed by up to 8
+        memories the agent wrote or read before it, kind "trail", and with a coloured
+        systemMessage telling the person what was recovered).
         The first welcome of a session also names, in one line, the newest active session
         state a previous session left in the worktree of project_dir, without loading it.
         With session, later calls add: overdue reminders every 10 messages; with
@@ -102,8 +104,9 @@ def _register_context(server: MCPServer, engine: Engine, store: maintenance.Stor
         and a nudge to save when the session has written no memory.
         task: decisions, constraints and lessons matching the task (Spanish and English stopwords
         ignored; with 3+ words a memory must hold 2 of them and score >= 25% of the best hit;
-        constraints on files always enter), up to 3 memories one link (any kind) from them, and up
-        to 5 related notes to open with read, within budget_tokens.
+        constraints on files always enter; norms this session already got are left out), up to
+        3 memories one link (any kind) from them, and up to 5 related notes to open with read,
+        within budget_tokens.
         Returns JSON {"text", "entries": [{"path", "score", "kind"}]}; score is 0-1, or null for
         norms, reminders, recalled and linked memories (welcome adds "already_sent").
         The first welcome of a session may run the maintenance configured in episteme.toml
@@ -130,11 +133,15 @@ def _register_surface(server: MCPServer, engine: Engine) -> None:
         project_dir: ProjectDir = None,
         project: ProjectArg = None,
         relative_path: RelativePathArg = None,
-        limit: _LimitArg = 5,
+        limit: _LimitArg = SURFACE_LIMIT,
         hook_event: HookEvent = None,
         session: _SurfaceSessionArg = None,
     ) -> str:
         """Memories (not constraints) about a file: listed in its files, or mentioned in the body.
+
+        A match by mention needs priority >= 4, and at most 2 come in one answer. With a
+        hook_event and a session, memories this session already got (welcome, recall, an
+        earlier surface) are left out.
 
         Returns JSON {"file", "memories": [{"path", "title", "type", "priority", "match"}]}.
         """
@@ -144,7 +151,7 @@ def _register_surface(server: MCPServer, engine: Engine) -> None:
             text, data = memory.surface(
                 engine, file, project_dir, project, limit, relative_path, skip
             )
-        _track_surfaced(st, data, hook_event)
+        _track_surfaced(st, data)
         return _reply(hook_event, text, data)
 
 
@@ -181,20 +188,14 @@ def _surface_skip(
 ) -> tuple[prompting.SessionState | None, set[str] | None]:
     """Return the session state and the paths surface must not repeat."""
     st = prompting.state(session) if session else None
-    skip = st.surfaced if st is not None and hook_event else None
+    skip = st.delivered if st is not None and hook_event else None
     return st, skip
 
 
-def _track_surfaced(
-    st: prompting.SessionState | None, data: dict[str, Any], hook_event: str | None
-) -> None:
-    """Record the memories surface returned in the session state."""
-    if st is None:
-        return
-    paths = [m["path"] for m in data["memories"]]
-    st.delivered.update(paths)
-    if hook_event:
-        st.surfaced.update(paths)
+def _track_surfaced(st: prompting.SessionState | None, data: dict[str, Any]) -> None:
+    """Record the memories surface returned as delivered to the session."""
+    if st is not None:
+        st.delivered.update(m["path"] for m in data["memories"])
 
 
 def _maintenance_note(engine: Engine, store: maintenance.Store, project: str) -> str:
@@ -274,7 +275,7 @@ def _welcome(call: _Call, prompt: str | None, source: str | None) -> str:
     st, welcomed, resend = turn.state, turn.welcomed, turn.resend
     out = _Blocks()
     if welcomed:
-        _head_block(engine, project, turn, out)
+        _head_block(engine, project, turn, out, brief=resend and source == "compact")
         if turn.fresh and not resend:
             out.blocks.append(_previous_state_line(engine, project, call.project_dir))
     elif st.prompts - st.reminded_at >= prompting.REMIND_EVERY:
@@ -314,9 +315,9 @@ class _Blocks:
         return {e["path"] for e in self.entries}
 
 
-def _head_block(engine: Engine, project: str, turn: _Turn, out: _Blocks) -> None:
-    """Add the welcome proper, then the maintenance note."""
-    out.add(*memory.welcome(engine, project), turn.state)
+def _head_block(engine: Engine, project: str, turn: _Turn, out: _Blocks, brief: bool) -> None:
+    """Add the welcome (``brief``: overdue reminders and norms only), then the maintenance note."""
+    out.add(*memory.welcome(engine, project, brief=brief), turn.state)
     if turn.note:
         out.blocks.append(turn.note)
 
@@ -349,7 +350,11 @@ def _task(engine: Engine, args: _TaskArgs) -> str:
     """Build the context pack for a task. Call it inside engine.session()."""
     if not args.task or not args.task.strip():
         raise invalid('mode "task" needs task.')
-    text, entries = memory.task_context(engine, args.task, args.project, args.budget_tokens)
+    sid = sessions.IDS.get("session")
+    skip = prompting.state(sid).delivered if sid else None
+    text, entries = memory.task_context(
+        engine, args.task, args.project, args.budget_tokens, skip=skip
+    )
     if args.hook_event:
         return hookmode.render(args.hook_event, text)
     return dump({"text": text, "entries": entries})
