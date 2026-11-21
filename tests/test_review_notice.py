@@ -50,11 +50,13 @@ def test_notice_matches_review_totals(engine: Engine) -> None:
     assert totals["expired"] > 0 and totals["stale"] > 0
     assert parts, "the fixture vault should have something pending"
     notice = prompting.review_notice(engine, "fabrik")
+    hint = " Las huérfanas enlazables se enlazan con /episteme:mantencion huerfanas."
     assert notice == (
         f"episteme · mantención pendiente en fabrik: {' · '.join(parts)}. "
         'Corre review(project="fabrik", zone="memory") y propón qué archivar o unificar; '
         "no cambies nada sin aprobación. "
         "Con poco tiempo: solo los 3 casos más claros, las vencidas primero."
+        + (hint if totals["orphans_linkable"] > 0 else "")
     )
     for k, label in order:
         assert (f"{label} " in notice) == (totals[k] > 0)
@@ -75,6 +77,7 @@ def test_notice_counts_linkable_orphans(engine: Engine) -> None:
     notice = prompting.review_notice(engine, "orph")
 
     assert "huérfanas enlazables 2" in notice
+    assert notice.endswith("/episteme:mantencion huerfanas.")
 
 
 def test_notice_empty_when_nothing_pending(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

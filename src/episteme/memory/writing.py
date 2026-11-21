@@ -7,12 +7,14 @@ import difflib
 import re
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from episteme.errors import invalid
+from episteme.errors import EpistemeError, invalid
 from episteme.index import STOPWORDS_ES
 from episteme.markdown import (
+    WIKILINK_RE,
     body_without_title,
     compose,
     fold,
+    parse_wikilink,
 )
 from episteme.memory.files import _as_list, _files_of
 from episteme.memory.revising import _reject_tool_zone
@@ -398,9 +400,24 @@ def _frontmatter(engine: Engine, raw: dict[str, Any], links: _Links) -> dict[str
     return fm
 
 
-def _skip_paths(engine: Engine, related: list[str] | None, links: _Links) -> set[str]:
+def _body_link_paths(engine: Engine, text_body: str) -> set[str]:
+    """Vault paths of the notes the body already links with a wikilink (unresolved ones skipped)."""
+    found: set[str] = set()
+    for m in WIKILINK_RE.finditer(text_body):
+        dest = parse_wikilink(m.group(1))[0]
+        try:
+            found.add(engine.resolve_note(dest))
+        except EpistemeError:
+            continue
+    return found
+
+
+def _skip_paths(
+    engine: Engine, related: list[str] | None, links: _Links, text_body: str
+) -> set[str]:
     """Paths that are already linked and so are not suggested as link candidates."""
     skip = {engine.resolve_note(r) for r in related or []}
+    skip |= _body_link_paths(engine, text_body)
     if links.old_rel:
         skip.add(links.old_rel)
     return skip
@@ -490,7 +507,8 @@ def remember(
     similar, blocking = _find_similar(engine, project, type, title, text_body, links.old_rel)
     if blocking is not None and not force:
         return _duplicate_reply(similar, blocking)
-    candidates = _link_candidates(engine, project, fm, _skip_paths(engine, related, links))
+    skip = _skip_paths(engine, related, links, text_body)
+    candidates = _link_candidates(engine, project, fm, skip)
     linkable = link and type not in ("session", "reminder")
     linked = [c["path"] for c in candidates[:MAX_AUTO_LINKS]] if linkable else []
     if linked:

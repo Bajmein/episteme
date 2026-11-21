@@ -167,6 +167,11 @@ _NOTICE_PARTS = (
 )
 
 
+_LINKABLE_HINT = (
+    " Las huérfanas enlazables se enlazan con /episteme:mantencion huerfanas."
+)
+
+
 def review_notice(engine: Engine, project: str) -> str:
     """One line with what review has pending for the project, or "" when nothing."""
     zone = engine.vault.memory_zone
@@ -181,6 +186,7 @@ def review_notice(engine: Engine, project: str) -> str:
         f'Corre review(project="{project}", zone="memory") y propón qué archivar o unificar; '
         "no cambies nada sin aprobación. "
         "Con poco tiempo: solo los 3 casos más claros, las vencidas primero."
+        f"{_LINKABLE_HINT if totals.get('orphans_linkable', 0) > 0 else ''}"
     )
 
 

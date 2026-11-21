@@ -179,6 +179,22 @@ async def test_remember_link_writes_candidates_into_related(vault: Path) -> None
     assert "related" not in _fm(vault / a["path"])
 
 
+async def test_remember_link_skips_a_note_the_body_already_links(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        a = await c.ok(
+            "remember", type="insight", title="Primera", body="Uno distinto.",
+            tags=["tema/pricing", "pieza/qq"],
+        )  # fmt: skip
+        b = await c.ok(
+            "remember", type="insight", title="Segunda", body=f"Dos, ver [[{a['path']}]].",
+            tags=["tema/pricing", "pieza/qq"], link=True,
+        )  # fmt: skip
+
+    assert b["linked"] == []
+    assert "related" not in _fm(vault / b["path"])
+    assert "link_candidates" not in b
+
+
 async def test_remember_link_rejects_a_non_boolean(vault: Path) -> None:
     async with mcp_client(vault) as c:
         failed, _ = await c.call("remember", type="insight", title="X", body="Y.", link="maybe")
