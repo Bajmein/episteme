@@ -482,7 +482,7 @@ def _wants_partial(query: str, hits: list[Any], total: int) -> bool:
 
 def _optional_fields(h: Any) -> dict[str, Any]:
     """The hit fields that are set, in row order."""
-    keys = ("zone", "type", "status", "project", "created", "priority")
+    keys = ("zone", "type", "status", "project", "created", "priority", "description")
     return {key: getattr(h, key) for key in keys if getattr(h, key) is not None}
 
 

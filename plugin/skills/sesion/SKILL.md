@@ -25,7 +25,7 @@ Según el primer argumento: `retomar` va a «Retomar», `plantilla` a «Plantill
    - Sin secretos (claves, tokens, contraseñas): di dónde están guardados. Las personas, por su apellido.
 3. **Guarda** con `session(action="save", title=<la tarea en pocas palabras>, body=<el estado>, files=[…])`. Sin `note` se reescribe el estado en uso; si no hay, se crea uno (por eso pide `title`). Para empezar otra línea de trabajo, archiva antes el estado en uso (ver «Al terminar»).
 4. Si la respuesta trae `missing_sections` o `template_hint`, completa lo que falte solo si tienes con qué; nunca inventes.
-5. Lo que deba durar más que la tarea (una decisión cerrada, una lección, una corrección de la persona) va aparte, con `remember` y su tipo. El estado no lo reemplaza.
+5. Lo que deba durar más que la tarea (una decisión cerrada, una lección, una corrección de la persona) va aparte, con `remember` y su tipo, y pasa `description` (una línea, hasta 160 caracteres). El estado no lo reemplaza.
 6. **Responde** con una línea: la ruta y si se creó o se reescribió.
 
 ## Retomar

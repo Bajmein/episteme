@@ -207,7 +207,9 @@ def _related_notes(engine: Engine, query: str, terms: list[list[str]]) -> list[A
 
 def _memory_block(row: Any) -> str:
     """The listing of a memory: header line plus a clipped excerpt of its body."""
-    excerpt = clip(" ".join(body_without_title(row["body"] or "").split()), EXCERPT_CHARS)
+    excerpt = clean_line(row["description"] or "") or clip(
+        " ".join(body_without_title(row["body"] or "").split()), EXCERPT_CHARS
+    )
     head = f"- [{row['type']} p{row['priority']}] {clean_line(row['title'])} ({row['path']})"
     return f"{head}\n  {excerpt}"
 

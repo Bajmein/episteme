@@ -37,6 +37,7 @@ STATUSES = ("active", "superseded", "speculative", "archived")
 KEY_ORDER = (
     "type",
     "kind",
+    "description",
     "project",
     "priority",
     "status",
@@ -63,11 +64,13 @@ OMIT_WHEN_EMPTY = {
     "tags",
     "keywords",
     "files",
+    "description",
 }
 DUPLICATE = 0.8
 SHARED = "_shared"
 KEYWORD_CHARS = 60
 KEYWORDS_MAX = 12
+DESCRIPTION_MAX = 160
 SIMILAR = 0.5
 MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left out
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
@@ -191,6 +194,37 @@ def _check_keywords(fm: dict[str, Any]) -> None:
         raise schema_error(f"keywords has {len(keywords)} items; the limit is {KEYWORDS_MAX}.")
 
 
+_LINE_BREAKS = ("\n", "\r", " ", " ")
+
+
+def _has_line_break(text: str) -> bool:
+    return any(c in text for c in _LINE_BREAKS)
+
+
+def _too_long(text: str) -> bool:
+    return len(text) > DESCRIPTION_MAX
+
+
+def _description_problem(description: Any) -> str | None:
+    """What is wrong with a ``description`` value, or ``None`` when it is fine."""
+    if not isinstance(description, str):
+        return "description must be a string. Pass one line of text."
+    if _has_line_break(description):
+        return "description must be a single line. Remove the line breaks."
+    if _too_long(description):
+        return (
+            f"description has {len(description)} characters; the limit is {DESCRIPTION_MAX}. "
+            "Shorten it."
+        )
+    return None
+
+
+def _check_description(fm: dict[str, Any]) -> None:
+    problem = _description_problem(fm.get("description"))
+    if fm.get("description") is not None and problem:
+        raise schema_error(problem)
+
+
 def _check_tags(fm: dict[str, Any]) -> None:
     for tag in fm.get("tags") or []:
         if not tag or any(c in tag for c in ": #\t"):
@@ -221,6 +255,7 @@ _CHECKS = (
     _check_reminder_due,
     _check_string_lists,
     _check_keywords,
+    _check_description,
     _check_tags,
     _check_helpful,
     _check_flagged,

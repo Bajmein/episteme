@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from episteme import memory
 from episteme.hookmode import clean_line
 from episteme.index import STOPWORDS_ES, is_past
-from episteme.markdown import tokens
+from episteme.markdown import memory_description, tokens
 from episteme.memory import STOPWORDS_EN
 from episteme.vault import MEMORY, today
 
@@ -114,10 +114,16 @@ def trail_block(engine: Engine, skip: set[str]) -> tuple[str, list[dict[str, Any
         chosen,
         "trail",
         lambda r: (
-            f"- [{r['type']} p{r['priority']}] {clean_line(r['title'])} ({r['path']}) "
-            f"· {labels[TRAIL[r['path']]]}"
+            f"- [{r['type']} p{r['priority']}] {clean_line(r['title'])} ({r['path']})"
+            f"{_description_tail(r)} · {labels[TRAIL[r['path']]]}"
         ),
     )
+
+
+def _description_tail(row: Any) -> str:
+    """`` — <description or first sentence>`` for a memory row, or nothing if it has none."""
+    text = clean_line(memory_description(row["description"], row["body"]))
+    return f" — {text}" if text else ""
 
 
 def _recovered_parts(memories: int, trail: int) -> list[str]:
@@ -325,7 +331,10 @@ def recall(
         "episteme · memorias que pueden venir al caso (ábrelas con read si aplican):",
         chosen,
         "recall",
-        lambda r: f"- [{r['type']} p{r['priority']}] {clean_line(r['title'])} ({r['path']})",
+        lambda r: (
+            f"- [{r['type']} p{r['priority']}] {clean_line(r['title'])} ({r['path']})"
+            f"{_description_tail(r)}"
+        ),
     )
 
 

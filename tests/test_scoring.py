@@ -140,7 +140,7 @@ HOSTILE_TITLE = "Título \x1b]0;pwn\x07hostil ‮al revés"
 def test_entry_line_drops_control_characters_from_the_title() -> None:
     row = {
         "type": "decision", "priority": 5, "title": HOSTILE_TITLE, "path": "memory/x.md",
-        "body": "Primera frase \x1b[2Jcon ESC. Segunda.",
+        "body": "Primera frase \x1b[2Jcon ESC. Segunda.", "description": None,
     }  # fmt: skip
 
     line = entry_line(row)

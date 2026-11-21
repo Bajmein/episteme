@@ -237,7 +237,9 @@ def _move_memory(engine: Engine, nf: NoteFile) -> str:
 
 
 def _coerce(key: str, value: Any) -> Any:
-    """Dates given as strings in ``set`` are stored as YAML dates."""
+    """Dates given as strings in ``set`` are stored as YAML dates; a blank description goes."""
+    if key == "description" and isinstance(value, str):
+        return value.strip() or None
     if key in ("created", "due", "valid_until") and isinstance(value, str):
         try:
             return dt.date.fromisoformat(value.strip())

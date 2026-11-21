@@ -506,6 +506,12 @@ def first_sentence(body: str, limit: int = SENTENCE_LIMIT) -> str:
     return clip(sentence, limit)
 
 
+def memory_description(description: str | None, body: str | None) -> str:
+    """The stored one-line description of a memory, or the first sentence of its body."""
+    stored = " ".join((description or "").split())
+    return stored or first_sentence(body or "")
+
+
 def clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text

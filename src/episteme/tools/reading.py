@@ -114,7 +114,8 @@ def _register_search(server: MCPServer, engine: Engine) -> None:
         "partial" lists up to 5 more notes with some of the words.
         With match="any" or after that retry, each row carries "matched": the words it has.
         Returns JSON {"results": [{"path", "title", "line", "snippet", "score", and when set
-        "zone", "type", "status", "project", "created", "priority", "heading",
+        "zone", "type", "status", "project", "created", "priority", "description" (memories),
+        "heading",
         "superseded_by"}], "total"}. `line` is the 1-based line of the first match; open it
         with read(path, lines=...). With no results, "hints" says which filter matches nothing.
         priority_min, valid and linked_to also filter (they can replace the query).

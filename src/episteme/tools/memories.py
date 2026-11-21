@@ -54,6 +54,14 @@ _KeywordsArg = Annotated[
         "title."
     ),
 ]
+_DescriptionArg = Annotated[
+    str | None,
+    Field(
+        description="One line (at most 160 characters, no line breaks) saying what this memory "
+        "is for, so a reader can decide without read. If omitted, the first sentence of the "
+        "body is shown instead (it is not stored)."
+    ),
+]
 _FilesArg = Annotated[
     list[str],
     Field(description="Project-relative files this memory is about (globs allowed)."),
@@ -114,6 +122,7 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
         force: _ForceArg = False,
         slug: _SlugArg = None,
         link: _LinkArg = False,
+        description: _DescriptionArg = None,
     ) -> str:
         """Store a memory as memory/<project>/<type folder>/YYYY-MM-DD-<slug>.md.
 
@@ -126,14 +135,15 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
         revise(action="feedback", value="helpful") if it happened again, remember again with
         supersedes=<path> if it changed, force=true only for a genuinely different memory.
         `similar` also lists active memories of any type in the project or _shared (they only
-        warn). title, body, keywords and source are refused (invalid_argument) when they look
-        like a credential (private key, cloud/API token, JWT, password in a URL): say where
-        the secret is stored instead.
+        warn). title, body, description, keywords and source are refused (invalid_argument)
+        when they look like a credential (private key, cloud/API token, JWT, password in a
+        URL): say where the secret is stored instead.
         Returns JSON {"created", "path", "similar": [{"path", "title", "similarity", "type",
         "project"}], "new_tags": [{"tag", "similar"}] (tags no other note has, with close
         spellings), "link_candidates": [{"path", "title", "reason"}] (up to 5 memories sharing
         a file or 2 tags; consider related), "keywords_hint": str (when keywords is empty and the
-        type is not session or reminder), "links_hint": str (when it has no related, supersedes
+        type is not session or reminder), "description_hint": str (same condition, for a
+        missing description), "links_hint": str (when it has no related, supersedes
         or [[wikilink]] in the body, and is not a session or reminder), "template_hint": str
         (when a body of 300+ characters lacks ## sections of its type's template; it never
         refuses), "linked": [path] (only with link=true: the candidates written into related;
@@ -160,6 +170,7 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
                     slug=slug,
                     keywords=keywords,
                     link=link,
+                    description=description,
                 )
             )
 

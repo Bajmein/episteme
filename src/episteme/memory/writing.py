@@ -312,6 +312,18 @@ def _needs_keywords_hint(fm: dict[str, Any]) -> bool:
     return not fm.get("keywords") and fm.get("type") not in ("session", "reminder")
 
 
+DESCRIPTION_HINT = (
+    "No description. Add one line (at most 160 characters) saying what this memory is for, "
+    'with revise(action="set", fields={"description": "..."}): it is shown instead of the '
+    "first sentence, so a reader can decide without read."
+)
+
+
+def _needs_description_hint(fm: dict[str, Any]) -> bool:
+    """True for a memory saved without a description, unless it is a session or a reminder."""
+    return not fm.get("description") and fm.get("type") not in ("session", "reminder")
+
+
 LINKS_HINT = (
     'No links. Link it to the memories it builds on or belongs with: revise(action="set", '
     'fields={"related": ["[[name]]"]}). Pick from link_candidates, or search for them.'
@@ -346,7 +358,14 @@ def _extras(engine: Engine, fm: dict[str, Any], candidates: list[dict[str, str]]
         extras["link_candidates"] = candidates
     if _needs_keywords_hint(fm):
         extras["keywords_hint"] = KEYWORDS_HINT
+    if _needs_description_hint(fm):
+        extras["description_hint"] = DESCRIPTION_HINT
     return extras
+
+
+def _clean_description(description: str | None) -> str | None:
+    """The description with its outer whitespace stripped; ``None`` when absent or empty."""
+    return (description or "").strip() or None
 
 
 def _numbered_rel(folder: str, base: str, n: int) -> str:
@@ -391,6 +410,7 @@ def _frontmatter(engine: Engine, raw: dict[str, Any], links: _Links) -> dict[str
             "tags": [t.strip().lstrip("#") for t in raw["tags"] or []],
             "keywords": [k.strip() if isinstance(k, str) else k for k in raw["keywords"] or []],
             "files": list(raw["files"] or []),
+            "description": _clean_description(raw["description"]),
             "supersedes": wikilink(engine, links.old_rel) if links.old_rel else None,
             "related": links.related,
             "due": _date_arg("due", raw["due"]),
@@ -466,6 +486,7 @@ def remember(
     slug: str | None = None,
     keywords: list[str] | None = None,
     link: bool = False,
+    description: str | None = None,
 ) -> dict[str, Any]:
     """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration.
 
@@ -476,6 +497,7 @@ def remember(
     check_files(files)
     secret_fields = (
         ("keywords", keywords),
+        ("description", description),
         ("source", source),
         ("tags", tags),
         ("files", files),
@@ -497,6 +519,7 @@ def remember(
         "tags": tags,
         "keywords": keywords,
         "files": files,
+        "description": description,
         "source": source,
         "helpful": helpful,
         "due": due,

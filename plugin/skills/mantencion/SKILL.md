@@ -39,7 +39,7 @@ Antes de proponer algo sobre una memoria, léela: `read(notes=[...])` con todas 
 1. Lee todas las del grupo y di en qué coinciden y en qué difieren.
 2. Elige una de estas salidas y proponla:
    - **Una ya lo dice todo**: se queda esa, y cada una de las otras se marca con `revise(note=<otra>, action="supersede", by=<la que queda>)`.
-   - **Cada una aporta algo**: redacta la unificada, con todos los datos concretos de las originales (archivos, comandos, fechas, personas); guárdala con `remember(…, supersedes=<una de ellas>)` y marca las demás con `revise(action="supersede", by=<la nueva>)`. Conserva el `type`, la `priority` más alta del grupo y la unión de `tags`, `keywords` y `files`.
+   - **Cada una aporta algo**: redacta la unificada, con todos los datos concretos de las originales (archivos, comandos, fechas, personas); guárdala con `remember(…, supersedes=<una de ellas>)` y marca las demás con `revise(action="supersede", by=<la nueva>)`. Pasa `description` (una línea, hasta 160 caracteres). Conserva el `type`, la `priority` más alta del grupo y la unión de `tags`, `keywords` y `files`.
    - **No son lo mismo**: se dejan, enlazadas con `related` para que se lean juntas.
 3. Muestra el texto de la unificada antes de guardarla. Si `remember` responde `created: false`, es por parecerse a las que se van a reemplazar: repite con `supersedes`.
 
