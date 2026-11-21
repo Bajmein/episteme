@@ -1,0 +1,29 @@
+# Solo actualizaciones de seguridad: open-pull-requests-limit 0 apaga los PR de versión
+# (molestaban al CI) y deja los de seguridad, que tienen su propio límite.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    labels: ["dependencias", "seguridad"]
+    commit-message:
+      prefix: "fix(deps)"
+    groups:
+      seguridad-python:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    labels: ["dependencias", "seguridad"]
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      seguridad-actions:
+        applies-to: security-updates
+        patterns: ["*"]

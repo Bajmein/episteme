@@ -1,0 +1,11 @@
+{
+  "usage": "Persist this file inside your repositories as .codescene/custom-quality-gates.json",
+  "rule_sets": [
+    {
+      "quality_gates": "bare_minimum",
+      "quality_gates_doc": "The Bare Minimum profile for all code, as in the project UI. Options: bare_minimum, clean_code_collective, pay_down_tech_debt.",
+      "matching_content_path": "**/*",
+      "matching_content_path_doc": "Glob relative to the repo root. Without a matching rule, no gate runs."
+    }
+  ]
+}
