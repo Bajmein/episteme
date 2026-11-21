@@ -88,6 +88,7 @@ async def test_docs_status_lists_docs_zones_with_counts(suite: Path) -> None:
                 "suite": SUITE,
                 "notes": 3,
                 "with_source": 2,
+                "local": 0,
                 "deprecated": 1,
                 "invalid": 1,
                 "manifest_valid": True,
@@ -95,6 +96,8 @@ async def test_docs_status_lists_docs_zones_with_counts(suite: Path) -> None:
                 "include": [f"{URL}/"],
                 "context7": "/jdx/mise",
                 "synced": "2026-10-10",
+                "markdown": None,
+                "manual": False,
             }
         ]
     }
@@ -334,6 +337,79 @@ async def test_docs_write_replaces_the_manifest_suite_mapping(suite: Path) -> No
     assert bad.startswith("invalid_schema:")
     assert res["manifest_valid"] is True
     assert res["context7"] is None and res["synced"] == TODAY and res["upstream"] == []
+
+
+async def test_docs_status_returns_the_optional_suite_keys(suite: Path) -> None:
+    template = "https://raw.example.org/docs/{page}.md"
+    new_suite = {
+        "upstream": [], "include": [], "context7": None, "synced": None,
+        "markdown": template, "manual": True,
+    }  # fmt: skip
+
+    async with mcp_client(suite) as c:
+        await c.ok("docs_write", suite=SUITE, path="README.index.md", fields={"suite": new_suite})
+        res = await c.ok("docs_status", suite=SUITE)
+
+    assert res["manifest_valid"] is True
+    assert res["markdown"] == template and res["manual"] is True
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"markdown": "https://raw.example.org/docs/index.md"},
+        {"markdown": "ftp://raw.example.org/{path}"},
+        {"markdown": "https://raw.example.org/{path}?v={version}"},
+        {"manual": "yes"},
+        {"mirror": "https://x.org/"},
+    ],
+)
+async def test_docs_write_refuses_bad_optional_suite_keys(suite: Path, extra: dict) -> None:
+    bad = {"upstream": [], "include": [], "context7": None, "synced": None, **extra}
+
+    async with mcp_client(suite) as c:
+        err = await c.error(
+            "docs_write", suite=SUITE, path="README.index.md", fields={"suite": bad}
+        )
+
+    assert err.startswith("invalid_schema:")
+
+
+async def test_docs_status_marks_a_manifest_with_a_bad_template_invalid(suite: Path) -> None:
+    manifest = suite / SUITE / "README.index.md"
+    manifest.write_text(
+        MANIFEST.replace("  synced:", '  markdown: "ftp://x.org/{path}"\n  synced:'),
+        encoding="utf-8",
+    )
+
+    async with mcp_client(suite) as c:
+        res = await c.ok("docs_status", suite=SUITE)
+
+    assert res["manifest_valid"] is False
+
+
+async def test_docs_write_creates_a_local_note_kept_out_of_pages(suite: Path) -> None:
+    async with mcp_client(suite) as c:
+        await c.ok(
+            "docs_write",
+            suite=SUITE,
+            path="notas/uso.md",
+            body="# Uso propio\n",
+            fields={**NEW_FIELDS, "origin": "local"},
+        )
+        both = await c.error(
+            "docs_write",
+            suite=SUITE,
+            path="notas/otra.md",
+            source=f"{URL}/otra.md",
+            body="# Otra\n",
+            fields={**NEW_FIELDS, "origin": "local"},
+        )
+        res = await c.ok("docs_status", suite=SUITE, pages=True)
+
+    assert both.startswith("invalid_schema:")
+    assert res["local"] == 1 and res["invalid"] == 1 and res["with_source"] == 2
+    assert "notas/uso.md" not in res["pages"]
 
 
 async def test_docs_status_reports_an_invalid_manifest(vault: Path) -> None:

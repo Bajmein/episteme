@@ -460,3 +460,119 @@ def test_non_pages_are_matched_without_regard_to_case(check: ModuleType) -> None
     assert not check._is_page("https://d.io/openapi.JSON")
     assert not check._is_page("https://d.io/LLMS-full.txt")
     assert not check._is_page("https://d.io/.well-known")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "# T\n",
+        "﻿# T\n",
+        "<div align='center'>\n\n# T\n</div>\n",
+        "<!-- generated -->\n# T\n",
+        "---\ntitle: x\n---\n# H\n",
+        "[link](u)\n",
+        "<html-tag-in-md> x",
+    ],
+)
+def test_not_markdown_reason_passes_markdown(check: ModuleType, text: str) -> None:
+    assert check._not_markdown_reason(check.Fetched("https://x.org/p", 200, text)) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    [
+        ("<!DOCTYPE html><html>", "HTML instead of Markdown"),
+        ("﻿<!doctype html>", "HTML instead of Markdown"),
+        ("  \n <!doctype html>", "HTML instead of Markdown"),
+        ("<head><title>x</title></head><body>", "HTML instead of Markdown"),
+        ("<body><p>x</p></body>", "HTML instead of Markdown"),
+        ("<!-- c -->\n<!DOCTYPE html>", "HTML instead of Markdown"),
+        ("<?xml version='1.0'?><rss/>", "HTML instead of Markdown"),
+        ('{"error":"x"}', "JSON instead of Markdown"),
+        ('[{"a":1}]', "JSON instead of Markdown"),
+        ("", "empty page"),
+        ("  \n", "empty page"),
+    ],
+)
+def test_not_markdown_reason_rejects_other_bodies(
+    check: ModuleType, text: str, reason: str
+) -> None:
+    assert check._not_markdown_reason(check.Fetched("https://x.org/p", 200, text)) == reason
+
+
+def test_markup_content_type_rejects_only_a_body_that_starts_with_a_tag(
+    check: ModuleType,
+) -> None:
+    html = check.Fetched("https://x.org/p", 200, "<div>x</div>", content_type="text/html")
+    md = check.Fetched("https://x.org/p", 200, "# T\n", content_type="text/html")
+
+    assert check._not_markdown_reason(html) == "HTML instead of Markdown"
+    assert check._not_markdown_reason(md) is None
+
+
+@pytest.mark.parametrize(
+    ("template", "url", "expected"),
+    [
+        ("https://m.org/b?pathname={path}", "https://d.org/en/a b/c", "https://m.org/b?pathname=/en/a%20b/c"),
+        ("https://m.org/{page}.md", "https://d.org/cli/use.html", "https://m.org/cli/use.md"),
+        ("https://m.org/{page}.md", "https://d.org/tasks/", "https://m.org/tasks/index.md"),
+        ("https://m.org/{page}.md", "https://d.org/", "https://m.org/index.md"),
+    ],
+)  # fmt: skip
+def test_expand_template(check: ModuleType, template: str, url: str, expected: str) -> None:
+    assert check.expand_template(template, url) == expected
+
+
+def _templated(check: ModuleType, base: str, tmp_path: Path, path: str, template: str) -> dict:
+    page = check.Page(f"https://public.example{path}", "0" * 16, "p.md", "stable")
+    return check.diff([page], tmp_path / "inbox", [], [], f"{base}{template}")
+
+
+def test_diff_fetches_pages_from_the_path_template(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _templated(check, base, tmp_path, "/docs/changed.md", "{path}")
+
+    [entry] = report["changed"]
+    assert entry["source"] == "https://public.example/docs/changed.md"
+    assert Path(entry["file"]).read_text(encoding="utf-8") == "# Changed\n\nNew text.\n"
+
+
+def test_diff_fetches_pages_from_the_page_template_without_md_variant(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _templated(check, base, tmp_path, "/docs/b.html", "/{page}")
+
+    [entry] = report["changed"]
+    assert Path(entry["file"]).read_text(encoding="utf-8") == "# B\n\nPlain.\n"
+
+
+def test_diff_reports_a_404_from_the_template_as_gone(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _templated(check, base, tmp_path, "/docs/missing", "/{page}.md")
+
+    assert report["gone"][0]["http_status"] == 404
+    assert report["errors"] == []
+
+
+def test_diff_reports_html_from_the_template_as_an_error(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    report = _templated(check, base, tmp_path, "/docs/html-only", "{path}")
+
+    assert report["errors"] == [
+        {"source": "https://public.example/docs/html-only", "error": "HTML instead of Markdown"}
+    ]
+
+
+def test_diff_fetches_new_pages_from_the_template(
+    check: ModuleType, base: str, tmp_path: Path
+) -> None:
+    _Handler.llms = f"# Docs\n\n- [A]({base}/docs/a)\n"
+
+    report = check.diff([], tmp_path / "inbox", [f"{base}/llms.txt"], [], f"{base}{{path}}.md")
+
+    [new] = report["new"]
+    assert new["source"] == f"{base}/docs/a"
+    assert Path(new["file"]).read_text(encoding="utf-8") == "# A\n\nMarkdown.\n"

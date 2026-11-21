@@ -38,10 +38,13 @@ def _register_docs_status(server: MCPServer, engine: Engine) -> None:
         """List the docs suites (zones with mode "docs") and their manifests. Never writes.
 
         Without suite returns JSON {"suites": [{"suite", "inbox", "notes", "with_source",
-        "deprecated", "invalid", "manifest_valid", "upstream", "include", "context7",
-        "synced"}]}: notes
+        "local", "deprecated", "invalid", "manifest_valid", "upstream", "include",
+        "context7", "synced", "markdown", "manual"}]}: notes
         leaves out README.index.md (the manifest), invalid counts notes that fail the suite
-        schema, inbox is the absolute path of the suite's inbox (never created here), where
+        schema, local counts the suite's own notes (origin: local, no source, never in pages),
+        markdown is the URL template that serves each page as Markdown (null if none), manual
+        is true for a suite kept by hand (/episteme:docs skips it),
+        inbox is the absolute path of the suite's inbox (never created here), where
         docs_check.py diff leaves the downloaded bodies that docs_write takes by body_ref.
         With suite returns that one object; pages=true adds "pages", one string with a
         line per note that has a source: <source>\\t<hash>\\t<path in the suite>\\t<status>.
@@ -96,7 +99,9 @@ def _register_docs_write(server: MCPServer, engine: Engine) -> None:
         and the file is deleted after a successful write or when the body was unchanged (it is
         kept on any error).
         fields={"suite": {...}} replaces the whole manifest mapping (upstream, include,
-        context7, synced). The result is checked against the suite schema (invalid_schema);
+        context7, synced, and the optional markdown and manual). A note of the suite's own,
+        with no upstream page, takes fields={"origin": "local"} and no source.
+        The result is checked against the suite schema (invalid_schema);
         string values in fields that look like a credential are refused; the body is not
         scanned. Pages are never deleted: mark a gone one with fields={"status":
         "deprecated"}. Returns JSON {"path", "created", "changed", "hash"}; changed false
