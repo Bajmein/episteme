@@ -24,6 +24,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `docs_status` y `docs_write` pasan a ser un solo tool, `docs(action="status"|"write", …)`, con los mismos argumentos y las mismas salidas. Un argumento que no corresponde a la acción, o la falta de `suite` en `write`, responde `invalid_argument`. Sigue registrándose solo con una zona `docs` y no lleva `read_only_hint`, porque escribe. Rotura sin alias: actualiza el plugin `episteme-docs` (su skill ya llama a `docs`) y vuelve a correr `/episteme:setup`, que ya no pone `docs_status` en el `allow` (`docs` pide permiso). Un `docs_status` que quedara en el `allow` de un proyecto no hace nada: bórralo.
 - `revise` en una zona `docs` pide `docs(action="write")` (antes `docs_write`).
 
+### Quitado
+
+- Los tools `surface`, `constraints`, `links`, `docs_status` y `docs_write`, sin alias: sus reemplazos son `context(mode="surface")`, `context(mode="constraints")`, `read(note, links=…)`, `docs(action="status")` y `docs(action="write")`. De 13 tools quedan 9 (8 sin zona `docs`).
+
 ## [0.19.0] - 2026-11-21
 
 ### Quitado
