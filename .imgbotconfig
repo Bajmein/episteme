@@ -1,6 +1,5 @@
 {
   "schedule": "monthly",
   "aggressiveCompression": "false",
-  "minKBReduced": 20,
-  "prTitle": "chore: optimize images"
+  "minKBReduced": 20
 }
