@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Conectar un proyecto a episteme
 
-episteme (`Bajmein/episteme`) sirve un vault Markdown, por defecto el global `~/.episteme` (`%USERPROFILE%\.episteme` en Windows), como documentación y memoria. Toda interacción pasa por sus 10 tools MCP; no hay CLI. El uso de cada tool está en `docs/tools.md` del repo.
+episteme (`Bajmein/episteme`) sirve un vault Markdown, por defecto el global `~/.episteme` (`%USERPROFILE%\.episteme` en Windows), como documentación y memoria. Toda interacción pasa por sus 9 tools MCP (8 sin zona `docs`); no hay CLI. El uso de cada tool está en `docs/tools.md` del repo.
 
 Pide a la persona el nombre del proyecto (`<p>`, p. ej. `fabrik`). Trabaja desde la raíz del proyecto.
 

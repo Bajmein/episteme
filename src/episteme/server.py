@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
 from pydantic import ValidationError
 
-from episteme import __version__, maintenance, prompting
+from episteme import __version__, hookmode, maintenance, prompting
 from episteme import session as sessions
 from episteme.activity import Activity
 from episteme.engine import Engine
@@ -22,15 +22,54 @@ from episteme.tools import session as session_tool
 
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.
-- Look before you answer or act. When you start work, call context(mode="task", task="<what you are about to do>"). When the user asks what is known about a person, a client, a decision or a past event, call search, even if they did not mention the vault; then read the best hits in one call with read(notes=[...]).
-- search is literal: it matches whole words. To look up several names, or a word with its plural, abbreviation and proper name (mkt marketing, a surname), put them in one query with match="any" instead of one search per word; add zone="memory" when you want memories, not documentation. tags follow a topic across projects; project is optional.
-- Before deciding something that may already have been decided, call search, then read the best hit.
-- Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact from another source because the vault did not have it; or the user says "remember". Name the files, tools, commands and people involved in the body: that is what is searched later. Save project knowledge with remember, not in the agent's own memory (Claude Code's MEMORY.md, or rule files such as AGENTS.md or GEMINI.md).
+- Look before you answer or act. When you start work, call context(mode="task", task="<what you are about to do>"). When the user asks what is known about a person, client, decision or past event, call search, even without a mention of the vault; then read the best hits in one call with read(notes=[...]).
+- search is literal: whole words only. To look up several names, or a word with its plural, abbreviation and proper name (mkt marketing, a surname), put them in one query with match="any" instead of one search per word; add zone="memory" when you want memories, not documentation. tags follow a topic across projects; project is optional.
+- Before deciding something that may already have been decided, call search, then read the best hit. Follow links with read(note, links="out"|"in"|"both").
+- Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact elsewhere because the vault lacked it; or the user says "remember". Name the files, tools, commands and people in the body: it is searched later. Pass description="<one line>", link=true. Save project knowledge with remember, not in the agent's own memory (MEMORY.md, or rule files such as AGENTS.md or GEMINI.md).
 - When a memory is wrong or replaced, call revise (action="supersede" or "archive"), never remember a contradiction next to it.
 - Keep the session state current with session(action="save"), following its template: when a plan is agreed, a phase ends, the approach changes, before a risky step, and when the user asks. If a hook asks you to launch the episteme:extractor agent, launch it in the background.
-- Notes under read-only zones (docs/claude-code) cannot be changed. Errors say what failed and what to do."""  # noqa: E501
+- Read-only zones (docs/claude-code) cannot be changed. Errors say what to do."""  # noqa: E501
+
+# Tools of earlier versions that were folded into others; calling one answers with its replacement.
+REMOVED_TOOLS = {
+    "surface": 'context(mode="surface")',
+    "constraints": 'context(mode="constraints")',
+    "links": "read(note, links=...)",
+    "docs_status": 'docs(action="status")',
+    "docs_write": 'docs(action="write")',
+}
 
 DOCS_INSTRUCTIONS = "\n- docs/ suites change only via /episteme-docs:docs."
+
+
+def _removed_error(name: str) -> str:
+    """The ``not_found`` message for a tool that was removed, naming its replacement."""
+    return (
+        f'not_found: tool "{name}" was removed. Use {REMOVED_TOOLS[name]} instead, '
+        "and re-run /episteme:setup to update hooks and permissions."
+    )
+
+
+def _removed_hook_text(name: str) -> str:
+    """The hook-mode notice for a removed tool: it says what replaces it and never blocks."""
+    return (
+        f'The episteme tool "{name}" no longer exists: use {REMOVED_TOOLS[name]} instead. '
+        "Re-run /episteme:setup to update this project's hooks and permissions."
+    )
+
+
+def _removed_result(name: str, arguments: dict[str, Any]) -> tuple[CallToolResult, str, bool]:
+    """``(result, text, ok)`` for a call to a removed tool; nothing is executed."""
+    event = arguments.get("hook_event")
+    if isinstance(event, str):
+        try:
+            text = hookmode.render(event, _removed_hook_text(name))
+        except EpistemeError:
+            text = None
+        if text is not None:
+            return CallToolResult(content=[TextContent(type="text", text=text)]), text, True
+    text = _removed_error(name)
+    return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True), text, False
 
 
 def _validation_message(exc: ValidationError) -> str:
@@ -170,6 +209,10 @@ class EpistemeServer(MCPServer):
     ) -> Any:
         start = time.perf_counter()
         caller = caller_identity(context)
+        if name in REMOVED_TOOLS:
+            removed, text, ok = _removed_result(name, arguments)
+            self._log(name, arguments, text, start, ok, caller)
+            return removed
         try:
             result = await super().call_tool(name, arguments, context)
         except ToolError as exc:

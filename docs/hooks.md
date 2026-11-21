@@ -83,6 +83,15 @@ Bloque para el `settings.json` del proyecto:
 }
 ```
 
+## Tools quitados
+
+Los tools `surface`, `constraints`, `links`, `docs_status` y `docs_write` ya no existen: sus funciones pasaron a `context(mode="surface"|"constraints")`, `read(note, links=…)` y `docs(action="status"|"write")`. Si un proyecto aún los llama (por ejemplo, con los hooks de una versión anterior), el servidor no ejecuta nada y responde:
+
+- Sin `hook_event` (el agente): un error `not_found: tool "surface" was removed. Use context(mode="surface") instead, and re-run /episteme:setup to update hooks and permissions.`
+- Con `hook_event` (un hook): una respuesta sin error, con el aviso como `additionalContext` (`PreToolUse`, `PostToolUse`, `UserPromptSubmit` y `SessionStart`; en los eventos silenciosos, vacía), que nombra el tool que lo reemplaza y pide volver a correr `/episteme:setup`. Nunca bloquea.
+
+La llamada queda en el registro de actividad con su nombre original.
+
 ## Después de compactar o de `/clear`
 
 No hay que hacer nada a mano: los tres hooks de `SessionStart` (`compact|clear`) corren solos. Antes, `PostCompact` guardó como estado el bloque `<estado-sesion>` del resumen (o el resumen, si no lo traía) y `SessionEnd` (`clear`) anotó el transcript que se cerró.
