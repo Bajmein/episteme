@@ -194,7 +194,7 @@ def validate(fm: dict[str, Any], rel: str, manifest: bool) -> None:
     if errors:
         raise EpistemeError(
             INVALID_SCHEMA,
-            f"{rel}: {'; '.join(errors)}. Fix fields and call docs_write again.",
+            f"{rel}: {'; '.join(errors)}. Fix fields and call docs(action='write') again.",
         )
 
 

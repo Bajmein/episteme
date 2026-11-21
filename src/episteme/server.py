@@ -53,7 +53,7 @@ def _created(text: str) -> bool:
 
 
 def _changed(text: str) -> bool:
-    """Whether a ``docs_write`` result wrote the note (changed: false wrote nothing)."""
+    """Whether a ``docs`` write result wrote the note (changed: false wrote nothing)."""
     try:
         return json.loads(text).get("changed") is True
     except (ValueError, AttributeError):
@@ -85,9 +85,9 @@ def _result_text(result: Any) -> str:
     return "".join(getattr(b, "text", "") for b in getattr(result, "content", None) or [])
 
 
-def _track_docs_write(name: str, text: str) -> None:
-    """A ``docs_write`` that changed a note joins the trail; it is not a memory write."""
-    if name == "docs_write" and _changed(text):
+def _track_docs_write(name: str, arguments: dict[str, Any], text: str) -> None:
+    """A ``docs`` write that changed a note joins the trail; it is not a memory write."""
+    if name == "docs" and arguments.get("action") == "write" and _changed(text):
         for path in _result_paths(text):
             prompting.track(path, "written")
 
@@ -164,7 +164,7 @@ class EpistemeServer(MCPServer):
             return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)
         text = _result_text(result)
         _track_result(name, arguments, text)
-        _track_docs_write(name, text)
+        _track_docs_write(name, arguments, text)
         _track_session_save(name, arguments, text)
         self._log(name, arguments, text, start, True, caller)
         return result

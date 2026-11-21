@@ -54,7 +54,9 @@ def _not_a_suite(vault: Vault, name: str) -> EpistemeError:
             f'{name} is a {other.mode} zone, not a docs zone. Only zones with mode = "docs" '
             "in episteme.toml are suites.",
         )
-    return EpistemeError(NOT_FOUND, f'no docs zone "{name}". Call docs_status() to list them.')
+    return EpistemeError(
+        NOT_FOUND, f'no docs zone "{name}". Call docs(action="status") to list them.'
+    )
 
 
 def manifest_path(zone: Zone) -> str:
@@ -148,7 +150,9 @@ def docs_status(engine: Engine, suite: str | None = None, pages: bool = False) -
     """The docs zones with their counts; one zone, plus its pages as TSV when asked."""
     if suite is None:
         if pages:
-            raise invalid("pages needs a suite. Pass suite, e.g. docs_status(suite=\"mise\").")
+            raise invalid(
+                "pages needs a suite. Pass suite, e.g. docs(action='status', suite='mise')."
+            )
         zones = engine.vault.docs_zones
         return {"suites": [_summary(engine.vault, z, suite_notes(engine, z)) for z in zones]}
     zone = find_zone(engine.vault, suite)

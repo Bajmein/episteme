@@ -65,7 +65,7 @@ def _too_big(body: str | None) -> bool:
 
 def _check_target(path: str | None, source: str | None) -> None:
     if path is None and source is None:
-        raise invalid("docs_write needs source or path. Pass the page URL or its path.")
+        raise invalid("docs(action='write') needs source or path. Pass the page URL or its path.")
     if _bad_source(source):
         raise invalid(f"source {source!r} is not an http(s) URL. Pass the page URL.")
     if _bad_path(path):
@@ -301,7 +301,9 @@ def _save(engine: Engine, rel: str, text: str, created: bool) -> None:
         raise EpistemeError(READ_ONLY_ZONE, f"{rel} is not in a docs zone. Pick another path.")
     if created:
         if not engine.vault.create_exclusive(rel, text):
-            raise invalid(f"{rel} was created meanwhile. Call docs_write again to update it.")
+            raise invalid(
+                f"{rel} was created meanwhile. Call docs(action='write') again to update it."
+            )
     else:
         engine.vault.write_atomic(rel, text)
     engine.index.reindex(rel)

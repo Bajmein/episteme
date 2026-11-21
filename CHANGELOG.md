@@ -7,6 +7,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Cambiado
 
 - Los tools `surface` y `constraints` pasan a `context` como modos: `context(mode="surface", file|relative_path, limit, session)` y `context(mode="constraints", file|relative_path)`, con la misma salida y el mismo modo hook. Sin `file` ni `relative_path`, error `invalid_argument`. Rotura sin alias: vuelve a correr `/episteme:setup` para que los hooks `PreToolUse` y `PostToolUse` llamen a `context` y se quiten `mcp__episteme__surface` y `mcp__episteme__constraints` del `allow`. `scripts/measure_uptake.py` cuenta las entregas nuevas (`context` con `mode=surface|constraints`) y las filas antiguas del registro de actividad.
+- `docs_status` y `docs_write` pasan a ser un solo tool, `docs(action="status"|"write", …)`, con los mismos argumentos y las mismas salidas. Un argumento que no corresponde a la acción, o la falta de `suite` en `write`, responde `invalid_argument`. Sigue registrándose solo con una zona `docs` y no lleva `read_only_hint`, porque escribe. Rotura sin alias: actualiza el plugin `episteme-docs` (su skill ya llama a `docs`) y vuelve a correr `/episteme:setup`, que ya no pone `docs_status` en el `allow` (`docs` pide permiso). Un `docs_status` que quedara en el `allow` de un proyecto no hace nada: bórralo.
+- `revise` en una zona `docs` pide `docs(action="write")` (antes `docs_write`).
 
 ## [0.19.0] - 2026-11-21
 

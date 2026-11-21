@@ -4,10 +4,11 @@
         JSON {id: lastUpdateDate | null} from Context7's public search API.
     docs_check.py diff --pages <tsv> --inbox <dir> [--upstream <url>...] [--include <prefix>...]
                        [--markdown <template>]
-        Downloads every source of the TSV that docs_status(suite, pages=true) returns, saves
-        each changed or new page as <dir>/<body hash>.md (<dir> is the "inbox" docs_status
-        gives) and prints JSON with the changed, gone, new and failed pages, each changed or
-        new one with its "hash". docs_write takes the body from the inbox with body_ref, so no
+        Downloads every source of the TSV that docs(action="status", suite, pages=true)
+        returns, saves each changed or new page as <dir>/<body hash>.md (<dir> is the "inbox"
+        docs(action="status") gives) and prints JSON with the changed, gone, new and failed
+        pages, each changed or new one with its "hash". docs(action="write") takes the body
+        from the inbox with body_ref, so no
         page text passes through the model. episteme itself has no HTTP: this script runs on
         the person's machine. With --markdown (the suite.markdown template, with {path} or
         {page}), each page is fetched only from the expanded template; the source stays the
@@ -171,7 +172,7 @@ class Page:
 
 
 def read_pages(tsv: Path) -> list[Page]:
-    """The lines of ``docs_status(pages=true)``: source, hash, path and status."""
+    """The lines of ``docs(action="status", pages=true)``: source, hash, path and status."""
     pages = []
     for line in tsv.read_text(encoding="utf-8").splitlines():
         parts = line.split("\t")

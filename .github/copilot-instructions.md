@@ -28,7 +28,7 @@ Dependencias solo con `uv` (`uv add`), nunca `pip install`.
 
 ## Reglas
 
-- La interfaz es solo tools MCP: no hay CLI para el agente. El alcance es cerrado: fuera de `memory/`, los tools solo escriben en zonas con un tool propio (`docs` con `docs_write`, `sesiones` con `session` y `planes` con `plan`); no hay tools para mover, renombrar ni borrar notas, ni sync, web, HTTP o embeddings.
+- La interfaz es solo tools MCP: no hay CLI para el agente. El alcance es cerrado: fuera de `memory/`, los tools solo escriben en zonas con un tool propio (`docs` con `docs(action="write")`, `sesiones` con `session` y `planes` con `plan`); no hay tools para mover, renombrar ni borrar notas, ni sync, web, HTTP o embeddings.
 - `tests/fixtures/` no se modifica: los tests copian el vault a `tmp_path` antes de escribir.
 - Portabilidad a Windows: rutas con `pathlib` u `os.path`, lecturas con `encoding="utf-8"` y escrituras con `newline=""`.
 - Un cambio que note quien usa episteme se anota en `CHANGELOG.md`, en «Sin publicar».

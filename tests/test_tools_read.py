@@ -18,12 +18,11 @@ TOOLS = {
     "revise",
     "review",
     "context",
-    "docs_status",
-    "docs_write",
+    "docs",
     "session",
     "plan",
 }
-DOCS_TOOLS = {"docs_status", "docs_write"}  # registered only with a mode = "docs" zone
+DOCS_TOOLS = {"docs"}  # registered only with a mode = "docs" zone
 
 
 async def test_read_tools_are_annotated(vault: Path) -> None:
