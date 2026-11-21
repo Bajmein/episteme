@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.18.0] - 2026-11-21
+
 ### Cambiado
 
 - **Al compactar, el resumen escribe el estado de la sesión.** El hook `PreCompact` (`session(action="gate")`) ya no frena el `/compact` manual: devuelve instrucciones para que el resumen termine con el estado al día entre `<estado-sesion>` y `</estado-sesion>`, y `PostCompact` (`capture`) lo guarda como el estado. Si lo último lo guardó el extractor, las instrucciones llevan su cuerpo. Tras compactar, `restore` responde una línea en lugar de repetir el estado, y no hace falta extractor. Si el resumen no trae el bloque, todo sigue como antes, pero el estado vuelve sin el resumen, que ya está en el contexto. `[session] compact_state = false` lo apaga.
@@ -389,7 +391,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.17.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/Bajmein/episteme/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Bajmein/episteme/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Bajmein/episteme/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Bajmein/episteme/compare/v0.14.0...v0.15.0
