@@ -76,7 +76,7 @@ Los mismos comandos sirven en PowerShell. Después, reinicia Claude Code.
 | [`/episteme-docs:docs [suite]`](../plugin-docs/skills/docs/SKILL.md) | La persona, o Claude cuando se le pide poner al día la documentación | Revisa las suites de documentación de `docs/` del vault contra su fuente y escribe lo que cambió con `docs(action="write")` (ver [Suites de documentación](documentacion.md)) |
 | [`/episteme:agy [tarea]`](../plugin/skills/agy/SKILL.md) | La persona, o Claude cuando se le pide «pásale esto a agy» | Activa agy con episteme en el proyecto o le delega una tarea en modo headless (ver «agy (opcional)») |
 
-El plugin sigue a la versión del release y el servidor al tag fijado en cada proyecto: si actualizas uno, actualiza el otro (ver «Actualizar episteme» en `/episteme:setup`).
+El plugin sigue a la versión del release y el servidor al tag fijado en cada proyecto: si actualizas uno, actualiza el otro (ver «Actualizar episteme» en `/episteme:setup`). Al pasar de una versión anterior a 0.20.0, vuelve a correr `/episteme:setup` en cada proyecto: los hooks llaman ahora a `context` con `mode`, y la skill quita del `allow` los tools que ya no existen (`surface`, `constraints`, `links` y `docs_status`).
 
 Para desarrollar las skills desde un clone, `claude --plugin-dir plugin` en la raíz carga los archivos en su sitio para esa sesión (los cambios valen con `/reload-plugins`). También se puede instalar desde el clone (`claude plugin marketplace add ./` y el `install`), pero Claude Code copia el plugin a su caché: los cambios llegan solo al subir `version` y hacer `claude plugin update episteme@episteme`.
 

@@ -19,7 +19,7 @@ Los mismos comandos que corre el CI, todos en verde:
 uv run ruff check
 uv run ty check
 uv run pytest
-uv run bandit -c pyproject.toml -r src scripts plugin -q
+uv run bandit -c pyproject.toml -r src scripts plugin plugin-docs -q
 uv run vulture
 uv run deptry .
 uv run zizmor .github/workflows
@@ -43,7 +43,7 @@ CodeScene revisa además cada PR. El check de CodeScene del PR (quality gate «T
 ## Documentación y registro de cambios
 
 - Un cambio que note quien usa episteme (tools, hooks, skills, scripts, instalación) se anota en `CHANGELOG.md`, en «Sin publicar».
-- Si cambia un tool, revisa también `README.md`, `docs/`, los `SKILL.md` del plugin, su agente (`plugin/agents/extractor.md`) y `plugin/rules/AGENTS.md`. Si cambian los hooks o los permisos, también `plugin/skills/setup/settings.json`.
+- Si cambia un tool, revisa también `README.md`, `docs/`, los `SKILL.md` de los dos plugins (`plugin/` y `plugin-docs/`), el agente (`plugin/agents/extractor.md`) y `plugin/rules/AGENTS.md`. Si cambian los hooks o los permisos, también `plugin/skills/setup/settings.json`.
 - `README.md` y `docs/` van en español; el código, los docstrings y los commits, en inglés.
 
 ## Licencia
