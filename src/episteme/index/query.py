@@ -47,6 +47,40 @@ def _status_filter(status: str | None) -> Filter | None:
     return None
 
 
+def _valid_filter(valid: str, today: str) -> Filter:
+    """``current``: no valid_until or not yet past; ``expired``: valid_until before today."""
+    if valid == "expired":
+        return "n.valid_until < ?", [today]
+    return "(n.valid_until is null or n.valid_until >= ?)", [today]
+
+
+def _linked_filter(rel: str) -> Filter:
+    return (
+        "(n.path != ? and (n.path in (select src from links where dst_path = ?) "
+        "or n.path in (select dst_path from links where src = ? and dst_path is not null)))",
+        [rel, rel, rel],
+    )
+
+
+def extra_filters(
+    priority_min: int | None, valid: str | None, today: str | None, linked_to: str | None
+) -> list[Filter]:
+    """The priority, validity and link filters, when given."""
+    out: list[Filter] = []
+    if priority_min is not None:
+        out.append(("n.priority >= ?", [priority_min]))
+    if valid and today:
+        out.append(_valid_filter(valid, today))
+    if linked_to:
+        out.append(_linked_filter(linked_to))
+    return out
+
+
+def _equals_filters(**columns: str | None) -> list[Filter]:
+    """``n.<column> = ?`` for each column that was given."""
+    return [(f"n.{col} = ?", [value]) for col, value in columns.items() if value]
+
+
 def build_where(
     query: str | None,
     *,
@@ -59,6 +93,7 @@ def build_where(
     status: str | None = None,
     mode: str | None = None,
     zone: str | None = None,
+    extra: list[Filter] | None = None,
 ) -> Built | None:
     """The ``(source, clause, params, terms)`` of a search; None if the query has no terms."""
     terms: list[list[str]] = []
@@ -70,15 +105,11 @@ def build_where(
         filters.append(_match_filter(terms, any_term))
     if path:
         filters.append(_path_filter(path))
-    if type:
-        filters.append(("n.type = ?", [type]))
     if project:
         filters.append(_project_filter(project))
-    if mode:
-        filters.append(("n.mode = ?", [mode]))
-    if zone:
-        filters.append(("n.zone = ?", [zone]))
+    filters.extend(_equals_filters(type=type, mode=mode, zone=zone))
     filters.append(_status_filter(status))
+    filters.extend(extra or [])
     filters.extend(
         ("n.path in (select path from tags where tag = ?)", [normalize_tag(tag)])
         for tag in tags or []

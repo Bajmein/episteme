@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from episteme.index.ingest import build_resolver, insert_note, relink
-from episteme.index.query import Built, build_where
+from episteme.index.query import Built, build_where, extra_filters
 from episteme.index.schema import (
     SCHEMA,
     SCHEMA_VERSION,
@@ -325,7 +325,9 @@ class Index:
 
     def facets(self, query: str | None = None, **filters: Any) -> dict[str, dict[str, int]]:
         """Counts by zone, project, type, status and tag over the notes the filters select."""
-        built = build_where(query, **filters)
+        keys = ("priority_min", "valid", "today", "linked_to")
+        extra = extra_filters(*(filters.pop(k, None) for k in keys))
+        built = build_where(query, extra=extra, **filters)
         out: dict[str, dict[str, int]] = {
             k: {} for k in ("zone", "project", "type", "status", "tags")
         }
@@ -445,6 +447,10 @@ class Index:
         limit: int = 20,
         zone: str | None = None,
         snippets: bool = True,
+        priority_min: int | None = None,
+        valid: str | None = None,
+        today: str | None = None,
+        linked_to: str | None = None,
     ) -> tuple[list[Hit], int]:
         """Full-text search. Returns the hits (after ``limit``) and the total before it.
 
@@ -464,6 +470,7 @@ class Index:
             status=status,
             mode=mode,
             zone=zone,
+            extra=extra_filters(priority_min, valid, today, linked_to),
         )
         if built is None:
             return [], 0

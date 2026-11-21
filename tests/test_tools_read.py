@@ -1,4 +1,4 @@
-"""search, read and links through a real MCP stdio client (cases 1, 2, 4, 5, 6, 17)."""
+"""search and read (with links) through a real MCP stdio client (cases 1, 2, 4, 5, 6, 17)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ pytestmark = pytest.mark.anyio
 TOOLS = {
     "search",
     "read",
-    "links",
     "remember",
     "revise",
     "review",
@@ -28,7 +27,7 @@ DOCS_TOOLS = {"docs"}  # registered only with a mode = "docs" zone
 async def test_read_tools_are_annotated(vault: Path) -> None:
     async with mcp_client(vault) as c:
         tools = {t.name: t for t in (await c.session.list_tools()).tools}
-        for name in ("search", "read", "links"):
+        for name in ("search", "read"):
             assert tools[name].annotations.read_only_hint is True
             assert tools[name].description
 
@@ -65,7 +64,7 @@ async def test_case4_paths_leaving_the_vault(vault: Path, tmp_path: Path) -> Non
         for bad in ("../outside/secret", "/etc/passwd", "escape/secret.md", "escape/secret"):
             for tool, args in (
                 ("read", {"note": bad}),
-                ("links", {"note": bad}),
+                ("read", {"note": bad, "links": "both"}),
                 ("search", {"query": "secret", "path": bad}),
             ):
                 text = await c.error(tool, **args)
@@ -81,12 +80,12 @@ async def test_case5_search_without_accents(vault: Path) -> None:
 
 async def test_case6_backlinks(vault: Path) -> None:
     async with mcp_client(vault) as c:
-        res = await c.ok("links", note="hooks-reference")
+        res = (await c.ok("read", note="hooks-reference", links="both"))["links"]
         assert res["path"] == "docs/claude-code/hooks-reference.md"
         assert "docs/claude-code/README.index.md" in {b["path"] for b in res["backlinks"]}
         kinds = {o["kind"] for o in res["outgoing"]}
         assert {"body", "up", "related"} <= kinds
-        deep = await c.ok("links", note="hooks-reference", direction="out", depth=2)
+        deep = (await c.ok("read", note="hooks-reference", links="out", depth=2))["links"]
         assert deep["backlinks"] == []
         assert {"path": "docs/claude-code/README.index.md", "distance": 1} in deep["reachable"]
 
@@ -112,9 +111,45 @@ async def test_read_errors(vault: Path) -> None:
         assert (await c.error("search", query="x", limit=500)).startswith("invalid_argument:")
         text = await c.error("search", query="x", limit="many")
         assert text.startswith("invalid_argument:")
-        assert (await c.error("links", note="hooks-reference", depth=9)).startswith(
-            "invalid_argument:"
-        )
+        text = await c.error("read", note="hooks-reference", links="both", depth=9)
+        assert text.startswith("invalid_argument:")
+        text = await c.error("read", note="hooks-reference", depth=2)
+        assert text.startswith("invalid_argument:")
+        text = await c.error("read", note="hooks-reference", links="sideways")
+        assert text.startswith("invalid_argument:")
+        text = await c.error("read", notes=["hooks-reference"], links="both")
+        assert text.startswith("invalid_argument:")
+
+
+async def test_read_without_links_and_without_content(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        plain = await c.ok("read", note="hooks-reference")
+        assert "links" not in plain
+        bare = await c.ok("read", note="hooks-reference", links="in", content=False)
+        assert not bare.get("content")
+        assert bare["outline"] and bare["links"]["outgoing"] == []
+        assert bare["links"]["backlinks"]
+
+
+async def test_search_priority_valid_and_linked_to(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        res = await c.ok("search", priority_min=5)
+        assert res["results"] and all(r["priority"] >= 5 for r in res["results"])
+        assert (await c.ok("search", priority_min=5, type="decision"))["total"] >= 0
+        cur = await c.ok("search", valid="current", zone="memory")
+        exp = await c.ok("search", valid="expired", zone="memory")
+        every = await c.ok("search", zone="memory", limit=100)
+        assert cur["total"] + exp["total"] == every["total"]
+        linked = await c.ok("search", linked_to="hooks-reference")
+        paths = {r["path"] for r in linked["results"]}
+        assert "docs/claude-code/README.index.md" in paths
+        assert "docs/claude-code/hooks-reference.md" not in paths
+        none = await c.ok("search", priority_min=5, linked_to="hooks-reference", valid="expired")
+        assert none["total"] == 0 and none["hints"]
+        text = await c.error("search", linked_to="nope-nothing")
+        assert text.startswith("not_found:")
+        for bad in ({"priority_min": 9}, {"priority_min": 0}, {"valid": "old"}):
+            assert (await c.error("search", **bad)).startswith("invalid_argument:")
 
 
 async def test_search_filters_and_superseded(vault: Path) -> None:
@@ -169,3 +204,22 @@ async def test_search_hyphenated_word_is_its_parts(vault: Path) -> None:
         res = await c.ok("search", query="qqqmissing-zorbclear")
         assert res["match"] == "or"
         assert {r["path"] for r in res["results"]} == {"plans/both.md", "plans/one.md"}
+
+
+async def test_search_valid_until_today_is_current_and_no_priority_is_out(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        made = await c.ok(
+            "remember",
+            type="lesson",
+            title="Frontier note on the last valid day",
+            body="Kept until the day the test runs; the boundary frontierword counts as current.",
+            valid_until="2026-10-19",
+        )
+        current = {r["path"] for r in (await c.ok("search", valid="current", limit=100))["results"]}
+        expired = await c.ok("search", valid="expired", query="frontierword")
+        assert made["path"] in current
+        assert expired["total"] == 0
+        with_priority = await c.ok("search", priority_min=1, limit=100)
+        paths = {r["path"] for r in with_priority["results"]}
+        assert made["path"] in paths
+        assert "docs/claude-code/hooks-reference.md" not in paths
