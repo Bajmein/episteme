@@ -50,6 +50,8 @@ def test_args_whitelist(tmp_path: Path) -> None:
                 "new": "n",
                 "prompt": "p",
                 "fields": {"a": 1},
+                "plan": "# texto largo",
+                "slug": "plan-azul",
                 "limit": 5,
             },
             "",
@@ -59,7 +61,7 @@ def test_args_whitelist(tmp_path: Path) -> None:
     finally:
         act.close()
     args = json.loads(rows(act.db_path)[0]["args"])
-    assert args == {"title": "t" * 200, "limit": 5}
+    assert args == {"title": "t" * 200, "slug": "plan-azul", "limit": 5}
 
 
 def test_extract_paths_json_and_text() -> None:

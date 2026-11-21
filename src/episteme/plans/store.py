@@ -407,12 +407,20 @@ def _linked_plans(engine: Engine) -> set[tuple[str, str]]:
     return linked
 
 
+def _rotation_stamp(engine: Engine, rel: str) -> dt.date | None:
+    """The date rotation counts from: ``saved_at``, else ``created`` if that is unreadable."""
+    props = engine.index.props(rel)
+    for key in ("saved_at", "created"):
+        try:
+            return dt.datetime.fromisoformat(str(props.get(key) or "")).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _saved_before(engine: Engine, rel: str, cutoff: dt.date) -> bool:
-    try:
-        saved = dt.datetime.fromisoformat(_saved_at(engine, rel)).date()
-    except ValueError:
-        return False
-    return saved < cutoff
+    saved = _rotation_stamp(engine, rel)
+    return saved is not None and saved < cutoff
 
 
 def rotate(engine: Engine, archive_days: int) -> list[str]:

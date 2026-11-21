@@ -327,6 +327,28 @@ async def test_first_welcome_archives_old_plans_but_not_the_linked_one(
     assert linked == "active"
 
 
+@pytest.mark.parametrize(
+    ("extra", "expected"), [("", "archived"), ("[plans]\narchive_days = 10", "active")]
+)
+async def test_rotation_counts_created_when_saved_at_is_missing(
+    vault: Path, extra: str, expected: str
+) -> None:
+    toml = vault / "episteme.toml"
+    toml.write_text(toml.read_text(encoding="utf-8") + "\n" + extra + "\n", encoding="utf-8")
+    async with mcp_client(vault, today="2026-10-01") as c:
+        saved = await c.ok("plan", action="save", plan=PLAN, plan_path=PATH_A)
+    copy = vault / saved["path"]
+    text = copy.read_text(encoding="utf-8")
+    lines = [ln for ln in text.split("\n") if not ln.startswith("saved_at:")]
+    assert len(lines) < len(text.split("\n"))
+    copy.write_text("\n".join(lines), encoding="utf-8", newline="")
+
+    async with mcp_client(vault, today="2026-10-09") as c:
+        await c.ok("context", mode="welcome", session="s1")
+
+    assert _fm(copy)["status"] == expected
+
+
 async def test_session_save_does_not_link_an_archived_current_plan(vault: Path) -> None:
     async with mcp_client(vault) as c, mcp_client(vault) as other:
         await c.ok("plan", action="save", plan=PLAN, plan_path=PATH_A)
