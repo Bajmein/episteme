@@ -206,7 +206,7 @@ async def test_review_totals_and_zone_filter(vault: Path) -> None:
         assert res["read_only"]["totals"]["invalid_frontmatter"] >= 1
         # Same categories as the project's own, so nothing found in a read-only zone is lost.
         assert set(res["read_only"]["totals"]) == set(res["totals"])
-        assert set(res["read_only"]) == {"totals", *res["totals"]}
+        assert set(res["read_only"]) == {"totals", *res["totals"]} - {"orphans_linkable"}
         plans = await c.ok("review", zone="plans")
         assert plans["totals"]["broken_links"] == 3
         assert plans["read_only"]["totals"]["invalid_frontmatter"] == 0
@@ -228,3 +228,14 @@ async def test_same_folder_preferred_for_repeated_names(vault: Path) -> None:
         assert {(b["path"], b["target"]) for b in res["broken_links"]} == {
             ("plans/other.md", "dup")
         }
+
+
+async def test_review_totals_count_linkable_orphans(vault: Path) -> None:
+    _orphan(vault, "lone")
+    _orphan(vault, "alpha", "[tema/x, tema/y]")
+    _orphan(vault, "beta", "[tema/x, tema/y]")
+
+    async with mcp_client(vault) as c:
+        res = await c.ok("review", project="orph")
+
+    assert res["totals"]["orphans_linkable"] == 2

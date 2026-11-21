@@ -46,6 +46,7 @@ BODY_MAX_CHARS = 100_000
 SLUG_WORDS = 5
 SLUG_CHARS = 40
 MAX_CANDIDATES = 5
+MAX_AUTO_LINKS = 3  # how many candidates ``remember(link=True)`` writes into ``related``
 MIN_SHARED_TAGS = 2
 _SLUG_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[a-z0-9]+")
 _SLUG_OK = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -333,13 +334,12 @@ def _body_hints(fm: dict[str, Any], text_body: str) -> dict[str, str]:
     return hints
 
 
-def _extras(engine: Engine, project: str, fm: dict[str, Any], skip: set[str]) -> dict[str, Any]:
+def _extras(engine: Engine, fm: dict[str, Any], candidates: list[dict[str, str]]) -> dict[str, Any]:
     """Hints for the caller: tags no other note has and memories worth linking."""
     extras: dict[str, Any] = {}
     new_tags = _new_tags(engine, fm.get("tags") or [])
     if new_tags:
         extras["new_tags"] = new_tags
-    candidates = _link_candidates(engine, project, fm, skip)
     if candidates:
         extras["link_candidates"] = candidates
     if _needs_keywords_hint(fm):
@@ -448,8 +448,13 @@ def remember(
     dry_run: bool = False,
     slug: str | None = None,
     keywords: list[str] | None = None,
+    link: bool = False,
 ) -> dict[str, Any]:
-    """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration."""
+    """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration.
+
+    With ``link=True`` the best link candidates (up to ``MAX_AUTO_LINKS``) go into the new
+    memory's ``related`` and the reply lists them under ``linked``.
+    """
     project = engine.need_project(project)
     check_files(files)
     secret_fields = (
@@ -485,8 +490,17 @@ def remember(
     similar, blocking = _find_similar(engine, project, type, title, text_body, links.old_rel)
     if blocking is not None and not force:
         return _duplicate_reply(similar, blocking)
-    extras = _extras(engine, project, fm, _skip_paths(engine, related, links))
+    candidates = _link_candidates(engine, project, fm, _skip_paths(engine, related, links))
+    linkable = link and type not in ("session", "reminder")
+    linked = [c["path"] for c in candidates[:MAX_AUTO_LINKS]] if linkable else []
+    if linked:
+        links = links._replace(related=[*links.related, *(wikilink(engine, p) for p in linked)])
+        fm = _frontmatter(engine, raw, links)
+        candidates = candidates[len(linked) :]
+    extras = _extras(engine, fm, candidates)
     extras.update(_body_hints(fm, text_body))
+    if link:
+        extras["linked"] = linked
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"

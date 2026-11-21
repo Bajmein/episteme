@@ -163,6 +163,7 @@ _NOTICE_PARTS = (
     ("similar", "grupos parecidos"),
     ("contradictions", "contradicciones posibles"),
     ("flagged", "marcadas"),
+    ("orphans_linkable", "huérfanas enlazables"),
 )
 
 

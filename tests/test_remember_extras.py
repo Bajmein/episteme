@@ -150,3 +150,37 @@ async def test_remember_rejects_a_body_over_100000_characters(vault: Path) -> No
         assert err.startswith("invalid_argument") and "100000" in err
         ok = await c.ok("remember", type="insight", title="Justo", body="y" * 100_000)
         assert ok["created"]
+
+
+async def test_remember_link_writes_candidates_into_related(vault: Path) -> None:
+    async with mcp_client(vault, today="2026-10-22") as c:
+        a = await c.ok(
+            "remember", type="insight", title="Primera", body="Uno distinto.",
+            tags=["tema/pricing", "pieza/qq"], files=["src/a.py"],
+        )  # fmt: skip
+        b = await c.ok(
+            "remember", type="insight", title="Segunda", body="Dos diferente totalmente.",
+            tags=["tema/pricing", "pieza/qq"], link=True,
+        )  # fmt: skip
+        plain = await c.ok(
+            "remember", type="insight", title="Tercera", body="Tres otra cosa.",
+            tags=["tema/pricing", "pieza/qq"],
+        )  # fmt: skip
+        lonely = await c.ok(
+            "remember", type="insight", title="Cuarta", body="Cuatro sin nada.", link=True
+        )
+
+    assert b["linked"] == [a["path"]]
+    assert a["path"] not in [x["path"] for x in b.get("link_candidates", [])]
+    assert "[[" in "".join(_fm(vault / b["path"])["related"])
+    assert "linked" not in plain and "related" not in _fm(vault / plain["path"])
+    assert lonely["linked"] == []
+    assert "related" not in _fm(vault / lonely["path"])
+    assert "related" not in _fm(vault / a["path"])
+
+
+async def test_remember_link_rejects_a_non_boolean(vault: Path) -> None:
+    async with mcp_client(vault) as c:
+        failed, _ = await c.call("remember", type="insight", title="X", body="Y.", link="maybe")
+
+    assert failed

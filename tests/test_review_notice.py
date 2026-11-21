@@ -44,6 +44,7 @@ def test_notice_matches_review_totals(engine: Engine) -> None:
         ("similar", "grupos parecidos"),
         ("contradictions", "contradicciones posibles"),
         ("flagged", "marcadas"),
+        ("orphans_linkable", "huérfanas enlazables"),
     ]
     parts = [f"{label} {totals[k]}" for k, label in order if totals[k] > 0]
     assert totals["expired"] > 0 and totals["stale"] > 0
@@ -57,6 +58,23 @@ def test_notice_matches_review_totals(engine: Engine) -> None:
     )
     for k, label in order:
         assert (f"{label} " in notice) == (totals[k] > 0)
+
+
+def test_notice_counts_linkable_orphans(engine: Engine) -> None:
+    folder = engine.vault.root / "memory" / "orph" / "insights"
+    folder.mkdir(parents=True)
+    for slug in ("alpha", "beta"):
+        (folder / f"2026-10-10-{slug}.md").write_text(
+            "---\ntype: insight\nproject: orph\npriority: 3\nstatus: active\n"
+            f"created: 2026-10-10\ntags: [tema/x, tema/y]\n---\n# {slug}\n\ntexto {slug}\n",
+            encoding="utf-8",
+            newline="",
+        )
+    engine.index.refresh()
+
+    notice = prompting.review_notice(engine, "orph")
+
+    assert "huérfanas enlazables 2" in notice
 
 
 def test_notice_empty_when_nothing_pending(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
