@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Cambiado
+
+- **El script del extractor ya no necesita regla de permiso.** Un hook `PreToolUse` (`Bash`) del plugin (`plugin/hooks/digest-allow.py`) aprueba solo el comando exacto de `transcript_digest.py`, dentro del agente `episteme:extractor` y con la ruta de la versión instalada del plugin. Al actualizar el plugin ya no hay que volver a correr `/episteme:setup` por este permiso; basta reiniciar Claude Code. `/episteme:setup` ya no escribe la regla `Bash(uv run … transcript_digest.py *)` y quita las que quedaron de versiones anteriores.
+
 ## [0.20.0] - 2026-11-21
 
 **Aviso de rotura:** tras actualizar, vuelve a correr `/episteme:setup` en cada proyecto (los hooks llaman ahora a `context` con `mode` y se quitan del `allow` los permisos de tools que ya no existen). De 13 a 9 tools, sin alias.

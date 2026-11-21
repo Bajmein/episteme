@@ -7,8 +7,7 @@
       "mcp__episteme__review",
       "mcp__episteme__context",
       "mcp__episteme__session",
-      "mcp__episteme__plan",
-      "Bash(uv run --no-project --python 3.14 python -I <SESION_SCRIPT> *)"
+      "mcp__episteme__plan"
     ],
     "deny": [
       "Read(~/.episteme/**)",

@@ -228,19 +228,16 @@ def test_setup_copies_the_plan_on_exit_plan_mode_and_restores_it() -> None:
     assert "mcp__episteme__plan" in settings["permissions"]["allow"]
 
 
-def test_setup_allows_session_and_only_the_digest_script() -> None:
+def test_setup_allows_session_and_no_bash_rule() -> None:
     allow = _json(SKILLS / "setup" / "settings.json")["permissions"]["allow"]
-    bash = [rule for rule in allow if rule.startswith("Bash(")]
 
     assert "mcp__episteme__session" in allow and "mcp__episteme__remember" not in allow
-    assert bash == ["Bash(uv run --no-project --python 3.14 python -I <SESION_SCRIPT> *)"]
-    before_path = bash[0].split("<SESION_SCRIPT>")[0]
-    assert "*" not in before_path
+    assert not [rule for rule in allow if rule.startswith("Bash(")]
 
 
-def test_setup_writes_the_absolute_script_path_and_asks_to_rerun_it() -> None:
+def test_setup_leaves_the_digest_script_to_the_plugin_hook() -> None:
     text = (SKILLS / "setup" / "SKILL.md").read_text(encoding="utf-8")
 
-    assert "<SESION_SCRIPT>" in text
-    assert "${CLAUDE_SKILL_DIR}/../sesion/scripts/transcript_digest.py" in text
-    assert "volver a correr `/episteme:setup`" in text
+    assert "<SESION_SCRIPT>" not in text
+    assert "plugin/hooks/digest-allow.py" in text
+    assert "quítalas" in text
