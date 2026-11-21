@@ -28,14 +28,13 @@ Los diagramas del README y de `docs/` están en `static/diagrams/`: cada uno es 
 
 ## Salud del código
 
-CodeScene Cloud analiza `main` cada día y revisa cada PR: el check «CodeScene Code Health Review (main)» aplica el perfil de quality gates «The Bare Minimum» y deja un comentario con el code health de cada archivo tocado, antes y después. Un PR no debería bajar el de ningún archivo; si lo baja, se corrige en el mismo PR.
+CodeScene Cloud analiza `main` cada día y revisa cada PR: el check «CodeScene Code Health Review (main)» aplica el perfil de quality gates «The Bare Minimum» y deja un comentario con el code health de cada archivo tocado, antes y después. El check de CodeScene del PR (quality gate «The Bare Minimum») tiene que pasar. La meta es 9 o más por archivo de `src/` y `scripts/`; un archivo nuevo o tocado no baja de 9 ni baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué. Si el code health baja, se corrige en el mismo PR.
 
 Para bajar la complejidad sin cambiar lo que ve el agente:
 
 - Se extraen funciones privadas en el mismo módulo, se nombran las condiciones compuestas con un predicado (`_is_…`, `_wants_…`) y se usan retornos anticipados o `continue` en vez de anidar.
 - No se tocan las firmas de los tools ni las funciones que las reflejan (`Engine.search`, `Engine.read`, `memory.remember`…): el SDK saca el esquema de la firma.
 - Cada módulo de `tools/` tiene un `register(...)` corto que llama a un `_register_<tool>(...)` por tool, en el orden de `list_tools`. El tool se define dentro de su `_register_<tool>`, con su docstring, porque el SDK saca de la función el nombre, la descripción y el esquema. Los argumentos con `Annotated` van como alias privados del módulo (`_LimitArg`…).
-- La meta es 9 o más en cada archivo de `src/` y `scripts/`. Un archivo nuevo o tocado no baja de 9.
 - Los tests no se modifican: son la red del refactor. CodeScene avisa entonces «Absence of Expected Change Pattern», que en un refactor es esperable.
 - Se compara la foto del contrato antes y después: arrancar el servidor por stdio, volcar las instrucciones y `list_tools` a JSON con las claves ordenadas y comprobar con `cmp` que no cambió.
 
@@ -72,6 +71,17 @@ Tras ese refactor, el análisis 8419179 sobre `0dd494b` dio 9,29 de code health 
 | `tools/reading.py` | 8,88 | 10,00 |
 | `tools/memories.py` | 8,99 | 10,00 |
 | `tools/hooks.py` | 8,99 | 9,69 |
+
+### MCP de CodeScene
+
+El MCP `codescene` deja medir el code health en local, sin esperar al check del PR. Si está disponible:
+
+- Tras cambiar código, `code_health_review` de los archivos tocados.
+- Si el code health baja, se corrige y se confirma con `code_health_score`.
+- Antes de terminar, `pre_commit_code_health_safeguard` en verde.
+- Sin el MCP, basta el check del PR.
+
+Instalación (opcional, es de cada persona: el MCP no es una dependencia del repo): el binario `cs-mcp` se instala siguiendo la documentación de [codehealth-mcp](https://github.com/codescene-oss/codehealth-mcp); en la máquina de kenno lo gestiona `mise`. Se registra una vez, para todos los proyectos, con `claude mcp add --scope user codescene -e CS_DISABLE_VERSION_CHECK=1 -- cs-mcp`. La primera vez hay que iniciar sesión con la tool `login`, que abre el navegador. Las instrucciones originales (en inglés) están en [AGENTS-standalone.md](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/AGENTS-standalone.md).
 
 ## Medir variantes de búsqueda
 
