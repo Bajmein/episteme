@@ -459,6 +459,23 @@ def test_backup_leaves_docs_zones_out(suite: Path) -> None:
     assert any(rel.startswith("memory/") for rel in members)
 
 
+async def test_docs_write_drops_the_frontmatter_a_page_brings(suite: Path) -> None:
+    new = "# Getting started\n\nInstall mise with `curl`.\n"
+
+    async with mcp_client(suite) as c:
+        res = await c.ok(
+            "docs_write",
+            suite=SUITE,
+            source=f"{URL}/getting-started.md",
+            body="---\ndescription: From the site.\n---\n\n" + new,
+        )
+
+    page = suite / SUITE / PAGE
+    assert res["changed"] is True and res["hash"] == _hash(new)
+    assert page.read_text(encoding="utf-8").endswith("---\n" + new)
+    assert "From the site" not in page.read_text(encoding="utf-8")
+
+
 # -- body_ref: the body comes from the inbox ----------------------------------------------------
 
 

@@ -13,7 +13,7 @@ Una suite es una zona del `episteme.toml` con `mode = "docs"`:
 mode = "docs"
 ```
 
-- Cada página de la fuente es una nota `.md`: el frontmatter lo pone episteme y el cuerpo es el texto de la página tal cual se descarga (las páginas de `llms.txt` suelen empezar con `> ## Documentation Index …`).
+- Cada página de la fuente es una nota `.md`: el frontmatter lo pone episteme y el cuerpo es el texto de la página tal cual se descarga (las páginas de `llms.txt` suelen empezar con `> ## Documentation Index …`), salvo el frontmatter YAML con que empiezan algunas (las de mise desde noviembre de 2026): el script y `docs_write` lo quitan, y el hash se calcula sin él. Solo cuenta como frontmatter un bloque `---` … `---` al principio cuyas líneas parecen YAML (`clave:`, sangradas, `- elemento`, comentarios o en blanco); una página que empieza con una línea horizontal la conserva.
 - Solo `docs_write` escribe en una zona `docs`. `revise` y `remember` responden `read_only_zone`; `review` trata la zona como de solo lectura (sus problemas van en `read_only`), y el backup no la incluye, porque las páginas se pueden volver a bajar.
 - Una zona que no es `docs` (por ejemplo, una `read-only`) no es una suite: `docs_status` y `docs_write` responden `read_only_zone`.
 
