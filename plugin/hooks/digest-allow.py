@@ -36,14 +36,25 @@ def _script(root: str) -> str:
     return root.replace("\\", "/").rstrip("/") + "/" + SCRIPT
 
 
-def allowed(data: dict[str, Any], root: str) -> bool:
-    """True only for the extractor's own digest command of the plugin at ``root``."""
-    if not root or data.get("tool_name") != "Bash" or data.get("agent_type") != AGENT:
-        return False
+def _extractor_bash(data: dict[str, Any]) -> bool:
+    """True when the call is a Bash command of the extractor agent."""
+    return data.get("tool_name") == "Bash" and data.get("agent_type") == AGENT
+
+
+def _command(data: dict[str, Any]) -> str:
+    """The Bash command of the call, or ``""`` when there is none."""
     tool_input = data.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    return command if isinstance(command, str) else ""
+
+
+def allowed(data: dict[str, Any], root: str) -> bool:
+    """True only for the extractor's own digest command of the plugin at ``root``."""
+    if not root or not _extractor_bash(data):
+        return False
     head = PREFIX + _script(root) + " "
-    if not isinstance(command, str) or not command.startswith(head):
+    command = _command(data)
+    if not command.startswith(head):
         return False
     return ARGS.fullmatch(command[len(head) :]) is not None
 
