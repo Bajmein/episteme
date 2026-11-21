@@ -55,7 +55,10 @@ _TranscriptArg = Annotated[
     str | None,
     Field(description="end, restore: path of the session transcript (${transcript_path})."),
 ]
-_TriggerArg = Annotated[str | None, Field(description='gate: "manual" or "auto" (${trigger}).')]
+_TriggerArg = Annotated[
+    str | None,
+    Field(description="Ignored since 0.18; kept so hooks installed before still validate."),
+]
 _ReasonArg = Annotated[str | None, Field(description="end: why the session ended (${reason}).")]
 _SourceArg = Annotated[
     str | None, Field(description='restore: "compact" or "clear" (${source}) from the hook.')
@@ -79,7 +82,6 @@ class _Hook(NamedTuple):
 
     summary: str | None = None
     transcript: str | None = None
-    trigger: str | None = None
     source: str | None = None
     session: str | None = None
     event: str | None = None
@@ -121,8 +123,9 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         """Keep the session state: one living note per line of work in sesiones/<project>/.
 
         Only this tool writes there (revise and remember refuse it). The state in use is the
-        one this process saved or restored, else the newest active state of the same
-        worktree (project_dir).
+        one this process saved or restored, else the active state of this Claude Code session
+        (its session_id) in the same worktree (project_dir); a state of another session is
+        only taken by restore without hook_event.
         save: create or rewrite the whole state. Target: note, else the current state, else a
         new one (needs title); to start another line of work, archive the current state
         first. A note that was archived becomes active again. body replaces the body (a
@@ -135,30 +138,37 @@ def _register_session(server: MCPServer, engine: Engine) -> None:
         time it read) and the next extraction order starts there, not at saved_at; any
         later save drops it.
         show: {"found", "path", "task_title", "saved_at", "content"} (plus "extracted_until"
-        when the extractor saved last). Never writes.
+        when the extractor saved last, and "transcript" when the state knows the transcript of
+        the session that saved it). Never writes.
         restore: the state as context, made current: {"found", "path", "task_title",
         "saved_at", "content", "source"}; without a state, found is false and source null.
+        Without hook_event and without a state in use, it takes the newest active state of
+        the worktree; when that state was saved in another session with a known transcript,
+        it adds "extract" (launch the episteme:extractor agent in the background with it).
         template: {"type", "sections", "skeleton"} of type (default "session").
         archive: set status archived on note (default the current state); never deletes.
         Returns {"path", "changed"}. States more than [session] archive_days (7) days after
         their saved_at are archived by the maintenance of the first welcome.
-        Hook actions: gate (only with hook_event="PreCompact") blocks a manual /compact once
-        when the state was not saved in 5+ messages; capture (PostCompact) puts
-        summary in the "Resumen de compactación" section of the state, credentials redacted,
-        creating «Sesión <date>» if there is none; end (SessionEnd) keeps transcript for the
+        Hook actions: gate (PreCompact: instructions that make the compaction summary end
+        with the updated session state between <estado-sesion> tags); capture (PostCompact)
+        saves that block of summary as the whole state (or, without a block, puts summary in
+        the "Resumen de compactación" section), credentials redacted, creating a state if
+        there is none; end (SessionEnd) keeps transcript for the
         next restore after /clear (only when reason is "clear" or empty). restore with source
-        and a transcript adds "extract", the order to launch the episteme:extractor agent, when
-        [session] extract is on.
+        "clear", or "compact" without a saved block, and a transcript adds "extract", the order
+        to launch the episteme:extractor agent, when [session] extract is on.
         """
         hookmode.check(hook_event)
+        sessions.track_ids(hook_event, session, transcript)
         if action not in ACTIONS:
             raise invalid(f'action must be one of {", ".join(ACTIONS)}, got "{action}".')
         if action == "template":
             return dump(sessions.template(type))
         if action == "end":
             return _reply(hook_event, sessions.end(transcript, reason))
-        save = sessions.SaveArgs(title, body, note, files, origin, session, plan, until)
-        hook = _Hook(summary, transcript, trigger, source, session, hook_event)
+        sid = session or sessions.IDS.get("session")
+        save = sessions.SaveArgs(title, body, note, files, origin, sid, plan, until)
+        hook = _Hook(summary, transcript, source, session, hook_event)
         with engine.session():
             return _run(_Args(engine, project, project_dir), action, save, hook)
 
@@ -188,29 +198,39 @@ def _run(args: _Args, action: str, save: sessions.SaveArgs, hook: _Hook) -> str:
 
 
 def _gate(args: _Args, hook: _Hook) -> str:
-    """Run gate from the PreCompact hook: a block decision, or nothing."""
+    """Run gate from the PreCompact hook: plain compaction instructions, or nothing."""
     if hook.event != "PreCompact":
         raise invalid(
             'action "gate" is for the PreCompact hook. Pass hook_event="PreCompact", or save '
             'the state with action="save".'
         )
-    reason = sessions.gate(args.engine, args.project, args.project_dir, hook.trigger, hook.session)
-    return hookmode.render_block(reason) if reason else ""
+    text = sessions.gate(args.engine, args.project, args.project_dir)
+    return hookmode.render_instructions(text) if text else ""
 
 
 def _restore(args: _Args, hook: _Hook) -> str:
     """Run restore and render it for a hook or as JSON."""
     data = sessions.restore(
-        args.engine, args.project, args.project_dir, hook.source, hook.transcript
+        args.engine,
+        args.project,
+        args.project_dir,
+        (hook.source, hook.transcript),
+        explicit=not (hook.event or hook.source),
     )
     if not hook.event:
         return dump(data)
     notice = ""
     if data["found"]:
         title = hookmode.clean_line(data["task_title"])
-        notice = f"episteme · estado de sesión recuperado: «{title}»"
+        verb = "guardado al compactar" if _from_compact(data) else "recuperado"
+        notice = f"episteme · estado de sesión {verb}: «{title}»"
     text = "\n\n".join(t for t in (data["content"], data.get("extract", "")) if t)
     return hookmode.render(hook.event, text, notice)
+
+
+def _from_compact(data: dict[str, Any]) -> bool:
+    """True when restore answered with the one line of a state saved from the summary."""
+    return data["content"] == sessions.from_compact_text(data["task_title"], data["path"])
 
 
 def _archive(args: _Args, note: str | None) -> dict[str, Any]:

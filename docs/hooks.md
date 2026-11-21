@@ -6,7 +6,7 @@
 
 ![Secuencia al compactar o con /clear: session gate, capture, end y restore, y el agente extractor que pone al día el estado](../static/diagrams/compactar-clear.png)
 
-Los hooks son `type: "mcp_tool"` y llaman a los mismos tools. En `UserPromptSubmit`, `SessionStart`, `PreToolUse` y `PostToolUse` el tool devuelve el objeto JSON `{"hookSpecificOutput": {"hookEventName", "additionalContext"}}` (en Claude Code 2.1.322 el texto plano de un hook `mcp_tool` no llega al modelo); en `SessionStart` puede llevar además un `systemMessage` para la persona; en `PreCompact`, `PostCompact` y `SessionEnd`, nada. Sin nada que decir, la salida es una cadena vacía. Nunca devuelve `decision`, `permissionDecision` ni `continue: false`, salvo una excepción: `session(action="gate")` en `PreCompact` devuelve `{"decision": "block", "reason": …}` una vez para frenar un `/compact` manual cuando el estado de la sesión lleva 5 mensajes o más sin guardarse (ver [Estado de la sesión](sesion.md)); repetir `/compact` compacta igual.
+Los hooks son `type: "mcp_tool"` y llaman a los mismos tools. En `UserPromptSubmit`, `SessionStart`, `PreToolUse` y `PostToolUse` el tool devuelve el objeto JSON `{"hookSpecificOutput": {"hookEventName", "additionalContext"}}` (en Claude Code 2.1.322 el texto plano de un hook `mcp_tool` no llega al modelo); en `SessionStart` puede llevar además un `systemMessage` para la persona; en `PostCompact` y `SessionEnd`, nada. En `PreCompact`, `session(action="gate")` devuelve **texto plano**: las instrucciones para que el resumen de la compactación termine con el estado de la sesión al día entre `<estado-sesion>` y `</estado-sesion>`. Claude Code añade el stdout de un `PreCompact` que no bloquea a las instrucciones del resumen (manual o automático; comprobado con un hook `mcp_tool` en Claude Code 2.1.330) y se lo muestra a la persona; nunca empieza por `{`, que Claude Code leería como JSON (ver [Estado de la sesión](sesion.md)). Sin nada que decir, la salida es una cadena vacía. Nunca devuelve `decision`, `permissionDecision` ni `continue: false`: ningún hook de episteme bloquea.
 
 Bloque para el `settings.json` del proyecto:
 
@@ -16,7 +16,8 @@ Bloque para el `settings.json` del proyecto:
     "UserPromptSubmit": [
       { "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "context",
                     "input": { "mode": "welcome", "session": "${session_id}",
-                               "prompt": "${prompt}",
+                               "prompt": "${prompt}", "project_dir": "${cwd}",
+                               "transcript": "${transcript_path}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PreToolUse": [
@@ -44,14 +45,15 @@ Bloque para el `settings.json` del proyecto:
     ],
     "PreCompact": [
       { "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "session",
-                    "input": { "action": "gate", "trigger": "${trigger}",
-                               "session": "${session_id}", "project_dir": "${cwd}",
+                    "input": { "action": "gate", "session": "${session_id}",
+                               "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "PostCompact": [
       { "hooks": [{ "type": "mcp_tool", "server": "episteme", "tool": "session",
                     "input": { "action": "capture", "summary": "${compact_summary}",
-                               "session": "${session_id}", "project_dir": "${cwd}",
+                               "session": "${session_id}", "transcript": "${transcript_path}",
+                               "project_dir": "${cwd}",
                                "hook_event": "${hook_event_name}" } }] }
     ],
     "SessionEnd": [
@@ -83,16 +85,18 @@ Bloque para el `settings.json` del proyecto:
 
 ## Después de compactar o de `/clear`
 
-No hay que hacer nada a mano: los tres hooks de `SessionStart` (`compact|clear`) corren solos. Antes, `PostCompact` guardó el resumen de la compactación en el estado y `SessionEnd` (`clear`) anotó el transcript que se cerró.
+No hay que hacer nada a mano: los tres hooks de `SessionStart` (`compact|clear`) corren solos. Antes, `PostCompact` guardó como estado el bloque `<estado-sesion>` del resumen (o el resumen, si no lo traía) y `SessionEnd` (`clear`) anotó el transcript que se cerró.
 
 | Qué vuelve | De dónde sale |
 |---|---|
-| El estado de la sesión | La nota de `sesiones/<proyecto>/` en uso, con la orden de lanzar en segundo plano el agente `episteme:extractor`, que lo pone al día con el transcript (ver [Estado de la sesión](sesion.md)). |
+| El estado de la sesión | Tras compactar con el bloque, una línea que dice dónde se guardó (su contenido ya está en el resumen). Si no, la nota de `sesiones/<proyecto>/` en uso (sin el resumen, que ya está en el contexto), con la orden de lanzar en segundo plano el agente `episteme:extractor`, que lo pone al día con el transcript (ver [Estado de la sesión](sesion.md)). |
 | La referencia al plan (solo tras `/clear`) | Una línea que apunta a la copia del plan de la tarea en `planes/<proyecto>/` (el plan vigente del proceso, el que enlaza el estado o el más reciente del worktree), para leerla con `read`. La copia la guardó el hook `PreToolUse` con matcher `ExitPlanMode`, que responde siempre vacío y nunca frena `ExitPlanMode` (ver [Planes](planes.md)) |
 | La bienvenida | Normas, recordatorios y las memorias mejor puntuadas del proyecto |
 | «De esta sesión» | Hasta 8 memorias que el agente escribió (`remember`, `revise`) o leyó (`read`) antes, primero las escritas; las que ya salen en la bienvenida no se repiten |
 
 La persona ve en el terminal una línea en verde por cada hook que recuperó algo, por ejemplo `SessionStart:clear says: episteme · contexto recuperado tras /clear: 12 memorias del proyecto y 3 de esta sesión` y `episteme · estado de sesión recuperado: «…»`. Con la variable de entorno `NO_COLOR` en el servidor, el texto sale sin color.
+
+Una sesión nueva (no `--resume`) no recibe nada de esto: su primera bienvenida, en `UserPromptSubmit` con `${cwd}`, añade solo una línea que nombra el estado que dejó otra sesión en la misma carpeta, sin cargarlo; `/episteme:sesion retomar` lo trae.
 
 Límites: el rastro «De esta sesión» vive en el proceso del servidor, así que se pierde al cerrar Claude Code (no al compactar ni con `/clear`). Sin estado de sesión guardado, tras `/clear` vuelven la bienvenida, el rastro y la orden de extracción, no la conversación.
 

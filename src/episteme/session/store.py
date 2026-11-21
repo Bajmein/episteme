@@ -30,12 +30,21 @@ ARCHIVED = "archived"
 CURRENT_MAX = 64  # (project, worktree) pairs one process remembers
 
 # The state of each (project, worktree) in this process: set by save and restore. Bounded by
-# CURRENT_MAX; losing it on restart is fine (the newest active state is looked up instead).
+# CURRENT_MAX; after a restart the state of this session_id (IDS) is looked up instead.
 CURRENT: dict[tuple[str, str], str] = {}
 
 # The transcript of the session that the last /clear ended (SessionEnd), at most one: the next
 # SessionStart(clear) hands it to the extractor once. Per process, like CURRENT.
 LAST_TRANSCRIPT: list[str] = []
+
+# The Claude Code session this process serves, from the hooks: "session" (its id) and
+# "transcript" (its path). Two keys at most; per process, like CURRENT.
+IDS: dict[str, str] = {}
+
+# States that capture rewrote from the <estado-sesion> block of the last compaction summary:
+# the restore after that compaction says so in one line instead of repeating the block.
+FROM_COMPACT: list[str] = []
+FROM_COMPACT_MAX = 8
 
 
 class SaveArgs(NamedTuple):
@@ -84,9 +93,13 @@ def _remember_current(key: tuple[str, str], rel: str) -> None:
 
 
 def _current_of(key: tuple[str, str]) -> str | None:
-    """``CURRENT`` of ``key``; without a worktree, the one this project set last."""
+    """``CURRENT`` of ``key``; without a worktree, the one this project set last.
+
+    With a worktree and no entry for it, the one set without a worktree (an agent call that
+    passed no project_dir, e.g. a save before /clear): it is still this process's state.
+    """
     if key[1]:
-        return CURRENT.get(key)
+        return CURRENT.get(key) or CURRENT.get((key[0], ""))
     mine = [rel for (project, _), rel in CURRENT.items() if project == key[0]]
     return mine[-1] if mine else None
 
@@ -143,22 +156,62 @@ def _is_active_state(engine: Engine, rel: str) -> bool:
     )
 
 
-def current(engine: Engine, project: str, project_dir: str | None) -> str | None:
-    """The state in use: ``CURRENT`` of this process, else the newest active of the worktree."""
-    key = _key(project, project_dir)
-    rel = _current_of(key)
-    if rel is not None and _is_active_state(engine, rel):
-        return rel
-    here = key[1]
-    rows = [
+def _worktree_rows(engine: Engine, project: str, project_dir: str | None) -> list[Any]:
+    """Active states of ``project`` in the worktree of ``project_dir`` (any without one)."""
+    here = _here(project_dir)
+    return [
         r
         for r in _active_rows(engine, project)
         if (not here or same_worktree(engine, r, here)) and _in_session_zone(engine, r["path"])
     ]
+
+
+def _newest(engine: Engine, rows: list[Any]) -> str | None:
     if not rows:
         return None
     newest = max(rows, key=lambda r: (_saved_at(engine, r["path"]), r["mtime_ns"] or 0, r["path"]))
     return newest["path"]
+
+
+def current(engine: Engine, project: str, project_dir: str | None) -> str | None:
+    """The state in use: ``CURRENT`` of this process, else the one of this session id.
+
+    A state of another session (a new one, or another window in the same worktree) is never
+    the state in use: ``latest`` finds it, and only an explicit restore takes it.
+    """
+    rel = _current_of(_key(project, project_dir))
+    if rel is not None and _is_active_state(engine, rel):
+        return rel
+    sid = IDS.get("session")
+    if not sid:
+        return None
+    rows = [
+        r
+        for r in _worktree_rows(engine, project, project_dir)
+        if engine.index.props(r["path"]).get("session_id") == sid
+    ]
+    return _newest(engine, rows)
+
+
+def latest(engine: Engine, project: str, project_dir: str | None) -> str | None:
+    """The newest active state of the worktree, whichever session saved it."""
+    return _newest(engine, _worktree_rows(engine, project, project_dir))
+
+
+def mark_from_compact(rel: str) -> None:
+    """Note that capture rewrote ``rel`` from the summary block (bounded by FROM_COMPACT_MAX)."""
+    if rel in FROM_COMPACT:
+        FROM_COMPACT.remove(rel)
+    FROM_COMPACT.append(rel)
+    del FROM_COMPACT[:-FROM_COMPACT_MAX]
+
+
+def take_from_compact(rel: str | None) -> bool:
+    """True once when capture rewrote ``rel`` from the last summary block."""
+    if rel is None or rel not in FROM_COMPACT:
+        return False
+    FROM_COMPACT.remove(rel)
+    return True
 
 
 def note_path(engine: Engine, note: str) -> str:
@@ -267,6 +320,7 @@ def _meta(old: dict[str, Any], fresh: dict[str, Any], args: SaveArgs) -> dict[st
         "extracted_until": _extracted_until(args),
         "worktree": fresh["worktree"] or old.get("worktree"),
         "session_id": args.session_id or old.get("session_id"),
+        "transcript": IDS.get("transcript") or old.get("transcript"),
         "plan": _plan_link(old, fresh, args),
     }
     return {k: v for k, v in meta.items() if v not in (None, [])}
@@ -373,8 +427,9 @@ def show(engine: Engine, project: str, project_dir: str | None) -> dict[str, Any
         "saved_at": str(meta.get("saved_at") or "") or None,
         "content": body_without_title(body.strip()).strip(),
     }
-    if meta.get("extracted_until"):
-        data["extracted_until"] = str(meta["extracted_until"])
+    for key in ("extracted_until", "transcript"):
+        if meta.get(key):
+            data[key] = str(meta[key])
     return data
 
 

@@ -203,6 +203,8 @@ async def test_restore_prefers_current_then_the_linked_plan_then_the_newest(
         newest = await c.ok("plan", action="restore", source="clear", project_dir=here)
         await c.ok("session", action="save", title="T", body=BODY, plan="plan-azul")
     async with mcp_client(vault, today="2026-10-03") as c:
+        # A state of another process is the one in use only after /episteme:sesion retomar.
+        await c.ok("session", action="restore", project_dir=here)
         linked = await c.ok("plan", action="restore", source="clear", project_dir=here)
     async with mcp_client(vault, today="2026-10-03") as c:
         await _hook_save(c, "# Plan rojo\n\nOtra vez.\n", PATH_B, here)

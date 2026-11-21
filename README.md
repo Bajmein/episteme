@@ -163,10 +163,10 @@ Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. 
 #### Al compactar o con `/clear`
 
 <p align="center">
-  <img src="static/diagrams/compactar-clear.png" alt="Secuencia de cómo el estado del trabajo sobrevive a /compact y a /clear: episteme guarda el resumen al compactar, lo devuelve con la bienvenida al volver a empezar y el agente extractor lo pone al día en segundo plano" width="880">
+  <img src="static/diagrams/compactar-clear.png" alt="Secuencia de cómo el estado del trabajo sobrevive a /compact y a /clear: al compactar, el resumen escribe el estado al día y episteme lo guarda; lo devuelve con la bienvenida al volver a empezar y, tras /clear, el agente extractor lo pone al día en segundo plano" width="880">
 </p>
 
-Si vas a compactar a mano y el estado lleva rato sin guardarse, episteme te lo pide una sola vez; si repites `/compact`, compacta igual. El detalle está en [Estado de la sesión](docs/sesion.md).
+Al compactar no tienes que hacer nada: el resumen que escribe Claude termina con el estado del trabajo y episteme lo guarda. Una sesión nueva no carga el trabajo de la anterior: te avisa en una línea de que existe y lo retomas con `/episteme:sesion retomar`. El detalle está en [Estado de la sesión](docs/sesion.md).
 
 #### El resto: quién hace qué
 

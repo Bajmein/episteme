@@ -151,9 +151,13 @@ def test_setup_hooks_drive_the_session_state_without_checkpoint() -> None:
     [gate] = _hook(settings, "PreCompact")
     [capture] = _hook(settings, "PostCompact")
     [end] = _hook(settings, "SessionEnd")
+    [prompt] = _hook(settings, "UserPromptSubmit")
     restore, plan_restore, welcome = _hook(settings, "SessionStart")
-    assert gate["input"]["action"] == "gate" and gate["input"]["trigger"] == "${trigger}"
+    assert gate["input"]["action"] == "gate" and "trigger" not in gate["input"]
     assert capture["input"]["summary"] == "${compact_summary}"
+    assert capture["input"]["transcript"] == "${transcript_path}"
+    assert prompt["input"]["project_dir"] == "${cwd}"
+    assert prompt["input"]["transcript"] == "${transcript_path}"
     assert end["input"]["transcript"] == "${transcript_path}"
     assert settings["hooks"]["SessionEnd"][0]["matcher"] == "clear"
     assert restore["input"]["action"] == "restore" and restore["input"]["source"] == "${source}"

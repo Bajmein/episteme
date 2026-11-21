@@ -25,10 +25,10 @@ mode = "session"
 
 # Estado de la sesión (descomenta para cambiar).
 # [session]
-# extract = true                # orden de extracción tras compact/clear
-# block_manual_compact = true   # bloquea una vez un /compact manual con el estado desactualizado
+# extract = true                # orden de extracción tras /clear, compact sin bloque y al retomar
+# compact_state = true          # el resumen de compactación escribe el estado de la sesión
 # archive_days = 7              # días sin guardar antes de archivar el estado (entero >= 1)
-# nudge_every = 12              # mensajes sin guardar antes del aviso (entero >= 1)
+# nudge_every = 0               # mensajes sin guardar antes del aviso (entero >= 0; 0 lo apaga)
 
 # Mantención al abrir la primera sesión del periodo (descomenta para cambiar).
 # [maintenance]

@@ -35,8 +35,14 @@ INDEX_DIR = ".index"
 DEFAULT_EVERY_DAYS = 1
 DEFAULT_BACKUP_KEEP = 14
 DEFAULT_ARCHIVE_DAYS = 7
-DEFAULT_NUDGE_EVERY = 12
-SESSION_KEYS = ("extract", "block_manual_compact", "archive_days", "nudge_every")
+DEFAULT_NUDGE_EVERY = 0  # 0: the "state not saved in N messages" nudge is off
+SESSION_KEYS = (
+    "extract",
+    "compact_state",
+    "archive_days",
+    "nudge_every",
+    "block_manual_compact",  # obsolete since 0.18, accepted and ignored
+)
 PLAN_KEYS = ("archive_days",)
 
 
@@ -71,7 +77,7 @@ class Backup:
 @dataclass(frozen=True)
 class Session:
     extract: bool = True
-    block_manual_compact: bool = True
+    compact_state: bool = True
     archive_days: int = DEFAULT_ARCHIVE_DAYS
     nudge_every: int = DEFAULT_NUDGE_EVERY
 
@@ -108,10 +114,22 @@ def _is_positive_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 1
 
 
+def _is_non_negative_int(value: object) -> bool:
+    """True for an int >= 0; ``bool`` is excluded."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 def _int_min1(table: dict, name: str, key: str, default: int) -> int:
     value = table.get(key, default)
     if not _is_positive_int(value):
         raise StartupError(f"[{name}] {key} must be an integer >= 1.")
+    return value
+
+
+def _int_min0(table: dict, name: str, key: str, default: int) -> int:
+    value = table.get(key, default)
+    if not _is_non_negative_int(value):
+        raise StartupError(f"[{name}] {key} must be an integer >= 0.")
     return value
 
 
@@ -133,11 +151,13 @@ def _load_maintenance(data: dict) -> Maintenance:
 
 def _load_session(data: dict) -> Session:
     table = _table(data, "session", SESSION_KEYS)
+    # Obsolete since 0.18 (compacting saves the state): still validated, then ignored.
+    _flag(table, "session", "block_manual_compact", True)
     return Session(
         extract=_flag(table, "session", "extract", True),
-        block_manual_compact=_flag(table, "session", "block_manual_compact", True),
+        compact_state=_flag(table, "session", "compact_state", True),
         archive_days=_int_min1(table, "session", "archive_days", DEFAULT_ARCHIVE_DAYS),
-        nudge_every=_int_min1(table, "session", "nudge_every", DEFAULT_NUDGE_EVERY),
+        nudge_every=_int_min0(table, "session", "nudge_every", DEFAULT_NUDGE_EVERY),
     )
 
 

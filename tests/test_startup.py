@@ -12,6 +12,8 @@ import pytest
 from conftest import mcp_client
 
 import episteme
+from episteme.__main__ import DEFAULT_TOML
+from episteme.vault import Session, load_config
 
 
 def _start(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -86,3 +88,21 @@ async def test_server_reports_the_package_version_on_initialize(vault: Path) -> 
 
     assert server_info is not None
     assert server_info.version == metadata.version("episteme")
+
+
+def test_default_toml_session_block_uncommented_loads_the_defaults(tmp_path: Path) -> None:
+    lines = DEFAULT_TOML.splitlines()
+    start = lines.index("# [session]")
+    block = []
+    for line in lines[start:]:
+        if not line.startswith("# "):
+            break
+        block.append(line[2:])
+    (tmp_path / "episteme.toml").write_text(
+        DEFAULT_TOML + "\n" + "\n".join(block) + "\n", encoding="utf-8"
+    )
+
+    session = load_config(tmp_path).session
+
+    assert session == Session()
+    assert "block_manual_compact" not in DEFAULT_TOML
