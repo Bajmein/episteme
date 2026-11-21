@@ -18,6 +18,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `docs_status` y `docs_write` pasan a ser un solo tool, `docs(action="status"|"write", …)`, con los mismos argumentos y las mismas salidas. Un argumento que no corresponde a la acción, o la falta de `suite` en `write`, responde `invalid_argument`. Sigue registrándose solo con una zona `docs` y no lleva `read_only_hint`, porque escribe. Rotura sin alias: actualiza el plugin `episteme-docs` (su skill ya llama a `docs`) y vuelve a correr `/episteme:setup`, que ya no pone `docs_status` en el `allow` (`docs` pide permiso). Un `docs_status` que quedara en el `allow` de un proyecto no hace nada: bórralo.
 - `revise` en una zona `docs` pide `docs(action="write")` (antes `docs_write`).
 
+### Añadido
+
+- **`description` en las memorias.** `remember` acepta una `description` opcional (una línea, hasta 160 caracteres) que se guarda en el frontmatter, se pasa por el filtro de credenciales y se valida también con `revise(action="set")`. Se muestra en la bienvenida, el contexto de tarea, las memorias sugeridas y las filas de `search`; si falta, se muestra la primera frase del cuerpo sin guardarla, y `remember` devuelve `description_hint`. Lee la `description` de las propiedades que el índice ya guarda: el esquema del índice no cambia y no se reconstruye. Sin migración de memorias viejas.
+
 ## [0.19.0] - 2026-11-21
 
 ### Quitado

@@ -143,7 +143,7 @@ async def test_welcome_after_compact_or_clear_brings_the_session_trail(vault: Pa
         out = json.loads(raw)
         text = out["hookSpecificOutput"]["additionalContext"]
         assert "De esta sesión, antes de compactar o limpiar" in text
-        assert f"({made['path']}) · escrita" in text
+        assert f"({made['path']}) — Algo aprendido antes de compactar. · escrita" in text
         assert "contexto recuperado tras /clear" in out["systemMessage"]
         assert "de esta sesión" in out["systemMessage"]
         # the first prompt after it does not repeat the welcome nor the notice

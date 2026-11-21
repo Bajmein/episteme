@@ -99,7 +99,7 @@ Locales por defecto: sus rutas van a `.git/info/exclude` y se indexan en `CLAUDE
 
 ### 7. Registro en episteme
 
-Guarda con `remember` una memoria `decision` del proyecto, título «Convenciones del proyecto: scaffold de episteme»: las partes creadas o auditadas, la convención elegida, lo que quedó local y `files` con las rutas. Si ya existe una (`search` con ese título y `project`), usa `supersedes`. Con `auditar` no se guarda nada.
+Guarda con `remember` una memoria `decision` del proyecto, título «Convenciones del proyecto: scaffold de episteme», con `description` (una línea, hasta 160 caracteres): las partes creadas o auditadas, la convención elegida, lo que quedó local y `files` con las rutas. Si ya existe una (`search` con ese título y `project`), usa `supersedes`. Con `auditar` no se guarda nada.
 
 ### 8. Respuesta
 

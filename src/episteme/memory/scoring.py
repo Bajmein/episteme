@@ -7,9 +7,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 from episteme.hookmode import clean_line
-from episteme.markdown import (
-    first_sentence,
-)
+from episteme.markdown import memory_description
 
 if TYPE_CHECKING:
     pass
@@ -39,7 +37,7 @@ def welcome_score(row: Any, now: dt.date) -> float:
 
 
 def entry_line(row: Any) -> str:
-    sentence = clean_line(first_sentence(row["body"] or ""))
+    sentence = clean_line(memory_description(row["description"], row["body"]))
     tail = f" — {sentence}" if sentence else ""
     title = clean_line(row["title"])
     return f"- [{row['type']} p{row['priority']}] {title} ({row['path']}){tail}"

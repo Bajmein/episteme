@@ -22,7 +22,7 @@ from episteme.index.schema import (
 )
 from episteme.index.text import _fts_term, locate, query_terms
 from episteme.links import Resolver
-from episteme.markdown import ParsedNote, parse
+from episteme.markdown import ParsedNote, memory_description, parse
 from episteme.perms import make_private_dir, restrict_db
 from episteme.vault import INDEX_DIR, MEMORY, DirListing, Vault
 
@@ -44,6 +44,18 @@ def _too_big(rel: str, size: int, warned: set[tuple[str, int]]) -> bool:
     return True
 
 
+# Characters of a body that a search row reads to derive the description shown for a memory.
+DERIVE_CHARS = 1000
+BODY_HEAD_COL = f"substr(n.body, 1, {DERIVE_CHARS}) as body, "
+# A memory's ``description`` read from the frontmatter props the index already keeps, so the
+# ``notes`` table (and its schema version) stays as older servers expect it.
+DESCRIPTION_COL = (
+    "case when n.mode = 'memory' then (select case when json_type(p.value) = 'text' "
+    "then json_extract(p.value, '$') end from props p "
+    "where p.path = n.path and p.key = 'description') end as description"
+)
+
+
 @dataclass
 class Hit:
     path: str
@@ -57,6 +69,7 @@ class Hit:
     project: str | None = None
     created: str | None = None
     priority: int | None = None
+    description: str | None = None
 
 
 def _sql(template: str, **names: str) -> str:
@@ -291,7 +304,9 @@ class Index:
     # -- queries -----------------------------------------------------------
 
     def note(self, rel: str) -> sqlite3.Row | None:
-        return self.conn.execute("select * from notes where path = ?", (rel,)).fetchone()
+        return self.conn.execute(
+            _sql("select n.*, {col} from notes n where n.path = ?", col=DESCRIPTION_COL), (rel,)
+        ).fetchone()
 
     def props(self, rel: str) -> dict[str, Any]:
         return {
@@ -309,7 +324,11 @@ class Index:
     ) -> list[sqlite3.Row]:
         """Rows of the notes in zones of ``mode``; ``where`` as in ``memories``."""
         return self.conn.execute(
-            _sql("select * from notes where mode = ? and ({where}) order by path", where=where),
+            _sql(
+                "select n.*, {col} from notes n where n.mode = ? and ({where}) order by n.path",
+                col=DESCRIPTION_COL,
+                where=where,
+            ),
             (mode, *params),
         ).fetchall()
 
@@ -492,9 +511,10 @@ class Index:
             cols = "0.0 as rank"
             order = "order by coalesce(n.priority, 0) desc, n.path"
         text_col = "n.search_text, " if snippets else ""
+        body_col = BODY_HEAD_COL  # the head of a body, to derive a missing description
         return self.conn.execute(
             f"select n.path, n.title, {text_col}n.zone, n.type, n.status, n.project, "
-            f"n.created, n.priority, {cols} {built.source} "
+            f"n.created, n.priority, {DESCRIPTION_COL}, {body_col}{cols} {built.source} "
             f"where {built.clause} {order} limit ?",
             [*built.params, limit],
         ).fetchall()
@@ -506,7 +526,15 @@ def _hit(r: sqlite3.Row, terms: list[list[str]], snippets: bool) -> Hit:
     return Hit(
         r["path"], r["title"], line, snippet, round(-r["rank"], 4) + 0.0,
         r["zone"], r["type"], r["status"], r["project"], r["created"], r["priority"],
+        _hit_description(r),
     )  # fmt: skip
+
+
+def _hit_description(r: sqlite3.Row) -> str | None:
+    """The stored description of a row, or the first sentence of a memory's body."""
+    if r["description"] is None and r["body"] is None:
+        return None  # not a memory, or an empty one: nothing to derive from
+    return memory_description(r["description"], r["body"]) or None
 
 
 def _diff(

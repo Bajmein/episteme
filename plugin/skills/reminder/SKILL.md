@@ -21,6 +21,7 @@ Sin texto en `$ARGUMENTS`, pregunta qué recordar; no inventes uno.
 4. **Campos**:
    - `priority=5` siempre: es lo que lo lleva a la bienvenida de cada sesión.
    - `title`: frase corta en imperativo.
+   - `description`: una línea, hasta 160 caracteres, que diga de qué trata.
    - `body`: el texto de la persona, sin reescribirlo, con los archivos, tools o comandos que toque.
    - `files` (rutas relativas al proyecto) y `tags` (con `/`, sin `:`) solo si se deducen del texto.
 5. **Respuesta**: una línea con la ruta creada, el tipo y, si hay `due`, la fecha. Sin resumen.
