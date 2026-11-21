@@ -76,6 +76,13 @@ _SlugArg = Annotated[
         "the date. Derived from the title when omitted."
     ),
 ]
+_LinkArg = Annotated[
+    bool,
+    Field(
+        description="Write the best link candidates (up to 3) into the new memory's related "
+        "field; the answer lists them under linked. The older memories are not edited."
+    ),
+]
 
 
 def register(server: MCPServer, engine: Engine) -> None:
@@ -106,6 +113,7 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
         status: _StatusArg = "active",
         force: _ForceArg = False,
         slug: _SlugArg = None,
+        link: _LinkArg = False,
     ) -> str:
         """Store a memory as memory/<project>/<type folder>/YYYY-MM-DD-<slug>.md.
 
@@ -128,7 +136,8 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
         type is not session or reminder), "links_hint": str (when it has no related, supersedes
         or [[wikilink]] in the body, and is not a session or reminder), "template_hint": str
         (when a body of 300+ characters lacks ## sections of its type's template; it never
-        refuses)}. The last five appear only when non-empty.
+        refuses), "linked": [path] (only with link=true: the candidates written into related;
+        empty when there were none)}. The hints appear only when non-empty.
         """
         with engine.session():
             return dump(
@@ -150,6 +159,7 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
                     force,
                     slug=slug,
                     keywords=keywords,
+                    link=link,
                 )
             )
 
@@ -237,7 +247,8 @@ def _register_review(server: MCPServer, engine: Engine) -> None:
         (old checkpoint-* session memories are left out); it only reports, so for each
         one call revise(action="archive"), or remember a new memory with supersedes if it
         still applies in updated form. "totals" counts every item per
-        category (the lists are cut at limit). Problems in read-only zones (you cannot fix
+        category (the lists are cut at limit) plus "orphans_linkable", the orphans that have at
+        least one candidate (it has no list of its own). Problems in read-only zones (you cannot fix
         them here; in practice broken links and invalid frontmatter, since memories live in
         memory zones) are not mixed in: they go under "read_only", with the same categories
         and their own "totals".

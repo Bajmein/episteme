@@ -366,6 +366,7 @@ def _partition(
 
 def _report(parts: dict[str, list[Any]], limit: int) -> dict[str, Any]:
     totals = {k: len(v) for k, v in parts.items()}
+    totals["orphans_linkable"] = sum(1 for o in parts.get("orphans", []) if o["candidates"])
     return {"totals": totals, **{k: v[:limit] for k, v in parts.items()}}
 
 

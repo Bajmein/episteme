@@ -4,6 +4,11 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- `remember(link=true)` escribe en `related` de la memoria nueva las mejores `link_candidates` (hasta 3) y las lista en `linked` de la respuesta. Las memorias viejas no se editan: sus enlaces de vuelta los calcula el índice. Sin `link`, nada cambia.
+- `review` suma `orphans_linkable` a `totals` (huérfanas con al menos una candidata de enlace) y la «mantención pendiente» de la bienvenida lo cuenta como «huérfanas enlazables».
+
 ### Cambiado
 
 - Los tools `surface` y `constraints` pasan a `context` como modos: `context(mode="surface", file|relative_path, limit, session)` y `context(mode="constraints", file|relative_path)`, con la misma salida y el mismo modo hook. Sin `file` ni `relative_path`, error `invalid_argument`. Rotura sin alias: vuelve a correr `/episteme:setup` para que los hooks `PreToolUse` y `PostToolUse` llamen a `context` y se quiten `mcp__episteme__surface` y `mcp__episteme__constraints` del `allow`. `scripts/measure_uptake.py` cuenta las entregas nuevas (`context` con `mode=surface|constraints`) y las filas antiguas del registro de actividad.

@@ -7,12 +7,14 @@ import difflib
 import re
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from episteme.errors import invalid
+from episteme.errors import EpistemeError, invalid
 from episteme.index import STOPWORDS_ES
 from episteme.markdown import (
+    WIKILINK_RE,
     body_without_title,
     compose,
     fold,
+    parse_wikilink,
 )
 from episteme.memory.files import _as_list, _files_of
 from episteme.memory.revising import _reject_tool_zone
@@ -46,6 +48,7 @@ BODY_MAX_CHARS = 100_000
 SLUG_WORDS = 5
 SLUG_CHARS = 40
 MAX_CANDIDATES = 5
+MAX_AUTO_LINKS = 3  # how many candidates ``remember(link=True)`` writes into ``related``
 MIN_SHARED_TAGS = 2
 _SLUG_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[a-z0-9]+")
 _SLUG_OK = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -333,13 +336,12 @@ def _body_hints(fm: dict[str, Any], text_body: str) -> dict[str, str]:
     return hints
 
 
-def _extras(engine: Engine, project: str, fm: dict[str, Any], skip: set[str]) -> dict[str, Any]:
+def _extras(engine: Engine, fm: dict[str, Any], candidates: list[dict[str, str]]) -> dict[str, Any]:
     """Hints for the caller: tags no other note has and memories worth linking."""
     extras: dict[str, Any] = {}
     new_tags = _new_tags(engine, fm.get("tags") or [])
     if new_tags:
         extras["new_tags"] = new_tags
-    candidates = _link_candidates(engine, project, fm, skip)
     if candidates:
         extras["link_candidates"] = candidates
     if _needs_keywords_hint(fm):
@@ -398,9 +400,24 @@ def _frontmatter(engine: Engine, raw: dict[str, Any], links: _Links) -> dict[str
     return fm
 
 
-def _skip_paths(engine: Engine, related: list[str] | None, links: _Links) -> set[str]:
+def _body_link_paths(engine: Engine, text_body: str) -> set[str]:
+    """Vault paths of the notes the body already links with a wikilink (unresolved ones skipped)."""
+    found: set[str] = set()
+    for m in WIKILINK_RE.finditer(text_body):
+        dest = parse_wikilink(m.group(1))[0]
+        try:
+            found.add(engine.resolve_note(dest))
+        except EpistemeError:
+            continue
+    return found
+
+
+def _skip_paths(
+    engine: Engine, related: list[str] | None, links: _Links, text_body: str
+) -> set[str]:
     """Paths that are already linked and so are not suggested as link candidates."""
     skip = {engine.resolve_note(r) for r in related or []}
+    skip |= _body_link_paths(engine, text_body)
     if links.old_rel:
         skip.add(links.old_rel)
     return skip
@@ -448,8 +465,13 @@ def remember(
     dry_run: bool = False,
     slug: str | None = None,
     keywords: list[str] | None = None,
+    link: bool = False,
 ) -> dict[str, Any]:
-    """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration."""
+    """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration.
+
+    With ``link=True`` the best link candidates (up to ``MAX_AUTO_LINKS``) go into the new
+    memory's ``related`` and the reply lists them under ``linked``.
+    """
     project = engine.need_project(project)
     check_files(files)
     secret_fields = (
@@ -485,8 +507,18 @@ def remember(
     similar, blocking = _find_similar(engine, project, type, title, text_body, links.old_rel)
     if blocking is not None and not force:
         return _duplicate_reply(similar, blocking)
-    extras = _extras(engine, project, fm, _skip_paths(engine, related, links))
+    skip = _skip_paths(engine, related, links, text_body)
+    candidates = _link_candidates(engine, project, fm, skip)
+    linkable = link and type not in ("session", "reminder")
+    linked = [c["path"] for c in candidates[:MAX_AUTO_LINKS]] if linkable else []
+    if linked:
+        links = links._replace(related=[*links.related, *(wikilink(engine, p) for p in linked)])
+        fm = _frontmatter(engine, raw, links)
+        candidates = candidates[len(linked) :]
+    extras = _extras(engine, fm, candidates)
     extras.update(_body_hints(fm, text_body))
+    if link:
+        extras["linked"] = linked
 
     content = compose(fm, f"# {title}\n\n{text_body}\n")
     folder = f"{zone.path}/{project}/{FOLDERS[type]}"

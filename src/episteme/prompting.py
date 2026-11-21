@@ -163,6 +163,12 @@ _NOTICE_PARTS = (
     ("similar", "grupos parecidos"),
     ("contradictions", "contradicciones posibles"),
     ("flagged", "marcadas"),
+    ("orphans_linkable", "huérfanas enlazables"),
+)
+
+
+_LINKABLE_HINT = (
+    " Las huérfanas enlazables se enlazan con /episteme:mantencion huerfanas."
 )
 
 
@@ -180,6 +186,7 @@ def review_notice(engine: Engine, project: str) -> str:
         f'Corre review(project="{project}", zone="memory") y propón qué archivar o unificar; '
         "no cambies nada sin aprobación. "
         "Con poco tiempo: solo los 3 casos más claros, las vencidas primero."
+        f"{_LINKABLE_HINT if totals.get('orphans_linkable', 0) > 0 else ''}"
     )
 
 
