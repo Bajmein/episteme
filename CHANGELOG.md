@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.20.0] - 2026-11-21
+
+**Aviso de rotura:** tras actualizar, vuelve a correr `/episteme:setup` en cada proyecto (los hooks llaman ahora a `context` con `mode` y se quitan del `allow` los permisos de tools que ya no existen). De 13 a 9 tools, sin alias.
+
 ### Añadido
 
 - Llamar a un tool quitado (`surface`, `constraints`, `links`, `docs_status`, `docs_write`) no ejecuta nada: sin `hook_event` da `not_found: tool "<nombre>" was removed. Use <reemplazo> instead, and re-run /episteme:setup …`, y con `hook_event` una respuesta sin error con el aviso como `additionalContext`. Las instrucciones del servidor recomiendan `description` y `link=true` al guardar y `read(note, links=…)` para seguir enlaces; el README, el plugin y los diagramas hablan de 9 tools (8 sin zona `docs`).
@@ -19,6 +23,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - Los tools `surface` y `constraints` pasan a `context` como modos: `context(mode="surface", file|relative_path, limit, session)` y `context(mode="constraints", file|relative_path)`, con la misma salida y el mismo modo hook. Sin `file` ni `relative_path`, error `invalid_argument`. Rotura sin alias: vuelve a correr `/episteme:setup` para que los hooks `PreToolUse` y `PostToolUse` llamen a `context` y se quiten `mcp__episteme__surface` y `mcp__episteme__constraints` del `allow`. `scripts/measure_uptake.py` cuenta las entregas nuevas (`context` con `mode=surface|constraints`) y las filas antiguas del registro de actividad.
 - `docs_status` y `docs_write` pasan a ser un solo tool, `docs(action="status"|"write", …)`, con los mismos argumentos y las mismas salidas. Un argumento que no corresponde a la acción, o la falta de `suite` en `write`, responde `invalid_argument`. Sigue registrándose solo con una zona `docs` y no lleva `read_only_hint`, porque escribe. Rotura sin alias: actualiza el plugin `episteme-docs` (su skill ya llama a `docs`) y vuelve a correr `/episteme:setup`, que ya no pone `docs_status` en el `allow` (`docs` pide permiso). Un `docs_status` que quedara en el `allow` de un proyecto no hace nada: bórralo.
 - `revise` en una zona `docs` pide `docs(action="write")` (antes `docs_write`).
+
+### Quitado
+
+- Los tools `surface`, `constraints`, `links`, `docs_status` y `docs_write`, sin alias: sus reemplazos son `context(mode="surface")`, `context(mode="constraints")`, `read(note, links=…)`, `docs(action="status")` y `docs(action="write")`. De 13 tools quedan 9 (8 sin zona `docs`).
 
 ## [0.19.0] - 2026-11-21
 
@@ -419,7 +427,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.19.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/Bajmein/episteme/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Bajmein/episteme/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Bajmein/episteme/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Bajmein/episteme/compare/v0.16.0...v0.17.0
