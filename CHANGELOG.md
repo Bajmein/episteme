@@ -13,6 +13,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `docs_check.py diff` usa `--inbox <dir>` en vez de `--out`, guarda cada página como `<hash>.md` y devuelve `hash` (y `title` en las nuevas). `/episteme:docs` ya no pasa cuerpos de página por el modelo: sincroniza suites grandes (uv, mise, render) sin copiar cientos de KB en las llamadas.
 - Las entradas `new` de `docs_check.py diff` traen `excerpt`, el primer párrafo de la página: `/episteme:docs` saca de él el `type` y el `summary` sin leer el archivo de la bandeja.
 
+### Eliminado
+
+- El tool `checkpoint` y `[checkpoint] state_glob` (obsoletos desde 0.15.0; usa `session`). Una tabla `[checkpoint]` que quede en `episteme.toml` se ignora en silencio. Se van también el aviso por stderr al arrancar, el guardado del `estado.md` que hacía `session` gate y la caída de `session(action="restore")` al `estado.md` o al último checkpoint: sin estado en `sesiones/`, responde `found: false`. Quien tenga hooks que llamen a `checkpoint`, vuelva a correr `/episteme:setup`.
+
 ### Corregido
 
 - `docs_check.py diff` ya no da por «cambiadas» las páginas cuya fuente se guardó sin `.md`: las baja por su variante Markdown, como las nuevas, y si solo hay HTML lo cuenta como error (`HTML instead of Markdown`) sin guardar nada. Reconoce `X`, `X/`, `X.md`, `X/index.md` y `X#sec` como la misma página (adiós a los duplicados) y ya no ofrece como nuevas las plantillas con `{…}`, `/.well-known/`, los `.json` ni los `.txt`. Una página nueva del `llms.txt` que falla va a `skipped` y no a `errors` (un enlace roto de un tercero ya no impide poner `synced`), y las páginas `deprecated` no se descargan.

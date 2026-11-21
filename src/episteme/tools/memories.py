@@ -234,7 +234,7 @@ def _register_review(server: MCPServer, engine: Engine) -> None:
         link (shared file or 2+ tags), linkable first; "cut_titles" lists memories whose
         first body line repeats the title and goes on. "expired" lists active memories
         {"path", "title", "type", "valid_until"} whose valid_until is before today
-        (checkpoints are left out: checkpoint manages them); it only reports, so for each
+        (old checkpoint-* session memories are left out); it only reports, so for each
         one call revise(action="archive"), or remember a new memory with supersedes if it
         still applies in updated form. "totals" counts every item per
         category (the lists are cut at limit). Problems in read-only zones (you cannot fix

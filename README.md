@@ -193,7 +193,6 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
 | `session` | Guardar y retomar el estado de la sesión (objetivo, lo hecho, el siguiente paso), con una plantilla | ● |
 | `plan` | Guardar una copia de cada plan de plan mode y señalarla tras «clear context» (la usan los hooks) | ● |
-| `checkpoint` | Obsoleto: guardar y recuperar el `estado.md` del proyecto (usa `session`) | ● |
 | `docs_status` | Ver las suites de documentación y qué páginas tienen | |
 | `docs_write` | Guardar una página de documentación descargada (lo usa `/episteme:docs`) | ● |
 

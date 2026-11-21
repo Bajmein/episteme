@@ -23,10 +23,6 @@ mode = "memory"
 [zones."sesiones"]
 mode = "session"
 
-# Obsoleto: se elimina en la próxima versión. Usa el tool session.
-[checkpoint]
-state_glob = ".fabrik/**/estado.md"   # relativo a project_dir
-
 # Estado de la sesión (descomenta para cambiar).
 # [session]
 # extract = true                # orden de extracción tras compact/clear
@@ -94,18 +90,6 @@ def _check_vault_path(raw: str) -> Path:
     return path
 
 
-def _warn_deprecated(vault: Path) -> None:
-    """Warn on stderr when episteme.toml still sets the deprecated [checkpoint] state_glob."""
-    from episteme.vault import load_config
-
-    if load_config(Path(os.path.realpath(vault))).state_glob:
-        print(
-            "episteme: [checkpoint] state_glob and the checkpoint tool are deprecated and will "
-            "be removed in the next minor release; use the session tool.",
-            file=sys.stderr,
-        )
-
-
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="episteme", description="MCP server for an episteme Markdown vault."
@@ -128,7 +112,6 @@ def main(argv: list[str] | None = None) -> None:
     except StartupError as exc:
         print(f"episteme: {exc}", file=sys.stderr)
         sys.exit(2)
-    _warn_deprecated(vault)
     server.run("stdio")
 
 

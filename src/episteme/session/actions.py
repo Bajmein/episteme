@@ -1,12 +1,10 @@
-"""The session tool's read actions: restore (with the deprecated checkpoint fallback) and
-template."""
+"""The session tool's read actions: restore and template."""
 
 from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING, Any
 
-from episteme import checkpoint
 from episteme.errors import invalid
 from episteme.memory import TEMPLATES
 from episteme.session import store
@@ -20,12 +18,6 @@ if TYPE_CHECKING:
 _SAVED_AT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 SINCE_ALL = "inicio"
 
-DEPRECATED = (
-    "checkpoint and [checkpoint] state_glob are deprecated and will be removed in the next "
-    "minor release; use session."
-)
-
-
 def restore_text(title: str, saved_at: str | None, content: str) -> str:
     """The state as context: a line that says what it is, then its body."""
     head = (
@@ -33,12 +25,6 @@ def restore_text(title: str, saved_at: str | None, content: str) -> str:
         "repo antes de repetir pasos):"
     )
     return f"{head}\n\n{content}".strip()
-
-
-def _fallback(engine: Engine, project: str, project_dir: str | None) -> dict[str, Any]:
-    """The deprecated checkpoint restore, used when there is no managed state."""
-    data = checkpoint.restore(engine, project, project_dir)
-    return {**data, "saved_at": None, "deprecated": DEPRECATED}
 
 
 def extraction_order(project: str, transcript: str, state: dict[str, Any]) -> str:
@@ -56,14 +42,12 @@ def extraction_order(project: str, transcript: str, state: dict[str, Any]) -> st
 
 
 def _state(engine: Engine, project: str, project_dir: str | None) -> dict[str, Any]:
-    """The state in use as context, made current; else the checkpoint (deprecated), if any."""
+    """The state in use as context, made current; else the empty result."""
     data = store.show(engine, project, project_dir)
     if data["found"]:
         store.mark_current(engine, project, project_dir, data["path"])
         text = restore_text(data["task_title"], data["saved_at"], data["content"])
         return {**data, "content": text, "source": "session"}
-    if engine.vault.config.state_glob:
-        return _fallback(engine, project, project_dir)
     return {**data, "source": None}
 
 
@@ -75,10 +59,10 @@ def restore(
     source: str | None = None,
     transcript: str | None = None,
 ) -> dict[str, Any]:
-    """The state in use as context, made current; else the checkpoint (deprecated), if any.
+    """The state in use as context, made current; else the empty result.
 
     Returns {"found", "path", "task_title", "saved_at", "content", "source"}; source is
-    "session", "state" or "checkpoint" (the last two add "deprecated"), or None. After a
+    "session", or None when there is no state. After a
     compact or clear (``source``) with ``[session] extract`` and a known transcript, it adds
     "extract": the order to launch the extractor.
     """

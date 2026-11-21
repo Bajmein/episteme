@@ -23,11 +23,9 @@ def _fm(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8").split("---\n")[1])
 
 
-def _config(vault: Path, extra: str, drop_state_glob: bool = False) -> None:
+def _config(vault: Path, extra: str) -> None:
     toml = vault / "episteme.toml"
     text = toml.read_text(encoding="utf-8")
-    if drop_state_glob:
-        text = text.split("[checkpoint]")[0]
     toml.write_text(text + "\n" + extra + "\n", encoding="utf-8")
 
 
@@ -147,31 +145,11 @@ async def test_restore_hook_renders_the_state_with_a_notice(vault: Path) -> None
     assert "estado de sesión recuperado: «Hilo»" in out["systemMessage"]
 
 
-async def test_restore_falls_back_to_the_deprecated_checkpoint(
-    vault: Path, project_dir: Path
-) -> None:
-    async with mcp_client(vault) as c:
-        res = await c.ok("session", action="restore", project_dir=str(project_dir))
-
-    assert res["found"] is True and res["source"] == "state"
-    assert "deprecated" in res["deprecated"]
-
-
-async def test_restore_without_state_or_state_glob_finds_nothing(vault: Path) -> None:
-    _config(vault, "", drop_state_glob=True)
+async def test_restore_without_state_finds_nothing(vault: Path) -> None:
     async with mcp_client(vault) as c:
         res = await c.ok("session", action="restore")
 
     assert res["found"] is False and res["source"] is None and "deprecated" not in res
-
-
-async def test_checkpoint_is_marked_deprecated(vault: Path, project_dir: Path) -> None:
-    async with mcp_client(vault) as c:
-        tools = {t.name: t for t in (await c.session.list_tools()).tools}
-        res = await c.ok("checkpoint", action="restore", project_dir=str(project_dir))
-
-    assert (tools["checkpoint"].description or "").startswith("Deprecated: use session.")
-    assert res["deprecated"].startswith("checkpoint and [checkpoint] state_glob are deprecated")
 
 
 @pytest.mark.parametrize(("type_", "first"), [(None, "Objetivo"), ("decision", "Contexto")])

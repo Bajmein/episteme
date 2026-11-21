@@ -7,7 +7,7 @@
 | Argumento | Qué hace |
 | --- | --- |
 | `--vault <ruta absoluta>` | Opcional (o la variable `EPISTEME_VAULT`; manda el argumento). Por defecto, `~/.episteme`, que se crea si falta. Una ruta explícita que no es absoluta, no existe o no tiene `episteme.toml` impide arrancar: el servidor sale con código ≠ 0 sin crear nada |
-| `--project <nombre>` | Opcional. Proyecto por defecto de `remember`, `context`, `surface`, `constraints`, `session`, `plan`, `checkpoint` y `review` |
+| `--project <nombre>` | Opcional. Proyecto por defecto de `remember`, `context`, `surface`, `constraints`, `session`, `plan` y `review` |
 
 Variables:
 
@@ -55,9 +55,6 @@ nudge_every = 12              # mensajes sin guardar antes del aviso
 [plans]                       # opcional; este es el valor por defecto
 archive_days = 7              # días sin guardar antes de archivar la copia de un plan
 
-[checkpoint]                  # obsoleto: se elimina en la próxima versión (usa session)
-state_glob = ".fabrik/*/*/estado.md"   # relativo a project_dir; opcional
-
 [maintenance]            # opcional; estos son los valores por defecto
 every_days = 1           # periodo mínimo entre ejecuciones de cada tarea
 notify = true            # avisa de los pendientes de review
@@ -73,7 +70,7 @@ keep = 14                # copias que se conservan
 - Una zona `docs` es una suite de documentación de terceros: solo la cambia `docs_write` (lo usa la skill `/episteme:docs`); `revise` responde `read_only_zone`, `review` la trata como de solo lectura y el backup no la incluye, porque las páginas se pueden volver a bajar. Ver [Suites de documentación](documentacion.md).
 - Una zona `session` guarda el estado de la sesión: solo la cambia el tool `session`; `revise` y `remember` responden `read_only_zone` y `review` la trata como de solo lectura. Si `episteme.toml` no declara ninguna, se añade `sesiones` con ese modo (declarar `sesiones` con otro modo impide arrancar). A diferencia de `docs`, entra en el backup. Ver [Estado de la sesión](sesion.md).
 - Una zona `plan` guarda las copias de los planes de plan mode: solo la cambia el tool `plan`; `revise` y `remember` responden `read_only_zone` y `review` la trata como de solo lectura. Si `episteme.toml` no declara ninguna, se añade `planes` con ese modo (declarar `planes` con otro modo impide arrancar). Entra en el backup. No tiene que ver con una zona `read-write` llamada `plans`. Ver [Planes](planes.md).
-- `[checkpoint] state_glob` está obsoleto: con él, el servidor avisa por stderr al arrancar y las respuestas de `checkpoint` traen `deprecated`. Se elimina en la próxima versión.
+- Una tabla `[checkpoint]` de versiones anteriores se ignora: el tool `checkpoint` ya no existe.
 - Lo que no está en ninguna zona es de solo lectura. Si dos zonas se anidan, manda la más específica.
 - Se ignoran `.obsidian/`, `.index/`, `.git/`, toda carpeta que empiece por `.` y los archivos que no son `.md`.
 - Toda ruta se confina al vault: se rechazan `..`, las rutas absolutas y los symlinks que salen (`outside_vault`).

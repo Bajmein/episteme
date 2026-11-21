@@ -16,5 +16,5 @@ El ciclo, siempre con la aprobación de la persona y grupo por grupo:
 1. `review(project="*", zone="memory")`.
 2. Por cada grupo de `similar`: leer las memorias, guardar la unificada con `remember` y marcar cada antigua con `revise(action="supersede", by=…)`.
 3. Archivar lo que ya no aplica con `revise(action="archive")` (reversible).
-4. Revisar las `expired` (memorias activas con `valid_until` ya pasado, sin contar los checkpoints, que gestiona `checkpoint`, obsoleto): `revise(action="archive")` o una memoria nueva con `supersedes`.
+4. Revisar las `expired` (memorias activas con `valid_until` ya pasado, sin contar las memorias `checkpoint-*` antiguas): `revise(action="archive")` o una memoria nueva con `supersedes`.
 5. Corregir los `cut_titles` (el título quedó cortado y repetido en la primera línea del cuerpo).

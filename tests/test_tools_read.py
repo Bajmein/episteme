@@ -20,7 +20,6 @@ TOOLS = {
     "context",
     "surface",
     "constraints",
-    "checkpoint",
     "docs_status",
     "docs_write",
     "session",

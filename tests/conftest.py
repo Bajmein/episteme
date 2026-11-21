@@ -26,13 +26,6 @@ def vault(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def project_dir(tmp_path: Path) -> Path:
-    dst = tmp_path / "project"
-    shutil.copytree(FIXTURES / "project", dst)
-    return dst
-
-
-@pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
 

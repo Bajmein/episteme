@@ -84,7 +84,6 @@ class Plans:
 @dataclass
 class Config:
     zones: list[Zone] = field(default_factory=list)
-    state_glob: str | None = None
     maintenance: Maintenance = field(default_factory=Maintenance)
     backup: Backup = field(default_factory=Backup)
     session: Session = field(default_factory=Session)
@@ -224,16 +223,6 @@ def _with_implicit_zone(zones: list[Zone], implicit: Zone, what: str) -> list[Zo
     return [*zones, implicit]
 
 
-def _load_state_glob(data: dict) -> str | None:
-    checkpoint = data.get("checkpoint", {})
-    if not isinstance(checkpoint, dict) or checkpoint.get("state_glob") is None:
-        return None
-    state_glob = checkpoint["state_glob"]
-    if not isinstance(state_glob, str) or not state_glob:
-        raise StartupError("[checkpoint] state_glob must be a non-empty string.")
-    return state_glob
-
-
 def load_config(root: Path) -> Config:
     """Parse ``episteme.toml``; any invalid value raises StartupError."""
     path = root / CONFIG_FILE
@@ -245,7 +234,6 @@ def load_config(root: Path) -> Config:
         raise StartupError(f"cannot read {path}: {exc}. Fix the file and restart.") from exc
     return Config(
         _load_zones(data),
-        _load_state_glob(data),
         _load_maintenance(data),
         _load_backup(data, root),
         _load_session(data),

@@ -16,7 +16,7 @@ episteme es un servidor local que habla por stdio y no usa la red. El vault y su
 
 ## Riesgos aceptados
 
-- **Una memoria guardada vuelve al contexto.** Lo que el agente guarda con `remember`, `revise` o `checkpoint` se entrega después en `context` y `search`. No se restringen `priority=5` ni `project="_shared"`: el uso normal depende de que el agente guarde normas y memorias compartidas. El freno es que esos tres tools, y `docs_write`, quedan en «ask» en los permisos que instala `/episteme:setup`.
+- **Una memoria guardada vuelve al contexto.** Lo que el agente guarda con `remember` o `revise` se entrega después en `context` y `search`. No se restringen `priority=5` ni `project="_shared"`: el uso normal depende de que el agente guarde normas y memorias compartidas. El freno es que esos dos tools, y `docs_write`, quedan en «ask» en los permisos que instala `/episteme:setup`.
 - **El estado de sesión y las copias de planes también vuelven.** `session` y `plan` van en el `allow` porque los llaman los hooks de compactación y de plan mode: lo que guardan sale después con `session` (`restore`, `show`) y `search`. Solo escriben en sus zonas (`sesiones/` y `planes/`), rechazan o redactan las credenciales y no salen en la bienvenida.
 - **El filtro de credenciales es de mejor esfuerzo.** Evita guardar los formatos más comunes, no todos los de todos los proveedores.
 - **Los `deny` de la skill no son un aislamiento.** Reducen errores del agente; no sustituyen a un sandbox. Los `deny` de `Read` y `Edit` sobre el vault no cubren Bash.

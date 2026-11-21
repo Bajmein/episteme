@@ -1,4 +1,4 @@
-"""Hook-facing tools: context, surface, constraints and checkpoint."""
+"""Hook-facing tools: context, surface and constraints."""
 
 from __future__ import annotations
 
@@ -8,9 +8,7 @@ from typing import Annotated, Any, NamedTuple
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from episteme import checkpoint as checkpoints
 from episteme import hookmode, maintenance, memory, prompting
-from episteme import session as sessions
 from episteme.engine import Engine
 from episteme.errors import invalid
 from episteme.tools.args import (
@@ -53,15 +51,6 @@ _SurfaceSessionArg = Annotated[
         " this session is not repeated."
     ),
 ]
-_ActionArg = Annotated[str, Field(description='"save" or "restore".')]
-_CheckpointDirArg = Annotated[
-    str | None,
-    Field(description="Absolute project directory (hooks pass ${cwd})."),
-]
-_TaskTitleArg = Annotated[
-    str | None,
-    Field(description="restore only: resume this task (exact title) instead of the branch's."),
-]
 
 
 def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> None:
@@ -69,7 +58,6 @@ def register(server: MCPServer, engine: Engine, store: maintenance.Store) -> Non
     _register_context(server, engine, store)
     _register_surface(server, engine)
     _register_constraints(server, engine)
-    _register_checkpoint(server, engine)
 
 
 def _register_context(server: MCPServer, engine: Engine, store: maintenance.Store) -> None:
@@ -164,36 +152,6 @@ def _register_constraints(server: MCPServer, engine: Engine) -> None:
         return _reply(hook_event, text, data)
 
 
-def _register_checkpoint(server: MCPServer, engine: Engine) -> None:
-    """Register the checkpoint tool on ``server``."""
-
-    @server.tool(structured_output=False)
-    def checkpoint(
-        action: _ActionArg,
-        project_dir: _CheckpointDirArg = None,
-        project: ProjectArg = None,
-        task_title: _TaskTitleArg = None,
-        hook_event: HookEvent = None,
-    ) -> str:
-        """Deprecated: use session. Save the active task state (estado.md) as a session
-        memory, or restore the latest; removed in the next minor release.
-
-        save: {"saved", "path", "task_title"}; saved is false when no state is active.
-        restore: {"found", "path", "task_title", "content", "source"}. It reads the live active
-        estado.md first (the branch's change, else the newest), with a flow line (etapa and
-        tasks.md progress); without one it falls back to the saved checkpoint. Saved checkpoints
-        of tasks with no active state are archived. Never blocks compaction. With
-        [checkpoint] state_glob set, the JSON adds "deprecated".
-        """
-        hookmode.check(hook_event)
-        with engine.session():
-            data, text, notice = _checkpoint_run(engine, action, project_dir, project, task_title)
-            if engine.vault.config.state_glob:
-                data = {**data, "deprecated": sessions.DEPRECATED}
-        return _reply(hook_event, text, data, notice)
-
-
-
 def _reply(hook_event: str | None, text: str, data: Any, notice: str = "") -> str:
     """Render for a hook when hook_event is set, else dump the JSON data."""
     if hook_event:
@@ -220,43 +178,6 @@ def _track_surfaced(
     st.delivered.update(paths)
     if hook_event:
         st.surfaced.update(paths)
-
-
-def _checkpoint_save(
-    engine: Engine, project_dir: str | None, project: str | None
-) -> tuple[dict[str, Any], str, str]:
-    """Save the active task state and return (data, text, notice)."""
-    data = checkpoints.save(engine, project_dir, project)
-    text = f"episteme · checkpoint saved: {data['path']}" if data["saved"] else ""
-    return data, text, ""
-
-
-def _checkpoint_restore(
-    engine: Engine, project: str | None, project_dir: str | None, task_title: str | None
-) -> tuple[dict[str, Any], str, str]:
-    """Restore the latest task state and return (data, text, notice)."""
-    data = checkpoints.restore(engine, project, project_dir, task_title)
-    notice = ""
-    if data["found"]:
-        origin = "estado.md" if data["source"] == "state" else "checkpoint guardado"
-        title = hookmode.clean_line(data["task_title"])
-        notice = f"episteme · tarea retomada: «{title}» ({origin})"
-    return data, data["content"], notice
-
-
-def _checkpoint_run(
-    engine: Engine,
-    action: str,
-    project_dir: str | None,
-    project: str | None,
-    task_title: str | None,
-) -> tuple[dict[str, Any], str, str]:
-    """Run the save or restore action and return (data, text, notice)."""
-    if action == "save":
-        return _checkpoint_save(engine, project_dir, project)
-    if action == "restore":
-        return _checkpoint_restore(engine, project, project_dir, task_title)
-    raise invalid(f'action must be "save" or "restore", got "{action}".')
 
 
 def _maintenance_note(engine: Engine, store: maintenance.Store, project: str) -> str:

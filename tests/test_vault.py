@@ -33,13 +33,21 @@ def test_load_fixture_config(vault: Path) -> None:
         ("sesiones", "session"),
         ("planes", PLAN),
     }
-    assert cfg.state_glob == ".fabrik/*/*/estado.md"
     assert cfg.plans == Plans(archive_days=7)
 
 
 def _append_config(vault: Path, extra: str) -> None:
     toml = vault / "episteme.toml"
     toml.write_text(toml.read_text(encoding="utf-8") + "\n" + extra + "\n", encoding="utf-8")
+
+
+def test_legacy_checkpoint_table_is_ignored(vault: Path) -> None:
+    _append_config(vault, '[checkpoint]\nstate_glob = ".fabrik/**/estado.md"')
+
+    cfg = load_config(vault)
+
+    assert not hasattr(cfg, "state_glob")
+    assert any(z.path == "memory" for z in cfg.zones)
 
 
 def test_declared_plan_zone_replaces_the_implicit_one(vault: Path) -> None:

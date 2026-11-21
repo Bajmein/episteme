@@ -27,7 +27,7 @@ def test_default_vault_is_created(tmp_path: Path) -> None:
     _start(env={"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)})
     toml = tmp_path / ".episteme" / "episteme.toml"
     assert toml.is_file()
-    assert 'state_glob = ".fabrik/**/estado.md"' in toml.read_text()
+    assert "checkpoint" not in toml.read_text(encoding="utf-8")
 
 
 def test_explicit_missing_vault_is_not_created(tmp_path: Path) -> None:

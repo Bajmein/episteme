@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from episteme.session.actions import DEPRECATED, restore, template
+from episteme.session.actions import restore, template
 from episteme.session.capture import capture, end
 from episteme.session.gate import gate
 from episteme.session.store import (
@@ -17,7 +17,6 @@ from episteme.session.store import (
 )
 
 __all__ = [
-    "DEPRECATED",
     "SaveArgs",
     "archive",
     "capture",
