@@ -185,14 +185,14 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `search` | Buscar en las notas y las memorias | |
 | `read` | Leer una nota, una sección o varias notas a la vez, y ver qué notas enlazan con ella | |
 | `context` | Dar la bienvenida de la sesión, reunir lo relevante para una tarea y mostrar lo que se sabe de un archivo y las normas que le aplican | ● |
-| `remember` | Guardar una memoria nueva; avisa si le faltan palabras clave o enlaces | ● |
+| `remember` | Guardar una memoria nueva, con una descripción de una línea si quieres; puede enlazarla sola con las memorias parecidas y avisa si le faltan palabras clave o enlaces | ● |
 | `revise` | Corregir, reemplazar o archivar una nota | ● |
 | `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
 | `session` | Guardar y retomar el estado de la sesión (objetivo, lo hecho, el siguiente paso), con una plantilla | ● |
 | `plan` | Guardar una copia de cada plan de plan mode y señalarla tras «clear context» (la usan los hooks) | ● |
 | `docs` | Ver las suites de documentación y guardar una página descargada (lo usa `/episteme-docs:docs`) | ● |
 
-Los parámetros y el comportamiento exacto de cada una están en [Tools y memorias](docs/tools.md).
+`docs` solo aparece si el vault tiene suites de documentación; sin ellas son 8. Los parámetros y el comportamiento exacto de cada una están en [Tools y memorias](docs/tools.md).
 
 ### Tipos de memoria
 
