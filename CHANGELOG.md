@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.20.0] - 2026-11-21
+
+**Aviso de rotura:** tras actualizar, vuelve a correr `/episteme:setup` en cada proyecto (los hooks llaman ahora a `context` con `mode` y se quitan del `allow` los permisos de tools que ya no existen). De 13 a 9 tools, sin alias.
+
 ### Añadido
 
 - Llamar a un tool quitado (`surface`, `constraints`, `links`, `docs_status`, `docs_write`) no ejecuta nada: sin `hook_event` da `not_found: tool "<nombre>" was removed. Use <reemplazo> instead, and re-run /episteme:setup …`, y con `hook_event` una respuesta sin error con el aviso como `additionalContext`. Las instrucciones del servidor recomiendan `description` y `link=true` al guardar y `read(note, links=…)` para seguir enlaces; el README, el plugin y los diagramas hablan de 9 tools (8 sin zona `docs`).
@@ -419,7 +423,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.19.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/Bajmein/episteme/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Bajmein/episteme/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Bajmein/episteme/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Bajmein/episteme/compare/v0.16.0...v0.17.0
