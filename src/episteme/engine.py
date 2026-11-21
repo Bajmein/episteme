@@ -7,11 +7,12 @@ import re
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from episteme.errors import NOT_FOUND, EpistemeError, invalid
+from episteme.filters import SearchFilters
 from episteme.index import NOTE_MAX_BYTES, Index, jsonable, normalize_tag, query_terms, to_json
 from episteme.links import reachable
 from episteme.markdown import (
@@ -151,11 +152,12 @@ class Engine:
             rows.append(row)
         return rows
 
-    def _hints(self, query: str | None, f: _Filters, zones: list[str]) -> list[str]:
+    def _hints(self, query: str | None, f: SearchFilters, zones: list[str]) -> list[str]:
         hints = [
             *self._unknown_value_hints(f.type, f.project, f.status),
             *self._unknown_tag_hints(f.tags),
             *self._unknown_path_hints(f.path, zones),
+            *[text for text, alone in f.probes() if not self._probe(alone)],
         ]
         if not hints and query is not None:
             hints.append(NO_MATCH_HINT)
@@ -212,6 +214,12 @@ class Engine:
             hints.append(text)
         return hints
 
+    def _probe(self, only: dict[str, Any]) -> bool:
+        """Whether any note passes the given filters alone (any status)."""
+        index: Any = self.index
+        hits, _ = index.search(None, status="any", limit=1, snippets=False, **only)
+        return bool(hits)
+
     def _unknown_path_hints(self, path: str | None, zones: list[str]) -> list[str]:
         if not path:
             return []
@@ -226,23 +234,18 @@ class Engine:
     def search(
         self,
         query: str | None = None,
-        path: str | None = None,
-        type: str | None = None,
-        tags: list[str] | None = None,
-        project: str | None = None,
-        status: str | None = None,
+        filters: SearchFilters | None = None,
         limit: int = 20,
-        zone: str | None = None,
         facets: bool = False,
         match: str = "all",
     ) -> dict[str, Any]:
-        has_filter = _has_filter(type, tags, project, zone, facets)
-        query = _check_query(query, match, limit, has_filter)
+        f = filters or SearchFilters()
+        f.check()
+        query = _check_query(query, match, limit, f.selects() or facets)
         any_mode = match == "any" and query is not None
-        self._check_search_path(path)
+        self._check_search_path(f.path)
         zones = sorted(z.path for z in self.vault.config.zones)
-        zone = _check_zone(zone, zones)
-        f = _Filters(path, type, tags, project, status, zone)
+        f = self._resolved(f, zones)
         kwargs = f.as_kwargs()
         result = self._run_query(query, f, any_mode, limit, facets)
         out = self._build_search_out(query, result, any_mode, kwargs)
@@ -253,12 +256,17 @@ class Engine:
             )
         return out
 
+    def _resolved(self, f: SearchFilters, zones: list[str]) -> SearchFilters:
+        """``f`` with the zone checked and ``linked_to`` resolved to a vault path."""
+        linked = self.resolve_note(f.linked_to) if f.linked_to is not None else None
+        return replace(f, zone=_check_zone(f.zone, zones), linked_to=linked)
+
     def _check_search_path(self, path: str | None) -> None:
         if path:
             self.check_path(path.strip().rstrip("/") or "/")
 
     def _add_hints(
-        self, out: dict[str, Any], query: str | None, f: _Filters, zones: list[str], total: int
+        self, out: dict[str, Any], query: str | None, f: SearchFilters, zones: list[str], total: int
     ) -> None:
         """An empty result explains itself with hints."""
         if total != 0:
@@ -268,7 +276,7 @@ class Engine:
             out["hints"] = hints
 
     def _run_query(
-        self, query: str | None, f: _Filters, any_mode: bool, limit: int, facets: bool
+        self, query: str | None, f: SearchFilters, any_mode: bool, limit: int, facets: bool
     ) -> _QueryResult:
         """Run the search; the result says whether it fell back to OR."""
         index = self.index
@@ -418,31 +426,6 @@ class Engine:
         )
 
 
-@dataclass(frozen=True)
-class _Filters:
-    """The search filters as the caller gave them (``project`` not yet expanded)."""
-
-    path: str | None
-    type: str | None
-    tags: list[str] | None
-    project: str | None
-    status: str | None
-    zone: str | None
-
-    def as_kwargs(self) -> dict[str, Any]:
-        return {
-            "path": self.path,
-            "type": self.type,
-            "tags": self.tags,
-            "project": _project_scope(self.project),
-            "status": self.status,
-            "zone": self.zone,
-        }
-
-    def is_empty(self) -> bool:
-        return not (self.path or self.type or self.tags or self.project or self.zone or self.status)
-
-
 class _QueryResult(NamedTuple):
     """What a search run found: the hits, the total and whether it fell back to OR."""
 
@@ -480,24 +463,11 @@ class _Shown:
     line_range: str | None
 
 
-def _has_filter(
-    type: str | None, tags: list[str] | None, project: str | None, zone: str | None, facets: bool
-) -> bool:
-    return bool(tags or type or project or zone or facets)
-
-
 def _has_section(heading: str | None, lines: str | None) -> bool:
     return heading is not None or lines is not None
 
 
-def _project_scope(project: str | None) -> str | list[str] | None:
-    """A project also sees the ``_shared`` memories."""
-    if project and project != "_shared":
-        return [project, "_shared"]
-    return project
-
-
-def _only_facets(query: str | None, f: _Filters, facets: bool) -> bool:
+def _only_facets(query: str | None, f: SearchFilters, facets: bool) -> bool:
     return query is None and facets and f.is_empty()
 
 
@@ -569,7 +539,7 @@ def _check_batch_notes(notes: list[str]) -> None:
 
 def _check_links_args(direction: str, depth: int) -> None:
     if direction not in ("out", "in", "both"):
-        raise invalid(f'direction must be "out", "in" or "both", got "{direction}".')
+        raise invalid(f'links must be "out", "in" or "both", got "{direction}".')
     if not (1 <= depth <= LINKS_DEPTH_MAX):
         raise invalid(f"depth must be 1-{LINKS_DEPTH_MAX}, got {depth}.")
 

@@ -35,19 +35,20 @@ from typing import Any, NamedTuple
 
 from episteme.engine import BATCH_MAX, Engine
 from episteme.errors import EpistemeError
+from episteme.filters import SearchFilters
 from episteme.index import query_terms
 from episteme.vault import INDEX_DIR
 
 REPO = Path(__file__).resolve().parents[1]
 BASELINE_CMD = "uvx --from git+https://github.com/Bajmein/episteme@v0.6.0 episteme"
 FILTERS = ("path", "type", "tags", "status", "zone")
-AB_TOOLS = ("search", "read", "context", "links")
+AB_TOOLS = ("search", "read", "context")
 RUN_TIMEOUT = 900
 BURST_GAP_SECONDS = 60
 SEARCH_LIMIT_DEFAULT = 20
 SEARCH_LIMIT_MAX = 100
 AB_COLUMNS = (
-    "Corrida", "Llamadas", "search", "read", "context", "links", "search_any", "read_batch",
+    "Corrida", "Llamadas", "search", "read", "context", "search_any", "read_batch",
     "Caracteres", "Turnos", "Coste (USD)", "Nota",
 )  # fmt: skip
 
@@ -227,14 +228,16 @@ def batch_calls(calls: list[Call]) -> list[Call]:
 def _call(engine: Engine, tool: str, args: dict[str, Any], project: str | None) -> dict[str, Any]:
     if tool == "search":
         return engine.search(
-            query=args.get("query"),
-            path=args.get("path"),
-            type=args.get("type"),
-            tags=args.get("tags"),
-            project=project,
-            status=args.get("status"),
+            args.get("query"),
+            SearchFilters(
+                path=args.get("path"),
+                type=args.get("type"),
+                tags=args.get("tags"),
+                project=project,
+                status=args.get("status"),
+                zone=args.get("zone"),
+            ),
             limit=int(args.get("limit", SEARCH_LIMIT_DEFAULT)),
-            zone=args.get("zone"),
             match=args.get("match", "all"),
         )
     if "notes" in args:
@@ -639,7 +642,7 @@ def _run_cells(run: dict[str, Any]) -> list[Any]:
     calls = run["calls"]
     return [
         run["total"], calls.get("search", 0), calls.get("read", 0), calls.get("context", 0),
-        calls.get("links", 0), run["search_any"], run["read_batch"], run["chars"],
+        run["search_any"], run["read_batch"], run["chars"],
         run["turns"], run["cost"],
     ]  # fmt: skip
 

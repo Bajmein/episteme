@@ -29,7 +29,7 @@
   <a href="#cómo-funciona">Cómo funciona</a> ·
   <a href="#instalación">Instalación</a> ·
   <a href="#uso-diario">Uso diario</a> ·
-  <a href="#las-14-herramientas">Herramientas</a> ·
+  <a href="#las-10-herramientas">Herramientas</a> ·
   <a href="#límites">Límites</a> ·
   <a href="#documentación">Documentación</a>
 </p>
@@ -178,13 +178,12 @@ Al compactar no tienes que hacer nada: el resumen que escribe Claude termina con
 
 Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes. episteme no revisa el vault en segundo plano: la revisión corre cuando alguien la pide.
 
-## Las 14 herramientas
+## Las 10 herramientas
 
 | Herramienta | Para qué sirve | Escribe |
 | :-- | :-- | :-: |
 | `search` | Buscar en las notas y las memorias | |
-| `read` | Leer una nota, una sección o varias notas a la vez | |
-| `links` | Ver qué notas enlazan con otra | |
+| `read` | Leer una nota, una sección o varias notas a la vez, y ver qué notas enlazan con ella | |
 | `context` | Dar la bienvenida de la sesión, reunir lo relevante para una tarea y mostrar lo que se sabe de un archivo y las normas que le aplican | ● |
 | `remember` | Guardar una memoria nueva; avisa si le faltan palabras clave o enlaces | ● |
 | `revise` | Corregir, reemplazar o archivar una nota | ● |
@@ -225,7 +224,7 @@ El detalle técnico vive en [`docs/`](docs/):
 | :-- | :-- |
 | [Instalación](docs/instalacion.md) | Pasos a mano en Linux, macOS y Windows, y el plugin con las skills |
 | [Configuración](docs/configuracion.md) | Argumentos del servidor, variables, `episteme.toml`, zonas y registro de actividad |
-| [Tools y memorias](docs/tools.md) | Las 14 herramientas con sus parámetros, el esquema de las memorias y los errores |
+| [Tools y memorias](docs/tools.md) | Las 10 herramientas con sus parámetros, el esquema de las memorias y los errores |
 | [Estado de la sesión](docs/sesion.md) | La nota viva de cada hilo de trabajo en `sesiones/`, su plantilla y cuándo se archiva |
 | [Planes](docs/planes.md) | La copia de cada plan de plan mode en `planes/`, cómo se recupera tras «clear context» y cuándo se archiva |
 | [Suites de documentación](docs/documentacion.md) | La documentación de terceros en `docs/` del vault y cómo se mantiene al día con `/episteme-docs:docs` |

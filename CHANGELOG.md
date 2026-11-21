@@ -8,9 +8,12 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - `remember(link=true)` escribe en `related` de la memoria nueva las mejores `link_candidates` (hasta 3) y las lista en `linked` de la respuesta. Las memorias viejas no se editan: sus enlaces de vuelta los calcula el índice. Sin `link`, nada cambia.
 - `review` suma `orphans_linkable` a `totals` (huérfanas con al menos una candidata de enlace) y la «mantención pendiente» de la bienvenida lo cuenta como «huérfanas enlazables».
+- `read(note, links="out"|"in"|"both", depth=1-3)` añade la clave `links` (enlaces salientes, backlinks y notas alcanzables); con `content=false` da frontmatter, esquema y enlaces sin cuerpo. Con `notes` da `invalid_argument`.
+- `search` filtra por `priority_min` (1-5), `valid` (`"current"` o `"expired"`, según `valid_until`) y `linked_to` (notas con un enlace hacia o desde la nota dada). Si un filtro no deja nada, `hints` lo dice.
 
 ### Cambiado
 
+- **Rotura:** el tool `links` se fusiona en `read` y desaparece, sin alias: `read(note, links=...)` devuelve lo mismo en la clave `links`. Vuelve a correr `/episteme:setup` para quitar `mcp__episteme__links` de los permisos.
 - Los tools `surface` y `constraints` pasan a `context` como modos: `context(mode="surface", file|relative_path, limit, session)` y `context(mode="constraints", file|relative_path)`, con la misma salida y el mismo modo hook. Sin `file` ni `relative_path`, error `invalid_argument`. Rotura sin alias: vuelve a correr `/episteme:setup` para que los hooks `PreToolUse` y `PostToolUse` llamen a `context` y se quiten `mcp__episteme__surface` y `mcp__episteme__constraints` del `allow`. `scripts/measure_uptake.py` cuenta las entregas nuevas (`context` con `mode=surface|constraints`) y las filas antiguas del registro de actividad.
 - `docs_status` y `docs_write` pasan a ser un solo tool, `docs(action="status"|"write", …)`, con los mismos argumentos y las mismas salidas. Un argumento que no corresponde a la acción, o la falta de `suite` en `write`, responde `invalid_argument`. Sigue registrándose solo con una zona `docs` y no lleva `read_only_hint`, porque escribe. Rotura sin alias: actualiza el plugin `episteme-docs` (su skill ya llama a `docs`) y vuelve a correr `/episteme:setup`, que ya no pone `docs_status` en el `allow` (`docs` pide permiso). Un `docs_status` que quedara en el `allow` de un proyecto no hace nada: bórralo.
 - `revise` en una zona `docs` pide `docs(action="write")` (antes `docs_write`).

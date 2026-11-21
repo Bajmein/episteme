@@ -1,4 +1,4 @@
-"""Reading tools: search, read and links."""
+"""Reading tools: search and read (read also gives the links of a note)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ from pydantic import Field
 
 from episteme.engine import Engine
 from episteme.errors import invalid
-from episteme.tools.args import READ_ONLY, NoteArg, dump
+from episteme.filters import SearchFilters
+from episteme.tools.args import READ_ONLY, dump
 
 _QueryArg = Annotated[
     str | None,
@@ -72,6 +73,19 @@ _MatchArg = Annotated[
         "to look up several names or variants of a word in one call."
     ),
 ]
+_PriorityMinArg = Annotated[
+    int | None, Field(description="1-5: only notes with this priority or higher.")
+]
+_ValidArg = Annotated[
+    str | None,
+    Field(
+        description='"current": no valid_until or not past; "expired": valid_until before today.'
+    ),
+]
+_LinkedToArg = Annotated[
+    str | None,
+    Field(description="A note (path or name): only notes that link to it or that it links to."),
+]
 
 
 def _register_search(server: MCPServer, engine: Engine) -> None:
@@ -89,6 +103,9 @@ def _register_search(server: MCPServer, engine: Engine) -> None:
         zone: _ZoneArg = None,
         facets: _FacetsArg = False,
         match: _MatchArg = "all",
+        priority_min: _PriorityMinArg = None,
+        valid: _ValidArg = None,
+        linked_to: _LinkedToArg = None,
     ) -> str:
         """Full-text search over the vault (notes and memories), best matches first.
 
@@ -100,13 +117,15 @@ def _register_search(server: MCPServer, engine: Engine) -> None:
         "zone", "type", "status", "project", "created", "priority", "heading",
         "superseded_by"}], "total"}. `line` is the 1-based line of the first match; open it
         with read(path, lines=...). With no results, "hints" says which filter matches nothing.
+        priority_min, valid and linked_to also filter (they can replace the query).
         facets=true adds "facets": counts by zone, project, type, status and tags.
         """
+        filters = SearchFilters(
+            path, type, tags, project, status, zone, priority_min, valid, linked_to
+        )
         with engine.session():
             return dump(
-                engine.search(
-                    query, path, type, tags, project, status, limit, zone, facets, match
-                )
+                engine.search(query, filters, limit, facets, match)
             )
 
 
@@ -141,6 +160,40 @@ _NotesArg = Annotated[
         "note. heading and lines do not apply."
     ),
 ]
+_LinksArg = Annotated[
+    str | None,
+    Field(
+        description='"out", "in" or "both": also return "links" (outgoing links, backlinks '
+        "and, with depth > 1, reachable notes). Property links (supersedes, related, up...) "
+        'carry their key as kind; body links are "body"; unresolved ones have path null and '
+        "resolved false. Not with notes."
+    ),
+]
+_DepthArg = Annotated[
+    int,
+    Field(description="1-3, with links: above 1 also lists notes reachable via outgoing links."),
+]
+
+
+def _check_read_args(
+    note: str | None, notes: list[str] | None, links: str | None, depth: int
+) -> None:
+    """Reject the combinations of note, notes, links and depth that make no sense."""
+    _check_note_or_notes(note, notes)
+    if links is None:
+        if depth != 1:
+            raise invalid("depth needs links. Pass links (out, in or both) or drop depth.")
+    elif notes is not None:
+        raise invalid("links works with one note, not with notes. Use note.")
+
+
+def _check_note_or_notes(note: str | None, notes: list[str] | None) -> None:
+    if (note is None) == (notes is None):
+        raise invalid(
+            "pass note (one note) or notes (several), not both."
+            if note is not None
+            else "pass note (one note) or notes (several)."
+        )
 
 
 def _register_read(server: MCPServer, engine: Engine) -> None:
@@ -154,6 +207,8 @@ def _register_read(server: MCPServer, engine: Engine) -> None:
         outline: _OutlineArg = None,
         content: _ContentArg = True,
         notes: _NotesArg = None,
+        links: _LinksArg = None,
+        depth: _DepthArg = 1,
     ) -> str:
         """Read a note: frontmatter, outline and body (or one section / line range).
 
@@ -165,39 +220,23 @@ def _register_read(server: MCPServer, engine: Engine) -> None:
         With notes, returns JSON {"notes": [one object per note as above, without outline
         unless outline=true; a note that fails is {"note", "error"}], "pending": [notes left
         out once the output passes 50,000 characters; call read again with them]}.
+        With links ("out", "in" or "both", plus depth 1-3), adds "links": {"path", "outgoing",
+        "backlinks", "reachable" (depth > 1)}; with content=false that is frontmatter, outline
+        and links without the body.
         """
         with engine.session():
+            _check_read_args(note, notes, links, depth)
             if notes is not None:
-                if note is not None:
-                    raise invalid("pass note or notes, not both.")
                 return dump(engine.read_many(notes, heading, lines, outline, content))
-            if note is None:
-                raise invalid("pass note (one note) or notes (several).")
-            return dump(engine.read(note, heading, lines, outline, content))
-
-
-def _register_links(server: MCPServer, engine: Engine) -> None:
-    """Register the links tool."""
-
-    @server.tool(annotations=READ_ONLY, structured_output=False)
-    def links(
-        note: NoteArg,
-        direction: Annotated[str, Field(description='"out", "in" or "both".')] = "both",
-        depth: Annotated[
-            int, Field(description="1-3; above 1 also lists notes reachable via outgoing links.")
-        ] = 1,
-    ) -> str:
-        """Outgoing links, backlinks and (depth > 1) reachable notes of a note.
-
-        Property links (supersedes, related, up…) carry their key as kind; body links are
-        "body". Unresolved links have path null and resolved false.
-        """
-        with engine.session():
-            return dump(engine.links(note, direction, depth))
+            assert note is not None  # checked above  # nosec B101
+            found = engine.links(note, links, depth) if links is not None else None
+            result = engine.read(note, heading, lines, outline, content)
+            if found is not None:
+                result["links"] = found
+            return dump(result)
 
 
 def register(server: MCPServer, engine: Engine) -> None:
     """Register the reading tools on ``server``."""
     _register_search(server, engine)
     _register_read(server, engine)
-    _register_links(server, engine)

@@ -84,7 +84,7 @@ async def test_case8_supersede(vault: Path) -> None:
         old_fm = _fm(vault / "memory/fabrik/decisions/2026-10-02-serena-ty.md")
         assert old_fm["status"] == "superseded" and old_fm["priority"] == 5
         assert _fm(vault / new["path"])["supersedes"] == "[[2026-10-02-serena-ty]]"
-        links = await c.ok("links", note=new["path"], direction="out")
+        links = (await c.ok("read", note=new["path"], links="out"))["links"]
         old = "memory/fabrik/decisions/2026-10-02-serena-ty.md"
         assert ("supersedes", old) in [(o["kind"], o["path"]) for o in links["outgoing"]]
         # remember(supersedes=...) does the same in one call
