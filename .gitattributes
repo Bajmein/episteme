@@ -4,3 +4,5 @@
 uv.lock -diff linguist-generated=true
 tests/fixtures/** linguist-vendored=true
 static/diagrams/*.html linguist-documentation=true
+
+.github/workflows/*.lock.yml linguist-generated=true
