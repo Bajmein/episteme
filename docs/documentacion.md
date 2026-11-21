@@ -49,7 +49,7 @@ suite:
   manual: false                                      # opcional: true si se mantiene a mano
 ```
 
-Las cuatro primeras claves son obligatorias; `markdown` y `manual` son opcionales y no se admiten otras. `markdown` es una URL `http(s)` con `{path}` (el path de la `source`, con `/` inicial) o `{page}` (ese path sin `/` inicial ni `.html`, `.htm` o `.md`, e `index` si termina en `/`), sin otros `{…}`; `docs_check.py diff --markdown` pide cada página ahí en vez de a la `source`, que sigue siendo la URL pública. Por ejemplo, `https://docs.github.com/api/article/body?pathname={path}` o `https://raw.githubusercontent.com/jdx/mise/main/docs/{page}.md`. `manual: true` marca una suite que se mantiene a mano: `/episteme:docs` no la sincroniza ni espera `synced`. `docs_write(path="README.index.md", fields={"suite": {...}})` reemplaza el mapa entero: las opcionales que no se reenvían se pierden.
+Las cuatro primeras claves son obligatorias; `markdown` y `manual` son opcionales y no se admiten otras. `markdown` es una URL `http(s)` con `{path}` (el path de la `source`, con `/` inicial) o `{page}` (ese path sin `/` inicial ni `.html`, `.htm` o `.md`, e `index` si termina en `/`), sin otros `{…}`; `docs_check.py diff --markdown` pide cada página ahí en vez de a la `source`, que sigue siendo la URL pública. Por ejemplo, `https://docs.github.com/api/article/body?pathname={path}` o `https://raw.githubusercontent.com/jdx/mise/main/docs/{page}.md`. `manual: true` marca una suite que se mantiene a mano: `/episteme-docs:docs` no la sincroniza ni espera `synced`. `docs_write(path="README.index.md", fields={"suite": {...}})` reemplaza el mapa entero: las opcionales que no se reenvían se pierden.
 
 ## El hash del cuerpo
 
