@@ -1,4 +1,4 @@
-"""Memory: schema, templates, remember, revise, review, welcome and surface."""
+"""Memory: schema, templates, remember, revise, review, welcome, surface and constraints."""
 
 from __future__ import annotations
 

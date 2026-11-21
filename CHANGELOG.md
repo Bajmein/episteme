@@ -6,6 +6,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Añadido
 
+- Llamar a un tool quitado (`surface`, `constraints`, `links`, `docs_status`, `docs_write`) no ejecuta nada: sin `hook_event` da `not_found: tool "<nombre>" was removed. Use <reemplazo> instead, and re-run /episteme:setup …`, y con `hook_event` una respuesta sin error con el aviso como `additionalContext`. Las instrucciones del servidor recomiendan `description` y `link=true` al guardar y `read(note, links=…)` para seguir enlaces; el README, el plugin y los diagramas hablan de 9 tools (8 sin zona `docs`).
 - `remember(link=true)` escribe en `related` de la memoria nueva las mejores `link_candidates` (hasta 3) y las lista en `linked` de la respuesta. Las memorias viejas no se editan: sus enlaces de vuelta los calcula el índice. Sin `link`, nada cambia.
 - `review` suma `orphans_linkable` a `totals` (huérfanas con al menos una candidata de enlace) y la «mantención pendiente» de la bienvenida lo cuenta como «huérfanas enlazables».
 - `read(note, links="out"|"in"|"both", depth=1-3)` añade la clave `links` (enlaces salientes, backlinks y notas alcanzables); con `content=false` da frontmatter, esquema y enlaces sin cuerpo. Con `notes` da `invalid_argument`.

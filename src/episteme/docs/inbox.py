@@ -1,4 +1,4 @@
-"""The inbox: page bodies ``docs_check.py diff`` downloaded, which ``docs_write`` takes by hash."""
+"""The inbox: bodies ``docs_check.py diff`` downloaded, which ``docs(action="write")`` takes."""
 
 from __future__ import annotations
 

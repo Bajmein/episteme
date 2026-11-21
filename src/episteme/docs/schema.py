@@ -19,7 +19,7 @@ OPTIONAL_SUITE_KEYS = ("markdown", "manual")
 LOCAL_ORIGIN = "local"
 PLACEHOLDERS = ("{path}", "{page}")
 PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
-# The order of the keys of a note created by docs_write; the rest go after, as given.
+# The order of the keys of a note created by docs(action="write"); the rest go after, as given.
 KEY_ORDER = (
     "title",
     "description",

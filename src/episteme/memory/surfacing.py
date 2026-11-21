@@ -1,4 +1,4 @@
-"""Memories surfaced for a file: ``surface`` and ``constraints``."""
+"""Memories surfaced for a file: ``context`` modes ``surface`` and ``constraints``."""
 
 from __future__ import annotations
 

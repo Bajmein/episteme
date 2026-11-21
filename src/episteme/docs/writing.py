@@ -1,4 +1,4 @@
-"""``docs_write``: create or update one note of a docs suite with what the skill downloaded."""
+"""``docs(action="write")``: create or update one note of a docs suite from downloaded pages."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Target:
-    """The note docs_write works on: its path and what it holds now (None if it is new)."""
+    """The note docs(action="write") works on: its path and what it holds now (None if new)."""
 
     rel: str
     fm: dict[str, Any] | None
@@ -260,7 +260,7 @@ def docs_write(
 
 @dataclass(frozen=True)
 class Change:
-    """What docs_write would leave in the note: frontmatter, body and whether it differs."""
+    """What docs(action="write") would leave in the note: frontmatter, body, if it differs."""
 
     fm: dict[str, Any]
     body: str

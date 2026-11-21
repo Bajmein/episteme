@@ -1,4 +1,4 @@
-"""``docs_status``: the docs zones with their counts, and the page list a suite check needs."""
+"""``docs(action="status")``: the docs zones with their counts and the pages a suite check needs."""
 
 from __future__ import annotations
 
