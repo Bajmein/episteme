@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.21.0] - 2026-11-21
+
 ### Cambiado
 
 - **El script del extractor ya no necesita regla de permiso.** Un hook `PreToolUse` (`Bash`) del plugin (`plugin/hooks/digest-allow.py`) aprueba solo el comando exacto de `transcript_digest.py`, dentro del agente `episteme:extractor` y con la ruta de la versión instalada del plugin. Al actualizar el plugin ya no hay que volver a correr `/episteme:setup` por este permiso; basta reiniciar Claude Code. `/episteme:setup` ya no escribe la regla `Bash(uv run … transcript_digest.py *)` y quita las que quedaron de versiones anteriores.
@@ -431,7 +433,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.20.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/Bajmein/episteme/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Bajmein/episteme/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Bajmein/episteme/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Bajmein/episteme/compare/v0.17.0...v0.18.0
