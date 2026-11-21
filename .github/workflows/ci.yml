@@ -25,7 +25,7 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check
       - run: uv run ty check
-      - run: uv run bandit -c pyproject.toml -r src scripts plugin -q
+      - run: uv run bandit -c pyproject.toml -r src scripts plugin plugin-docs -q
       - run: uv run vulture
       - run: uv run deptry .
       - run: uv run zizmor .github/workflows

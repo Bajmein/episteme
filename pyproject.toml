@@ -90,7 +90,7 @@ exclude_dirs = ["tests", ".venv"]
 skips = ["B101"]  # assert is used to narrow types
 
 [tool.vulture]
-paths = ["src", "scripts", "tests", "plugin"]
+paths = ["src", "scripts", "tests", "plugin", "plugin-docs"]
 # sqlite3.Connection.row_factory is set, not read; anyio_backend and pytestmark are pytest hooks;
 # do_GET and log_message are http.server hooks (tests/test_docs_check.py); ignore_aliases is a
 # yaml.SafeDumper hook (markdown._FrontmatterDumper).

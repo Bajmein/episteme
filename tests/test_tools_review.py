@@ -14,18 +14,31 @@ README = "docs/claude-code/README.index.md"
 
 
 async def test_tool_list_is_complete(vault: Path) -> None:
-    from test_tools_read import TOOLS
+    from test_tools_read import DOCS_TOOLS, TOOLS
 
     async with mcp_client(vault) as c:
         tools = {t.name: t for t in (await c.session.list_tools()).tools}
-        assert set(tools) == TOOLS
+        assert set(tools) == TOOLS - DOCS_TOOLS
         read_only = {n for n, t in tools.items() if t.annotations and t.annotations.read_only_hint}
-        assert read_only == {
-            "search", "read", "links", "review", "surface", "constraints", "docs_status"
-        }  # fmt: skip
+        assert read_only == {"search", "read", "links", "review", "surface", "constraints"}
         assert all(t.description for t in tools.values())
         info = c.session.initialize_result
         assert info.instructions.startswith("episteme is the project memory")
+        assert "episteme-docs" not in info.instructions
+
+
+async def test_docs_zone_adds_docs_tools_and_instructions(vault: Path) -> None:
+    from test_tools_read import TOOLS
+
+    with (vault / "episteme.toml").open("a", encoding="utf-8") as fh:
+        fh.write('\n[zones."docs/mise"]\nmode = "docs"\n')
+    async with mcp_client(vault) as c:
+        tools = {t.name: t for t in (await c.session.list_tools()).tools}
+        assert set(tools) == TOOLS
+        assert tools["docs_status"].annotations.read_only_hint is True
+        text = c.session.initialize_result.instructions
+        assert "/episteme-docs:docs" in text
+        assert len(text) <= 2000
 
 
 async def test_case14_review_reports_invalid_frontmatter(vault: Path) -> None:

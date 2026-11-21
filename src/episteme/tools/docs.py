@@ -48,8 +48,8 @@ def _register_docs_status(server: MCPServer, engine: Engine) -> None:
         docs_check.py diff leaves the downloaded bodies that docs_write takes by body_ref.
         With suite returns that one object; pages=true adds "pages", one string with a
         line per note that has a source: <source>\\t<hash>\\t<path in the suite>\\t<status>.
-        The hash is what /episteme:docs compares with the downloaded page. Used by the
-        /episteme:docs skill; to update docs/, run that skill, never edit by hand.
+        The hash is what /episteme-docs:docs compares with the downloaded page. Used by the
+        /episteme-docs:docs skill; to update docs/, run that skill, never edit by hand.
         """
         with engine.session():
             return dump(docs.docs_status(engine, suite, pages))

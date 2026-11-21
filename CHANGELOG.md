@@ -12,6 +12,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Cambiado
 
+- `docs_status` y `docs_write` solo existen si `episteme.toml` declara al menos una zona `mode = "docs"` (cambiar las zonas pide reiniciar el servidor); sin ella, las instrucciones del servidor tampoco nombran la skill de documentación.
+- La skill de documentación pasa al plugin aparte `episteme-docs` (`plugin-docs/`, depende de `episteme`): ahora es `/episteme-docs:docs` y se instala con `claude plugin install episteme-docs@episteme`. Ya no carga en agy.
 - `docs_check.py diff` usa `--inbox <dir>` en vez de `--out`, guarda cada página como `<hash>.md` y devuelve `hash` (y `title` en las nuevas). `/episteme:docs` ya no pasa cuerpos de página por el modelo: sincroniza suites grandes (uv, mise, render) sin copiar cientos de KB en las llamadas.
 - Las entradas `new` de `docs_check.py diff` traen `excerpt`, el primer párrafo de la página: `/episteme:docs` saca de él el `type` y el `summary` sin leer el archivo de la bandeja.
 

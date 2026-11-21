@@ -1,13 +1,19 @@
 {
   "name": "episteme",
   "owner": { "name": "Bajmein" },
-  "description": "Marketplace de episteme: el plugin con sus skills.",
+  "description": "Marketplace de episteme: el plugin con sus skills y el de documentación.",
   "plugins": [
     {
       "name": "episteme",
       "source": "./plugin",
       "license": "MIT",
       "description": "Skills y agente de episteme: conectar un proyecto, guardar y retomar el estado de la sesión (con un extractor tras /compact o /clear), mantención de memorias, recordatorios, scaffolding (README, CLAUDE.md, CHANGELOG, .github y reglas) y delegar tareas a agy."
+    },
+    {
+      "name": "episteme-docs",
+      "source": "./plugin-docs",
+      "license": "MIT",
+      "description": "Poner al día las suites de documentación de terceros en docs/ del vault (/episteme-docs:docs). Requiere el plugin episteme."
     }
   ]
 }

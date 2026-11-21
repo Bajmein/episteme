@@ -2,7 +2,7 @@
 
 [← Volver al README](../README.md)
 
-Además de memorias, el vault guarda documentación de terceros (Claude Code, mise, uv…) en `docs/`, para que Claude la busque con `search` y la lea con `read` sin salir a la web. Cada conjunto de páginas de una misma fuente es una **suite**, y se mantiene al día bajo demanda con la skill `/episteme:docs`.
+Además de memorias, el vault guarda documentación de terceros (Claude Code, mise, uv…) en `docs/`, para que Claude la busque con `search` y la lea con `read` sin salir a la web. Cada conjunto de páginas de una misma fuente es una **suite**, y se mantiene al día bajo demanda con la skill `/episteme-docs:docs`.
 
 ## Qué es una suite
 
@@ -82,9 +82,9 @@ Se calcula al vuelo y no se guarda en el frontmatter: la primera revisión solo 
 - **Frontmatter roto**: si el de la nota no se puede leer, se reconstruye solo con `fields`, que entonces tiene que traer todas las claves obligatorias.
 - **Devuelve** `{"path", "created", "changed", "hash"}`. Con `changed: false` no se escribió nada. Cada nota escrita entra en el rastro de la sesión («De esta sesión» tras compactar), pero no cuenta como memoria guardada.
 
-## La skill `/episteme:docs`
+## La skill `/episteme-docs:docs`
 
-`/episteme:docs` revisa todas las suites; `/episteme:docs claude code` solo esa (el argumento se compara con el nombre de la suite, su `title` y sus `aliases`). La descarga la hace `plugin/skills/docs/scripts/docs_check.py`, en la máquina de la persona, con la biblioteca estándar de Python:
+`/episteme-docs:docs` revisa todas las suites; `/episteme-docs:docs claude code` solo esa (el argumento se compara con el nombre de la suite, su `title` y sus `aliases`). La descarga la hace `plugin-docs/skills/docs/scripts/docs_check.py`, en la máquina de la persona, con la biblioteca estándar de Python:
 
 | Comando | Qué hace |
 | --- | --- |
@@ -111,4 +111,4 @@ Una segunda corrida seguida tiene que dar 0 cambiadas.
 
 1. Crea la carpeta en el vault (por ejemplo `docs/render`) y declárala en `episteme.toml` con `mode = "docs"`. Reinicia Claude Code para que el servidor la lea.
 2. Crea el manifiesto con `docs_write(suite="render", path="README.index.md", fields={"title": "Render", "type": "index", "status": "stable", "lang": "es", "tags": ["render"], "suite": {"upstream": ["https://render.com/docs/llms.txt"], "include": ["https://render.com/docs/"], "context7": null, "synced": null}})`.
-3. Corre `/episteme:docs render`: con `synced: null`, todas las páginas del `llms.txt` salen como nuevas y la skill las crea.
+3. Corre `/episteme-docs:docs render`: con `synced: null`, todas las páginas del `llms.txt` salen como nuevas y la skill las crea.

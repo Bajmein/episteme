@@ -1,10 +1,10 @@
 ---
 name: docs
-description: Actualiza las suites de documentación de terceros en docs/ del vault de episteme (claude-code, mise, uv…) con docs_status, docs_write y un script que descarga las páginas. Úsala cuando pidan revisar «docs vencidas», «actualiza la documentación», poner al día una suite, o con /episteme:docs.
+description: Actualiza las suites de documentación de terceros en docs/ del vault de episteme (claude-code, mise, uv…) con docs_status, docs_write y un script que descarga las páginas. Úsala cuando pidan revisar «docs vencidas», «actualiza la documentación», poner al día una suite, o con /episteme-docs:docs.
 argument-hint: "[suite en lenguaje natural]"
 ---
 
-# /episteme:docs: poner al día las suites de documentación
+# /episteme-docs:docs: poner al día las suites de documentación
 
 Argumentos: $ARGUMENTS
 

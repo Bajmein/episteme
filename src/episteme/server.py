@@ -27,7 +27,9 @@ episteme is the project memory and documentation vault. Use only these tools; ne
 - Save without being asked, with remember, when: a decision is closed; a plan is agreed; the user corrects something you said; you learn a lesson or hit an error worth remembering; you had to get a fact from another source because the vault did not have it; or the user says "remember". Name the files, tools, commands and people involved in the body: that is what is searched later. Save project knowledge with remember, not in the agent's own memory (Claude Code's MEMORY.md, or rule files such as AGENTS.md or GEMINI.md).
 - When a memory is wrong or replaced, call revise (action="supersede" or "archive"), never remember a contradiction next to it.
 - Keep the session state current with session(action="save"), following its template: when a plan is agreed, a phase ends, the approach changes, before a risky step, and when the user asks. If a hook asks you to launch the episteme:extractor agent, launch it in the background.
-- Notes under read-only zones (docs/claude-code) cannot be changed. docs/ suites change only via /episteme:docs. Errors say what failed and what to do."""  # noqa: E501
+- Notes under read-only zones (docs/claude-code) cannot be changed. Errors say what failed and what to do."""  # noqa: E501
+
+DOCS_INSTRUCTIONS = "\n- docs/ suites change only via /episteme-docs:docs."
 
 
 def _validation_message(exc: ValidationError) -> str:
@@ -184,13 +186,16 @@ class EpistemeServer(MCPServer):
 def build_server(vault: Path, project: str | None = None) -> MCPServer:
     """Create the MCP server for ``vault``; raises StartupError on a bad episteme.toml."""
     engine = Engine(vault, project)
-    server = EpistemeServer("episteme", instructions=INSTRUCTIONS)
+    has_docs = bool(engine.vault.docs_zones)
+    instructions = INSTRUCTIONS + DOCS_INSTRUCTIONS if has_docs else INSTRUCTIONS
+    server = EpistemeServer("episteme", instructions=instructions)
     server.activity = Activity(engine.vault.root)
     store = maintenance.Store(engine.vault.root)
     reading.register(server, engine)
     memories.register(server, engine)
     hooks.register(server, engine, store)
-    docs.register(server, engine)
+    if has_docs:
+        docs.register(server, engine)
     session_tool.register(server, engine)
     plans.register(server, engine)
     return server

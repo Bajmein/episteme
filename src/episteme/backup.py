@@ -20,7 +20,7 @@ SEAL_LENGTH = 12
 STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 TMP_PREFIX = ".episteme-backup-"
 TMP_GLOB = f"{TMP_PREFIX}*.tmp"
-# Docs zones hold third-party pages that /episteme:docs can download again.
+# Docs zones hold third-party pages that /episteme-docs:docs can download again.
 SKIPPED_MODES = (READ_ONLY, DOCS)
 
 

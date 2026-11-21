@@ -10,7 +10,8 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
-      - "plugin/**"   # sus scripts (transcript_digest, docs_check, doc-review) tienen tests
+      - "plugin/**"   # sus scripts (transcript_digest, doc-review) tienen tests
+      - "plugin-docs/**"   # docs_check tiene tests
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"

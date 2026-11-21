@@ -13,6 +13,7 @@ import yaml
 ROOT = Path(__file__).parents[1]
 PLUGIN = ROOT / "plugin"
 SKILLS = PLUGIN / "skills"
+DOCS_PLUGIN = ROOT / "plugin-docs"
 
 
 def _json(path: Path) -> dict:
@@ -36,10 +37,21 @@ def test_plugin_version_matches_package() -> None:
 def test_marketplace_points_to_plugin_dir_without_version() -> None:
     marketplace = _json(ROOT / ".claude-plugin" / "marketplace.json")
     assert marketplace["name"] == "episteme"
-    [entry] = marketplace["plugins"]
-    assert entry["name"] == "episteme"
-    assert entry["source"] == "./plugin"
-    assert "version" not in entry
+    entries = {e["name"]: e for e in marketplace["plugins"]}
+    assert set(entries) == {"episteme", "episteme-docs"}
+    assert entries["episteme"]["source"] == "./plugin"
+    assert entries["episteme-docs"]["source"] == "./plugin-docs"
+    assert all("version" not in e for e in entries.values())
+
+
+def test_docs_plugin_depends_on_episteme_and_matches_package_version() -> None:
+    manifest = _json(DOCS_PLUGIN / ".claude-plugin" / "plugin.json")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert manifest["name"] == "episteme-docs"
+    assert manifest["version"] == pyproject["project"]["version"]
+    assert manifest["dependencies"] == ["episteme"]
+    meta = _frontmatter(DOCS_PLUGIN / "skills" / "docs" / "SKILL.md")
+    assert meta["name"] == "docs"
 
 
 def test_antigravity_manifest_is_valid_and_matches_package_version() -> None:
@@ -70,7 +82,7 @@ def test_shared_skills_load_tools_with_toolsearch_only_in_claude_code(skill: str
     assert all("En Claude Code" in line for line in toolsearch)
 
 
-SKILL_NAMES = ["setup", "sesion", "mantencion", "reminder", "scaffold", "docs", "agy"]
+SKILL_NAMES = ["setup", "sesion", "mantencion", "reminder", "scaffold", "agy"]
 
 
 def test_skill_folders() -> None:
@@ -94,7 +106,7 @@ def test_setup_settings_has_hooks() -> None:
 def test_docs_check_body_hash_matches_episteme() -> None:
     from episteme.docs import body_hash
 
-    script = runpy.run_path(str(SKILLS / "docs" / "scripts" / "docs_check.py"))
+    script = runpy.run_path(str(DOCS_PLUGIN / "skills" / "docs" / "scripts" / "docs_check.py"))
 
     for text in ("# A\r\n\r\nb\r\n", "\n\n# A\n", "> ## Documentation Index\n"):
         assert script["body_hash"](text) == body_hash(text)
