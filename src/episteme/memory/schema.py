@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import re
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from episteme.errors import INVALID_SCHEMA, EpistemeError, invalid
+from episteme.errors import INVALID_SCHEMA, NOT_FOUND, EpistemeError, invalid
 from episteme.index import NOTE_MAX_BYTES, STOPWORDS_ES, as_date
 from episteme.markdown import (
     dump_frontmatter,
@@ -325,14 +326,23 @@ def wikilink(engine: Engine, rel: str) -> str:
     return f"[[{target}]]"
 
 
+class StaleNote(Exception):  # noqa: N818 - internal signal, never reaches a tool
+    """The note changed on disk after ``NoteFile`` read it."""
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 class NoteFile:
     """A note split into raw frontmatter and body, so a body edit keeps the YAML byte-exact."""
 
     def __init__(self, engine: Engine, rel: str) -> None:
         self.engine = engine
         self.rel = rel
-        text = engine.vault.resolve(rel).read_text(encoding="utf-8")
-        text = text.replace("\r\n", "\n")
+        raw_text = engine.vault.resolve(rel).read_text(encoding="utf-8")
+        self.digest = _digest(raw_text)
+        text = raw_text.replace("\r\n", "\n")
         lines = text.split("\n")
         raw, fm_end = split_frontmatter(lines)
         self.fm_end = fm_end
@@ -366,6 +376,17 @@ class NoteFile:
             head = self.head
         return head + self.body
 
+    def ensure_fresh(self) -> None:
+        """Raise ``StaleNote`` if the file no longer has the text this object read."""
+        try:
+            current = self.engine.vault.resolve(self.rel).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise EpistemeError(
+                NOT_FOUND, f"{self.rel} was moved or deleted while revising it. Search again."
+            ) from None
+        if _digest(current) != self.digest:
+            raise StaleNote(self.rel)
+
     def save(self) -> None:
         if self.engine.vault.mode_for(self.rel) == MEMORY:
             validate(self.fm)
@@ -376,6 +397,7 @@ class NoteFile:
                 f"{self.rel} would be {size} bytes, the limit is 2 MB. "
                 "Shorten it or split it into several memories."
             )
+        self.ensure_fresh()  # last check before writing, so a concurrent write is not lost
         self.engine.vault.write_atomic(self.rel, text)
         self.engine.index.reindex(self.rel)
 
