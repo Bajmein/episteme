@@ -19,7 +19,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Cambiado
 
 - El README presenta episteme como una sola memoria para todos los agentes y plantea el límite de búsqueda como «palabras clave curadas, no embeddings», con enlace a la medición.
-- **`review` ya no marca como vieja una memoria que se usa.** `stale` exigía más de 90 días y `helpful` en 0, y `helpful` casi nunca sube. Ahora además la memoria no debe haberse leído (`read`) ni entregado como contexto (`context`) en los últimos 90 días, según `.index/activity.db`. Un `search` no cuenta. Sin registro de actividad, rige el criterio anterior.
+- **`review` ya no marca como vieja una memoria que se usa.** `stale` exigía más de 90 días y `helpful` en 0, y `helpful` casi nunca sube. Ahora además la memoria no debe haberse leído (`read`) ni entregado como contexto (`context`) en los últimos 90 días, según `.index/activity.db`. Un `search` no cuenta, y un `read` cuenta solo las notas que abrió: ni las vecinas de `links` ni los enlaces de su cuerpo. Sin registro de actividad, rige el criterio anterior.
 - El autor firma como Kenno en `LICENSE`, `pyproject.toml`, el `README.md` y los manifiestos de los plugins y del marketplace; el `README.md` enlaza además a la página del proyecto en benjamincriado.dev.
 
 ## [0.21.0] - 2026-11-21

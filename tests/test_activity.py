@@ -75,6 +75,23 @@ def test_extract_paths_json_and_text() -> None:
     assert len(extract_paths(" ".join(f"(n{i}.md)" for i in range(50)))) == 30
 
 
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        ({"path": "a.md", "content": "[x](b.md)", "links": {"outgoing": [{"path": "c.md"}]}},
+         ["a.md"]),
+        ({"notes": [{"path": "a.md"}, {"note": "z", "error": "not_found"}, {"path": "d.md"}]},
+         ["a.md", "d.md"]),
+        ([{"path": "a.md"}], []),
+    ],
+)
+def test_call_paths_for_read_keeps_only_the_notes_read(result: object, expected: list[str]) -> None:
+    from episteme.activity import call_paths
+
+    assert call_paths("read", json.dumps(result)) == expected
+    assert call_paths("read", "not json") == []
+
+
 def test_never_raises(tmp_path: Path) -> None:
     blocker = tmp_path / "file"
     blocker.write_text("x")

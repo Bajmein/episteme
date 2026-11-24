@@ -268,6 +268,38 @@ async def test_stale_drops_a_memory_after_it_is_read(vault: Path) -> None:
     assert rel not in _stale_paths(after)
 
 
+def _write_neighbour(vault: Path) -> str:
+    rel = "memory/fabrik/insights/2026-11-01-vecina.md"
+    (vault / rel).write_text(
+        "---\ntype: insight\nproject: fabrik\npriority: 3\nstatus: active\n"
+        "created: 2026-11-01\n---\n# Vecina\n\n"
+        "[[2026-01-01-vieja]] y [vieja](2026-01-01-vieja.md)\n"
+    )
+    return rel
+
+
+async def test_stale_keeps_a_memory_that_is_only_a_linked_neighbour(vault: Path) -> None:
+    rel = _write_old_memory(vault)
+    neighbour = _write_neighbour(vault)
+    async with mcp_client(vault) as c:
+        await c.ok("read", note=neighbour, links="both", depth=2)
+
+        res = await c.ok("review", project="fabrik")
+
+    assert rel in _stale_paths(res)
+
+
+async def test_stale_drops_a_memory_read_with_its_links(vault: Path) -> None:
+    rel = _write_old_memory(vault)
+    _write_neighbour(vault)
+    async with mcp_client(vault) as c:
+        await c.ok("read", note=rel, links="in")
+
+        res = await c.ok("review", project="fabrik")
+
+    assert rel not in _stale_paths(res)
+
+
 async def test_stale_keeps_a_memory_that_only_search_names(vault: Path) -> None:
     rel = _write_old_memory(vault)
     async with mcp_client(vault) as c:
