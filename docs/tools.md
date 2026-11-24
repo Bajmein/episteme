@@ -47,6 +47,7 @@ supersedes: "[[2026-09-12-serena-pyright]]"
 related: ["[[...]]"]
 contradicts: []
 source: <sha o PR>
+agent: claude-code      # lo pone el servidor con el nombre del cliente MCP (≤ 64 caracteres); no se puede cambiar con revise
 helpful: 0
 due:                    # obligatorio en reminder
 flagged: false

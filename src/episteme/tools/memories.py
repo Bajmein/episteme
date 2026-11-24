@@ -9,7 +9,7 @@ from pydantic import Field
 
 from episteme import memory
 from episteme.engine import Engine
-from episteme.tools.args import READ_ONLY, NoteArg, dump
+from episteme.tools.args import CLIENT, READ_ONLY, NoteArg, dump
 
 _TypeArg = Annotated[
     str,
@@ -130,6 +130,9 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
         nothing already in the path, at most 40 characters) unless you pass slug; the full title
         stays in the H1. A name that already exists gets -2, -3...
 
+        The server also records the MCP client name as the memory's `agent` field; it cannot
+        be passed or changed.
+
         Validates the schema and looks for near-duplicates of the same project and type: at
         similarity >= 0.8 nothing is created (created: false) and the answer carries a "hint":
         revise(action="feedback", value="helpful") if it happened again, remember again with
@@ -171,6 +174,7 @@ def _register_remember(server: MCPServer, engine: Engine) -> None:
                     keywords=keywords,
                     link=link,
                     description=description,
+                    agent=CLIENT.get(),
                 )
             )
 

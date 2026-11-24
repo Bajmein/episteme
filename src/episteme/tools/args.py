@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
 from typing import Annotated, Any
 
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
 READ_ONLY = ToolAnnotations(read_only_hint=True)
+
+# MCP client name of the call being served; ``EpistemeServer.call_tool`` sets it.
+CLIENT: ContextVar[str | None] = ContextVar("episteme_client", default=None)
 
 NoteArg = Annotated[
     str,

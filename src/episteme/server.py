@@ -19,6 +19,7 @@ from episteme.engine import Engine
 from episteme.errors import INVALID_ARGUMENT, EpistemeError
 from episteme.tools import docs, hooks, memories, plans, reading
 from episteme.tools import session as session_tool
+from episteme.tools.args import CLIENT
 
 INSTRUCTIONS = """\
 episteme is the project memory and documentation vault. Use only these tools; never read or edit the vault with Bash, Read, Edit or Write.
@@ -214,7 +215,11 @@ class EpistemeServer(MCPServer):
             self._log(name, arguments, text, start, ok, caller)
             return removed
         try:
-            result = await super().call_tool(name, arguments, context)
+            token = CLIENT.set(caller[0])
+            try:
+                result = await super().call_tool(name, arguments, context)
+            finally:
+                CLIENT.reset(token)
         except ToolError as exc:
             text = _error_text(exc)
             if text is None:
