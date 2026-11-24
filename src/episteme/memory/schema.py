@@ -50,6 +50,7 @@ KEY_ORDER = (
     "related",
     "contradicts",
     "source",
+    "agent",
     "helpful",
     "due",
     "flagged",
@@ -58,6 +59,7 @@ OMIT_WHEN_EMPTY = {
     "valid_until",
     "due",
     "source",
+    "agent",
     "supersedes",
     "related",
     "contradicts",
@@ -71,6 +73,7 @@ SHARED = "_shared"
 KEYWORD_CHARS = 60
 KEYWORDS_MAX = 12
 DESCRIPTION_MAX = 160
+AGENT_MAX = 64
 SIMILAR = 0.5
 MIN_CONTEXT_SCORE = 0.25  # task context: memories and notes below this are left out
 ACTIONS = ("edit", "append", "set", "supersede", "feedback", "archive", "dismiss")
@@ -233,6 +236,14 @@ def _check_tags(fm: dict[str, Any]) -> None:
             )
 
 
+def _check_agent(fm: dict[str, Any]) -> None:
+    agent = fm.get("agent")
+    if agent is None:
+        return
+    if not isinstance(agent, str) or "\n" in agent or len(agent) > AGENT_MAX:
+        raise schema_error(f"agent must be a one-line string of at most {AGENT_MAX} characters.")
+
+
 def _check_helpful(fm: dict[str, Any]) -> None:
     helpful = fm.get("helpful")
     if helpful is not None and not _is_plain_int(helpful, 0):
@@ -257,6 +268,7 @@ _CHECKS = (
     _check_keywords,
     _check_description,
     _check_tags,
+    _check_agent,
     _check_helpful,
     _check_flagged,
 )

@@ -19,6 +19,7 @@ from episteme.markdown import (
 from episteme.memory.files import _as_list, _files_of
 from episteme.memory.revising import _reject_tool_zone
 from episteme.memory.schema import (
+    AGENT_MAX,
     DUPLICATE,
     FOLDERS,
     SHARED,
@@ -487,6 +488,7 @@ def remember(
     keywords: list[str] | None = None,
     link: bool = False,
     description: str | None = None,
+    agent: str | None = None,
 ) -> dict[str, Any]:
     """Create a memory. ``created``, ``helpful`` and ``dry_run`` are for the OMEGA migration.
 
@@ -521,6 +523,7 @@ def remember(
         "files": files,
         "description": description,
         "source": source,
+        "agent": " ".join((agent or "").split())[:AGENT_MAX].strip() or None,
         "helpful": helpful,
         "due": due,
     }

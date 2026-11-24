@@ -87,6 +87,8 @@ def _set(
     if not fields:
         raise invalid('set needs fields, e.g. {"priority": 5}.')
     _reject_field_secrets(fields)
+    if "agent" in fields:
+        raise invalid("agent is set by the server from the MCP client. Leave it out.")
     if "files" in fields:
         check_files(fields["files"])
     changed = nf.set_fields({k: _coerce(k, v) for k, v in fields.items()})
