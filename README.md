@@ -20,13 +20,18 @@
 
 # episteme
 
-**Documentación y memoria de proyectos para agentes, servida por MCP desde un vault Markdown**
+**Una sola memoria de proyecto, curada, para todos tus agentes.**
 
 </div>
 
 <p align="center">
+  <b>Español</b> · <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <a href="#qué-es">Qué es</a> ·
   <a href="#cómo-funciona">Cómo funciona</a> ·
+  <a href="#con-qué-agentes-funciona">Agentes</a> ·
   <a href="#instalación">Instalación</a> ·
   <a href="#uso-diario">Uso diario</a> ·
   <a href="#las-9-herramientas">Herramientas</a> ·
@@ -38,7 +43,7 @@
 
 ## Qué es
 
-Claude Code es como un colega brillante que cada mañana llega sin recordar nada de ayer: empieza cada sesión sin saber qué pasó en la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que Claude consulta y completa mientras trabaja.
+Claude Code y agy (Google Antigravity, con Gemini) comparten las mismas memorias con episteme. Un agente de IA es como un colega brillante que cada mañana llega sin recordar nada de ayer: empieza cada sesión sin saber qué pasó en la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que tus agentes consultan y completan mientras trabajan. Lo que uno aprende, lo encuentra el otro.
 
 | | Qué hace por ti |
 | :-- | :-- |
@@ -52,6 +57,8 @@ Claude Code es como un colega brillante que cada mañana llega sin recordar nada
 
 Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
 
+**Tu información no sale de tu máquina.** Las memorias, el índice y el registro viven en tu equipo y el servidor no se conecta a la red. La única red es la instalación (se descarga desde GitHub) y `/episteme-docs:docs`, si la usas.
+
 > [!NOTE]
 > **Versión actual: v0.21.0.** Funciona en Linux, macOS y Windows. Las novedades de cada versión están en el [CHANGELOG](CHANGELOG.md).
 
@@ -61,7 +68,7 @@ Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.
   <img src="static/diagrams/arquitectura.png" alt="Claude Code (el agente y sus hooks) y, si lo activas, agy llaman al servidor episteme, que lee y escribe las notas Markdown del vault (memorias, documentación, sesiones y planes) y mantiene un índice de búsqueda; Obsidian puede abrir el mismo vault" width="880">
 </p>
 
-1. **Claude Code** habla con episteme de dos formas: el agente usa sus herramientas cuando las necesita, y los *hooks* las llaman solos en momentos fijos de la sesión. **agy** (Google Antigravity CLI) es opcional: usa las mismas herramientas, pero sin hooks.
+1. **Claude Code** habla con episteme de dos formas: el agente usa sus herramientas cuando las necesita, y los *hooks* las llaman solos en momentos fijos de la sesión. **agy** (Google Antigravity CLI) usa las mismas herramientas y las mismas memorias, pero sin hooks.
 2. **episteme** es un programa pequeño que corre en tu máquina. Es la única puerta al vault: valida lo que se guarda y mantiene un índice para buscar rápido.
 3. **El vault** es una carpeta de notas Markdown, por defecto `~/.episteme`. Tú puedes leerlo y editarlo con Obsidian.
 
@@ -78,6 +85,22 @@ Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.
 
 </details>
 
+## Con qué agentes funciona
+
+Las herramientas funcionan con cualquier cliente MCP. Los automatismos (los hooks) son de Claude Code.
+
+| | Claude Code | agy | Otro cliente MCP |
+| :-- | :-: | :-: | :-: |
+| Herramientas (buscar, leer, guardar) | Sí | Sí | Sí |
+| Bienvenida al empezar la sesión | Sí | No | No |
+| Sugerencias de memorias con cada mensaje | Sí | No | No |
+| Normas antes de editar un archivo | Sí | No | No |
+| Avisos después de leer o editar un archivo | Sí | No | No |
+| Continuidad tras `/compact` y `/clear` | Sí | No | No |
+| Copia de los planes | Sí | No | No |
+
+En agy y en otros clientes, el agente usa las herramientas cuando se lo pides o cuando una regla se lo indica. No se prometen otros agentes, como Codex o Copilot.
+
 ## Instalación
 
 **Necesitas** [uv](https://docs.astral.sh/uv/) y git. uv consigue Python por ti si falta.
@@ -91,7 +114,7 @@ claude plugin marketplace add Bajmein/episteme
 claude plugin install episteme@episteme
 ```
 
-Más detalles (actualizar, quitar) en la [guía de instalación](docs/instalacion.md#el-plugin).
+Más detalles (actualizar, quitar) en la [guía de instalación](docs/instalacion.md#los-plugins).
 
 Después, en cada proyecto que quieras conectar:
 
@@ -110,7 +133,7 @@ El plugin trae además estas skills:
 | `/episteme-docs:docs [suite]` | Poner al día la documentación de terceros guardada en `docs/` del vault (todas las suites, o solo la que nombres, como `claude code`): baja las páginas, muestra qué cambió y lo guarda. Viene en un plugin aparte, opcional: `claude plugin install episteme-docs@episteme` |
 | `/episteme:agy [tarea]` | Activar agy (Google Antigravity CLI) en el proyecto y pasarle tareas. Claude revisa lo que agy propone recordar |
 
-El plugin también funciona con agy, sin los automatismos: ni hooks ni bienvenida automática (ver «agy (opcional)» en [Instalación](docs/instalacion.md)).
+El plugin también funciona con agy, sin los automatismos: ni hooks ni bienvenida automática (ver «agy» en [Instalación](docs/instalacion.md#agy-opcional)).
 
 ### Opción B · A mano
 
@@ -211,7 +234,7 @@ Cada memoria lleva una prioridad del 1 al 5: las de prioridad 5 son las normas q
 
 ## Límites
 
-- **Busca por palabras, no por significado.** «marketing» no encuentra una nota que solo dice «mkt». Por eso cada memoria lleva `keywords` con sinónimos y siglas, que Claude añade al guardar.
+- **Búsqueda por palabras clave curadas, no por embeddings.** «marketing» no encuentra una nota que solo dice «mkt»: por eso cada memoria lleva `keywords` con sinónimos y siglas, que Claude añade al guardar. Se probó un modelo de embeddings (bge-m3) con 147 consultas reales y solo 3 encontraron algo nuevo; la medición está en [Desarrollo](docs/desarrollo.md#medir-si-los-embeddings-aportan).
 - **Avisa, no obliga.** Las normas llegan a Claude a tiempo, pero nada le impide ignorarlas.
 - **No se ordena solo.** Unificar memorias repetidas y resolver contradicciones lo apruebas tú, con `/episteme:mantencion`. Conviene activar `archive_expired = true` (ver [Mantención](docs/mantencion.md)).
 - **El filtro de contraseñas conoce los formatos habituales.** Una clave con un formato raro puede pasar: no dictes secretos.
