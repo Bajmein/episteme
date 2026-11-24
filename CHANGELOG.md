@@ -9,6 +9,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `README.en.md`: traducción al inglés del README, con selector de idioma en ambos.
 - El README explica con qué agentes funciona (tabla de Claude Code, agy y otros clientes MCP) y dice que el servidor no se conecta a la red.
 - `docs/desarrollo.md` publica el resultado de la medición de embeddings del 15-11-2026 (bge-m3, 147 consultas reales: solo 3 ganan un vecino nuevo claro) y por qué no se construye el módulo.
+- `scripts/bench_calls.py ab` mide también los tokens de cada corrida (entrada total, de caché y salida) y compara la mediana de tokens de entrada entre variantes.
 
 ### Cambiado
 

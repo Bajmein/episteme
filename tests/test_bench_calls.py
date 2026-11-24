@@ -6,6 +6,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 from episteme.activity import Activity
 
 SCRIPT = Path(__file__).parents[1] / "scripts/bench_calls.py"
@@ -128,3 +130,76 @@ def test_no_log_or_no_burst_exits_1(tmp_path: Path, capsys) -> None:
     assert m.main(["replay", "--vault", str(root)]) == 1
     assert m.main(["replay", "--vault", str(tmp_path / "nope")]) == 1
     assert "no burst" in capsys.readouterr().err
+
+
+ANSWER = {
+    "num_turns": 3,
+    "total_cost_usd": 0.5,
+    "result": "hola",
+    "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 200,
+        "cache_read_input_tokens": 790,
+        "output_tokens": 55,
+    },
+}
+
+
+def _run_fake(m, tmp_path: Path, answer: dict) -> list[dict]:
+    fake = tmp_path / "claude"
+    fake.write_text(
+        f"#!{sys.executable}\nimport json\nprint(json.dumps({answer!r}))\n",
+        encoding="utf-8",
+        newline="",
+    )
+    fake.chmod(0o755)
+    options = m.AbOptions(runs=1, claude_bin=str(fake), baseline_cmd="true")
+    return m.run_ab(_vault(tmp_path), "p", "pregunta", tmp_path / "out", options)
+
+
+def test_usage_tokens_sum_the_window_and_keep_cache_and_output() -> None:
+    m = _script()
+
+    tokens = m._usage_tokens(ANSWER)
+
+    assert tokens == {"tokens_in": 1000, "tokens_cached": 790, "tokens_out": 55}
+
+
+def test_usage_tokens_are_none_when_usage_is_missing() -> None:
+    m = _script()
+
+    assert m._usage_tokens({}) == {"tokens_in": None, "tokens_cached": None, "tokens_out": None}
+    partial = m._usage_tokens({"usage": {"output_tokens": 7}})
+    assert partial == {"tokens_in": None, "tokens_cached": None, "tokens_out": 7}
+    no_creation = m._usage_tokens({"usage": {"input_tokens": 1, "cache_read_input_tokens": 5}})
+    assert no_creation["tokens_in"] is None
+    assert no_creation["tokens_cached"] == 5
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake claude is a shebang script")
+def test_run_ab_with_a_fake_claude_reports_tokens(tmp_path: Path) -> None:
+    m = _script()
+
+    results = _run_fake(m, tmp_path, ANSWER)
+    report = m.render_ab(results, tmp_path / "out")
+
+    assert [r["tokens_in"] for r in results] == [1000, 1000]
+    assert "Tokens entrada" in report
+    assert "| 1000 | 790 | 55 |" in report
+    assert "Mediana de tokens de entrada por corrida: 1000 en base y 1000 en new (+0%)." in report
+
+
+def test_render_ab_shows_dashes_and_the_token_change() -> None:
+    m = _script()
+
+    def run(variant: str, tokens_in: int | None) -> dict:
+        return {
+            "variant": variant, "n": 1, "note": "", "total": 4, "calls": {}, "search_any": 0,
+            "read_batch": 0, "chars": 9, "turns": 2, "cost": 0.1, "tokens_in": tokens_in,
+            "tokens_cached": None, "tokens_out": None,
+        }  # fmt: skip
+
+    report = m.render_ab([run("base", 1000), run("new", 500), run("new", None)], Path("x"))
+
+    assert "| – | – | – |" in report
+    assert "1000 en base y 500 en new (-50%)." in report
