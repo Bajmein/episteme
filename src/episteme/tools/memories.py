@@ -267,10 +267,12 @@ def _register_review(server: MCPServer, engine: Engine) -> None:
         them here; in practice broken links and invalid frontmatter, since memories live in
         memory zones) are not mixed in: they go under "read_only", with the same categories
         and their own "totals".
-        "stale" lists active memories older than 90 days (from created) never marked helpful,
-        except preferences and constraints. "flagged" lists memories marked outdated with
-        revise(action="feedback", value="outdated"); once fixed, clear the mark with
-        revise(action="set", fields={"flagged": null}) or they keep showing up.
+        "stale" lists active memories older than 90 days (from created) never marked helpful
+        and not read or delivered as context in the last 90 days (from the activity log; search
+        hits and writes do not count), except preferences and constraints. "flagged" lists
+        memories marked outdated with revise(action="feedback", value="outdated"); once fixed,
+        clear the mark with revise(action="set", fields={"flagged": null}) or they keep
+        showing up.
         """
         with engine.session():
             return dump(memory.review(engine, path, project, limit, zone))

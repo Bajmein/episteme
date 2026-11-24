@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from episteme.errors import EpistemeError, invalid
@@ -13,7 +15,7 @@ from episteme.markdown import (
 from episteme.memory.schema import NoteFile, dedup_tokens, similarity, validate
 from episteme.memory.scoring import days_since
 from episteme.memory.writing import shared_reason
-from episteme.vault import MEMORY, READ_ONLY, TOOL_MODES, today
+from episteme.vault import INDEX_DIR, MEMORY, READ_ONLY, TOOL_MODES, today
 
 if TYPE_CHECKING:
     from datetime import date
@@ -143,11 +145,20 @@ def _is_stale(r: Any, days: int) -> bool:
     )
 
 
-def _find_stale(active: list[Any], now: date) -> list[dict[str, Any]]:
+def _recently_used(engine: Engine) -> set[str]:
+    """Paths read or delivered as context in the last ``STALE_DAYS`` days (activity log)."""
+    # Deferred: episteme.activity imports episteme.memory.secrets, so a top-level import cycles.
+    from episteme.activity import used_paths
+
+    since = datetime.now(UTC) - timedelta(days=STALE_DAYS)
+    return used_paths(Path(engine.vault.root) / INDEX_DIR / "activity.db", since)
+
+
+def _find_stale(active: list[Any], now: date, used: set[str]) -> list[dict[str, Any]]:
     stale = []
     for r in active:
         days = days_since(r["created"], now)
-        if _is_stale(r, days):
+        if _is_stale(r, days) and r["path"] not in used:
             stale.append({"path": r["path"], "title": r["title"], "days": days})
     return stale
 
@@ -344,7 +355,7 @@ def _collect_findings(engine: Engine, scope: _Scope, mems: list[Any]) -> dict[st
         for r in active
     }
     return {
-        "stale": _find_stale(active, now),
+        "stale": _find_stale(active, now, _recently_used(engine)),
         "expired": _find_expired(active, now.isoformat()),
         "contradictions": _find_contradictions(engine, active, props, toks),
         "similar": _similar_groups([r for r in active if r["type"] not in NOT_SIMILAR_TYPES], toks),

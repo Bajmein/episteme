@@ -92,6 +92,33 @@ def extract_paths(text: str) -> list[str]:
     return list(dict.fromkeys(found))[:MAX_PATHS]
 
 
+def used_paths(db_path: Path, since: datetime) -> set[str]:
+    """Paths delivered by ``read`` or ``context`` since ``since``; empty if the log is unreadable.
+
+    Opens the log read-only, so it never creates the database.
+    """
+    if not db_path.is_file():
+        return set()
+    cutoff = since.astimezone(UTC).isoformat(timespec="seconds")
+    try:
+        conn = sqlite3.connect(
+            f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=CONNECT_TIMEOUT_S
+        )
+        try:
+            rows = conn.execute(
+                "select paths from calls where tool in ('read', 'context') and at >= ?",
+                (cutoff,),
+            ).fetchall()
+        finally:
+            conn.close()
+        found: set[str] = set()
+        for (raw,) in rows:
+            found.update(p for p in json.loads(raw or "[]") if isinstance(p, str))
+    except (sqlite3.Error, ValueError, OSError):
+        return set()
+    return found
+
+
 def _text(value: Any) -> str | None:
     """A non-empty string argument, redacted when it looks like a credential."""
     if not isinstance(value, str) or not value:
