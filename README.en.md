@@ -2,7 +2,7 @@
 
 ![episteme: Agentic Memory & Knowledge Vault. Persistent Knowledge Engine for AI Workflows.](static/banner-episteme.jpg)
 
-<a href="https://github.com/Bajmein/episteme/tags"><img alt="Version" src="https://img.shields.io/badge/version-v0.21.0-8B5CF6?style=for-the-badge"></a>
+<a href="https://github.com/Bajmein/episteme/tags"><img alt="Version" src="https://img.shields.io/badge/version-v0.22.0-8B5CF6?style=for-the-badge"></a>
 <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/python-3.14+-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54"></a>
 <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/uv-DE5FE9?style=for-the-badge&logo=uv&logoColor=white"></a>
 <a href="https://github.com/modelcontextprotocol/python-sdk"><img alt="MCP SDK" src="https://img.shields.io/badge/MCP_SDK-2.x-005571?style=for-the-badge&logo=modelcontextprotocol&logoColor=white"></a>
@@ -63,7 +63,7 @@ The notes are your own text files: open them with [Obsidian](https://obsidian.md
 **Your information stays on your machine.** The memories, the index and the activity log live on your computer, and the server does not connect to the network. The only network use is the installation (downloaded from GitHub) and `/episteme-docs:docs`, if you use it.
 
 > [!NOTE]
-> **Current version: v0.21.0.** Works on Linux, macOS and Windows. What is new in each version is in the [CHANGELOG](CHANGELOG.md) (in Spanish).
+> **Current version: v0.22.0.** Works on Linux, macOS and Windows. What is new in each version is in the [CHANGELOG](CHANGELOG.md) (in Spanish).
 
 ## How it works
 
@@ -146,13 +146,13 @@ A single command registers the server. Replace `<project>` with your project's n
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+https://github.com/Bajmein/episteme@v0.21.0 episteme --project <project>
+  uvx --from git+https://github.com/Bajmein/episteme@v0.22.0 episteme --project <project>
 ```
 
 **Windows** (PowerShell, on a single line)
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.21.0 episteme --project <project>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.22.0 episteme --project <project>
 ```
 
 The hooks, the permissions and the `CLAUDE.md` rule are still missing: the steps are in the [installation guide](docs/instalacion.md#después-de-registrar) (in Spanish).

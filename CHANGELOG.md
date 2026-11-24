@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.22.0] - 2026-11-24
+
 ### Añadido
 
 - `README.en.md`: traducción al inglés del README, con selector de idioma en ambos.
@@ -12,15 +14,15 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 - `docs/desarrollo.md` publica el resultado de la medición de embeddings del 15-11-2026 (bge-m3, 147 consultas reales: solo 3 ganan un vecino nuevo claro) y por qué no se construye el módulo.
 - `scripts/bench_calls.py ab` mide también los tokens de cada corrida (entrada total, de caché y salida) y compara la mediana de tokens de entrada entre variantes.
 
-### Corregido
-
-- `revise` ya no pierde cambios cuando dos procesos editan la misma nota a la vez (por ejemplo, dos `feedback` seguidos): toma un bloqueo del vault y, si el archivo cambió justo antes de escribir, lo relee y reaplica la acción (hasta 3 intentos). Los tests de integración pasan ahora `TZ` al servidor que arrancan.
-
 ### Cambiado
 
 - El README presenta episteme como una sola memoria para todos los agentes y plantea el límite de búsqueda como «palabras clave curadas, no embeddings», con enlace a la medición.
 - **`review` ya no marca como vieja una memoria que se usa.** `stale` exigía más de 90 días y `helpful` en 0, y `helpful` casi nunca sube. Ahora además la memoria no debe haberse leído (`read`) ni entregado como contexto (`context`) en los últimos 90 días, según `.index/activity.db`. Un `search` no cuenta, y un `read` cuenta solo las notas que abrió: ni las vecinas de `links` ni los enlaces de su cuerpo. Sin registro de actividad, rige el criterio anterior.
 - El autor firma como Kenno en `LICENSE`, `pyproject.toml`, el `README.md` y los manifiestos de los plugins y del marketplace; el `README.md` enlaza además a la página del proyecto en benjamincriado.dev.
+
+### Corregido
+
+- `revise` ya no pierde cambios cuando dos procesos editan la misma nota a la vez (por ejemplo, dos `feedback` seguidos): toma un bloqueo del vault y, si el archivo cambió justo antes de escribir, lo relee y reaplica la acción (hasta 3 intentos). Los tests de integración pasan ahora `TZ` al servidor que arrancan.
 
 ## [0.21.0] - 2026-11-21
 
@@ -451,7 +453,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.21.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/Bajmein/episteme/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Bajmein/episteme/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Bajmein/episteme/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Bajmein/episteme/compare/v0.18.0...v0.19.0
