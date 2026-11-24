@@ -21,6 +21,7 @@ from episteme.errors import (
     StartupError,
     invalid,
 )
+from episteme.perms import FILE_MODE, make_private_dir
 
 READ_ONLY = "read-only"
 READ_WRITE = "read-write"
@@ -319,8 +320,8 @@ def _dir_mtime(base: Path) -> int | None:
 LOCK_WAIT_SECONDS = 30  # Windows only: POSIX flock waits as long as it takes
 
 
-def _lock_file(fh: IO[bytes]) -> None:
-    """Block until this process holds an exclusive lock on ``fh`` (POSIX flock, Windows msvcrt)."""
+def _lock_file(fh: IO[bytes]) -> bool:
+    """Lock ``fh`` exclusively (POSIX flock, Windows msvcrt); False if Windows gave up waiting."""
     if sys.platform == "win32":
         import msvcrt
 
@@ -329,15 +330,16 @@ def _lock_file(fh: IO[bytes]) -> None:
         while True:
             try:
                 msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-                return
+                return True
             except OSError:
                 if time.monotonic() > deadline:
-                    return  # give up waiting: the freshness check in NoteFile.save still applies
+                    return False  # the freshness check in NoteFile.save still applies
                 time.sleep(0.05)
     else:
         import fcntl
 
         fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        return True
 
 
 def _unlock_file(fh: IO[bytes]) -> None:
@@ -539,17 +541,20 @@ class Vault:
         """Hold a vault-wide lock between processes (``.index/write.lock``) while revising."""
         try:
             lock_dir = self.root / ".index"
-            lock_dir.mkdir(exist_ok=True)
-            fh = open(lock_dir / "write.lock", "a+b")  # noqa: SIM115 - closed below
+            make_private_dir(lock_dir)
+            lock_path = lock_dir / "write.lock"
+            fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, FILE_MODE)
+            fh = os.fdopen(fd, "a+b")  # closed below
         except OSError:  # read-only vault: the freshness check in NoteFile.save still applies
             yield
             return
         with fh:
-            _lock_file(fh)
+            locked = _lock_file(fh)
             try:
                 yield
             finally:
-                _unlock_file(fh)
+                if locked:
+                    _unlock_file(fh)
 
     def remove(self, rel: str) -> None:
         """Delete ``rel``. Only ``revise`` uses it, to move a memory to its new folder."""

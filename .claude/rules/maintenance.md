@@ -9,4 +9,4 @@ paths:
 - Lo automático solo archiva y respalda: nunca borra ni fusiona notas.
 - Nunca rompe un tool: todo error se traga (`Store` no lanza; `run` y el hilo del backup restauran la marca con `restore` si fallan) y la bienvenida sigue.
 - `review` no cambia de comportamiento: solo informa.
-- La coordinación entre procesos pasa solo por `Store.claim` (`.index/maintenance.db`); nada de `flock`, `index.db` ni `activity.db`.
+- La coordinación entre procesos pasa solo por `Store.claim` (`.index/maintenance.db`); nada de `flock`, `index.db` ni `activity.db`. `Vault.write_lock` (`.index/write.lock`, `flock` o `msvcrt`) es otra cosa: un lock de escritura de notas que solo toma `revise` para no perder cambios, no coordina la mantención.

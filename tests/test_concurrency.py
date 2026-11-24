@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import anyio
+import pytest
 import yaml
 from conftest import mcp_client
 
@@ -93,3 +94,18 @@ def test_concurrent_feedback_keeps_every_increment(vault: Path) -> None:
     _run_two(FEEDBACK_WRITER, vault=str(vault), note=path)
 
     assert _front_matter(vault / path)["helpful"] == 2 * ROUNDS
+
+
+def test_write_lock_does_not_unlock_when_the_lock_was_never_taken(
+    vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from episteme import vault as vault_module
+
+    unlocked: list[bool] = []
+    monkeypatch.setattr(vault_module, "_lock_file", lambda fh: False)  # Windows timeout
+    monkeypatch.setattr(vault_module, "_unlock_file", lambda fh: unlocked.append(True))
+
+    with vault_module.Vault(vault).write_lock():
+        pass
+
+    assert unlocked == []
