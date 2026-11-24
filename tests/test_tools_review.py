@@ -239,3 +239,51 @@ async def test_review_totals_count_linkable_orphans(vault: Path) -> None:
         res = await c.ok("review", project="orph")
 
     assert res["totals"]["orphans_linkable"] == 2
+
+
+def _write_old_memory(vault: Path) -> str:
+    rel = "memory/fabrik/insights/2026-01-01-vieja.md"
+    old = vault / rel
+    old.parent.mkdir(parents=True, exist_ok=True)
+    old.write_text(
+        "---\ntype: insight\nproject: fabrik\npriority: 3\nstatus: active\n"
+        "created: 2026-01-01\nhelpful: 0\n---\n# Vieja\n\ntexto\n"
+    )
+    return rel
+
+
+def _stale_paths(res: dict) -> list[str]:
+    return [s["path"] for s in res["stale"]]
+
+
+async def test_stale_drops_a_memory_after_it_is_read(vault: Path) -> None:
+    rel = _write_old_memory(vault)
+    async with mcp_client(vault) as c:
+        before = await c.ok("review", project="fabrik")
+
+        await c.ok("read", notes=[rel])
+        after = await c.ok("review", project="fabrik")
+
+    assert rel in _stale_paths(before)
+    assert rel not in _stale_paths(after)
+
+
+async def test_stale_keeps_a_memory_that_only_search_names(vault: Path) -> None:
+    rel = _write_old_memory(vault)
+    async with mcp_client(vault) as c:
+        await c.ok("search", query="Vieja")
+
+        res = await c.ok("review", project="fabrik")
+
+    assert rel in _stale_paths(res)
+
+
+def test_used_paths_does_not_create_a_missing_log(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from episteme.activity import used_paths
+
+    db = tmp_path / "activity.db"
+
+    assert used_paths(db, datetime.now(UTC)) == set()
+    assert not db.exists()
