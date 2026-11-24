@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import sys
 import tempfile
+import time
 import tomllib
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import IO
 
 from episteme.errors import (
     OUTSIDE_VAULT,
@@ -17,6 +21,7 @@ from episteme.errors import (
     StartupError,
     invalid,
 )
+from episteme.perms import FILE_MODE, make_private_dir
 
 READ_ONLY = "read-only"
 READ_WRITE = "read-write"
@@ -312,6 +317,43 @@ def _dir_mtime(base: Path) -> int | None:
         return None
 
 
+LOCK_WAIT_SECONDS = 30  # Windows only: POSIX flock waits as long as it takes
+
+
+def _lock_file(fh: IO[bytes]) -> bool:
+    """Lock ``fh`` exclusively (POSIX flock, Windows msvcrt); False if Windows gave up waiting."""
+    if sys.platform == "win32":
+        import msvcrt
+
+        fh.seek(0)
+        deadline = time.monotonic() + LOCK_WAIT_SECONDS
+        while True:
+            try:
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                return True
+            except OSError:
+                if time.monotonic() > deadline:
+                    return False  # the freshness check in NoteFile.save still applies
+                time.sleep(0.05)
+    else:
+        import fcntl
+
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        return True
+
+
+def _unlock_file(fh: IO[bytes]) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 class Vault:
     """A vault root with its zones. All paths handed out are relative and use ``/``."""
 
@@ -493,6 +535,26 @@ class Vault:
         finally:
             os.unlink(tmp)
         return True
+
+    @contextmanager
+    def write_lock(self) -> Generator[None]:
+        """Hold a vault-wide lock between processes (``.index/write.lock``) while revising."""
+        try:
+            lock_dir = self.root / ".index"
+            make_private_dir(lock_dir)
+            lock_path = lock_dir / "write.lock"
+            fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, FILE_MODE)
+            fh = os.fdopen(fd, "a+b")  # closed below
+        except OSError:  # read-only vault: the freshness check in NoteFile.save still applies
+            yield
+            return
+        with fh:
+            locked = _lock_file(fh)
+            try:
+                yield
+            finally:
+                if locked:
+                    _unlock_file(fh)
 
     def remove(self, rel: str) -> None:
         """Delete ``rel``. Only ``revise`` uses it, to move a memory to its new folder."""

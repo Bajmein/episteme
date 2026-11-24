@@ -68,6 +68,8 @@ async def mcp_client(
         env={
             "EPISTEME_TODAY": today,
             "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            # The SDK does not pass TZ on; without it the server falls back to /etc/localtime.
+            **({"TZ": os.environ["TZ"]} if "TZ" in os.environ else {}),
             # With --cov, coverage's subprocess patch measures the server through these.
             **{k: v for k, v in os.environ.items() if k.startswith("COVERAGE_")},
         },

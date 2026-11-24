@@ -18,6 +18,7 @@ from episteme.memory.schema import (
     MEMORY_ACTIONS,
     TYPES,
     NoteFile,
+    StaleNote,
     check_files,
     kind_for,
     validate,
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
     from episteme.engine import Engine
 
 
+REVISE_ATTEMPTS = 3  # re-reads of a note that another process keeps writing
 FEEDBACK_VALUES = ("helpful", "unhelpful", "outdated")
 
 
@@ -127,6 +129,8 @@ def _supersede(engine: Engine, nf: NoteFile, by: str | None) -> tuple[list[str],
     newer.set_fields({"supersedes": link_value})
     validate(nf.fm)
     validate(newer.fm)
+    nf.ensure_fresh()  # check both before writing either, so a stale retry leaves nothing half done
+    newer.ensure_fresh()
     nf.save()
     newer.save()
     return changed, by_rel
@@ -172,6 +176,35 @@ def revise(
     _reject_tool_zone(rel, mode)
     if action in MEMORY_ACTIONS and mode != MEMORY:
         raise invalid(f'action "{action}" only applies to memories, and {rel} is not one.')
+    for _ in range(REVISE_ATTEMPTS):
+        try:
+            # The lock serialises episteme processes; the freshness check in NoteFile.save
+            # still catches writers that do not take it (Obsidian, an editor).
+            with engine.vault.write_lock():
+                return _apply(
+                    engine, rel, mode, action, old, new, text, heading, fields, by, value
+                )
+        except StaleNote:
+            continue  # another writer changed the file: re-read it and apply the action again
+    raise invalid(
+        f"{rel} changed while revising it (another process wrote it). Read it again and retry."
+    )
+
+
+def _apply(
+    engine: Engine,
+    rel: str,
+    mode: str,
+    action: str,
+    old: str | None,
+    new: str | None,
+    text: str | None,
+    heading: str | None,
+    fields: dict[str, Any] | None,
+    by: str | None,
+    value: str | None,
+) -> dict[str, Any]:
+    """Read ``rel`` fresh, apply ``action`` and save; ``StaleNote`` if it changed meanwhile."""
     nf = NoteFile(engine, rel)
     result: dict[str, Any] = {"path": rel, "action": action, "changed": []}
 
@@ -227,6 +260,7 @@ def _move_memory(engine: Engine, nf: NoteFile) -> str:
             f"break them. Change those links to [[{name.removesuffix('.md')}]] first."
         )
     engine.vault.check_writable(new_rel)
+    nf.ensure_fresh()
     if not engine.vault.create_exclusive(new_rel, nf.text()):
         raise invalid(
             f"{new_rel} already exists, so {nf.rel} cannot move there. "
