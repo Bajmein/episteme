@@ -10,7 +10,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ### Cambiado
 
-- El autor firma como Benjamín Criado en `LICENSE`, `pyproject.toml` y el `README.md`, que enlaza además a la página del proyecto en benjamincriado.dev.
+- El autor firma como Kenno en `LICENSE`, `pyproject.toml`, el `README.md` y los manifiestos de los plugins y del marketplace; el `README.md` enlaza además a la página del proyecto en benjamincriado.dev.
 
 ## [0.21.0] - 2026-11-21
 

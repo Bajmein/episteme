@@ -1,6 +1,6 @@
 {
   "name": "episteme",
-  "owner": { "name": "Bajmein" },
+  "owner": { "name": "Kenno" },
   "description": "Marketplace de episteme: el plugin con sus skills y el de documentación.",
   "plugins": [
     {
