@@ -92,6 +92,27 @@ def extract_paths(text: str) -> list[str]:
     return list(dict.fromkeys(found))[:MAX_PATHS]
 
 
+def _read_paths(text: str) -> list[str]:
+    """The notes a ``read`` result opened: its top ``path`` or each entry of ``notes``.
+
+    The neighbours under ``links`` and the ``(x.md)`` links in the body were not read.
+    """
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    entries = data["notes"] if isinstance(data.get("notes"), list) else [data]
+    found = [e["path"] for e in entries if isinstance(e, dict) and isinstance(e.get("path"), str)]
+    return list(dict.fromkeys(found))[:MAX_PATHS]
+
+
+def call_paths(tool: str, text: str) -> list[str]:
+    """Vault paths to log for one call: the notes read for ``read``, every path otherwise."""
+    return _read_paths(text) if tool == "read" else extract_paths(text)
+
+
 def used_paths(db_path: Path, since: datetime) -> set[str]:
     """Paths delivered by ``read`` or ``context`` since ``since``; empty if the log is unreadable.
 
@@ -209,7 +230,7 @@ class Activity:
                     _text(arguments.get("hook_event")),
                     _text(arguments.get("project")),
                     json.dumps(args, ensure_ascii=False, default=str),
-                    json.dumps(extract_paths(text), ensure_ascii=False),
+                    json.dumps(call_paths(tool, text), ensure_ascii=False),
                     len(text),
                     int(ms),
                     1 if ok else 0,
