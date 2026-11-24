@@ -49,7 +49,7 @@ SEARCH_LIMIT_DEFAULT = 20
 SEARCH_LIMIT_MAX = 100
 AB_COLUMNS = (
     "Corrida", "Llamadas", "search", "read", "context", "search_any", "read_batch",
-    "Caracteres", "Turnos", "Coste (USD)", "Nota",
+    "Caracteres", "Turnos", "Coste (USD)", "Tokens entrada", "De caché", "Tokens salida", "Nota",
 )  # fmt: skip
 
 Call = tuple[str, dict[str, Any], str | None]
@@ -583,6 +583,25 @@ class AbOptions:
     baseline_cmd: str = BASELINE_CMD
 
 
+def _usage_tokens(answer: dict[str, Any]) -> dict[str, int | None]:
+    """Window input, cached input and output tokens of a run; None where ``usage`` lacks them."""
+    usage = answer.get("usage")
+    if not isinstance(usage, dict):
+        return {"tokens_in": None, "tokens_cached": None, "tokens_out": None}
+    parts = [
+        usage.get(k)
+        for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+    ]
+    numbers = [p for p in parts if isinstance(p, int) and not isinstance(p, bool)]
+    cached = usage.get("cache_read_input_tokens")
+    output = usage.get("output_tokens")
+    return {
+        "tokens_in": sum(numbers) if len(numbers) == len(parts) else None,
+        "tokens_cached": cached if isinstance(cached, int) else None,
+        "tokens_out": output if isinstance(output, int) else None,
+    }
+
+
 def _measure_run(
     variant: str, n: int, cmd: list[str], cwd: Path, out: Path, db: Path
 ) -> dict[str, Any]:
@@ -596,6 +615,7 @@ def _measure_run(
     answer = _parse_answer(stdout)
     run["turns"] = answer.get("num_turns")
     run["cost"] = answer.get("total_cost_usd")
+    run.update(_usage_tokens(answer))
     run["answer_chars"] = len(answer.get("result") or "")
     run.update(_merge(summarize(db, before)))
     if run["total"] == 0 and not run["note"]:
@@ -629,12 +649,17 @@ def run_ab(
     return results
 
 
+def _plain(value: float) -> str:
+    """A number without exponent notation: whole numbers as integers, halves with one decimal."""
+    return f"{value:.0f}" if value == int(value) else f"{value:.1f}"
+
+
 def _median(values: list[Any]) -> str:
     numbers = [v for v in values if isinstance(v, (int, float))]
     if not numbers:
         return "–"
     med = statistics.median(numbers)
-    return f"{med:.2f}" if any(isinstance(v, float) for v in numbers) else f"{med:g}"
+    return f"{med:.2f}" if any(isinstance(v, float) for v in numbers) else _plain(med)
 
 
 def _run_cells(run: dict[str, Any]) -> list[Any]:
@@ -644,6 +669,7 @@ def _run_cells(run: dict[str, Any]) -> list[Any]:
         run["total"], calls.get("search", 0), calls.get("read", 0), calls.get("context", 0),
         run["search_any"], run["read_batch"], run["chars"],
         run["turns"], run["cost"],
+        run["tokens_in"], run["tokens_cached"], run["tokens_out"],
     ]  # fmt: skip
 
 
@@ -669,6 +695,26 @@ def _median_line(variant: str, rows: list[list[Any]]) -> str:
     return f"| **mediana {variant}** | " + " | ".join(_median(list(c)) for c in columns) + " | |"
 
 
+def _tokens_summary(results: list[dict[str, Any]]) -> list[str]:
+    """The summary line with the median input tokens per run of each variant, or nothing."""
+    medians: dict[str, float] = {}
+    for variant in ("base", "new"):
+        values = [
+            r["tokens_in"]
+            for r in results
+            if r["variant"] == variant and isinstance(r.get("tokens_in"), int)
+        ]
+        if values:
+            medians[variant] = statistics.median(values)
+    if not medians.get("base") or "new" not in medians:
+        return []
+    change = (medians["new"] - medians["base"]) / medians["base"]
+    return [
+        f"Mediana de tokens de entrada por corrida: {_plain(medians['base'])} en base y "
+        f"{_plain(medians['new'])} en new ({change:+.0%})."
+    ]
+
+
 def render_ab(results: list[dict[str, Any]], out: Path) -> str:
     cols = "| " + " | ".join(AB_COLUMNS) + " |"
     lines = ["# A/B con agentes", "", cols, "|" + " --- |" * len(AB_COLUMNS)]
@@ -687,6 +733,7 @@ def render_ab(results: list[dict[str, Any]], out: Path) -> str:
             f"Mediana de llamadas del modelo por corrida: {medians['base']:g} en base y "
             f"{medians.get('new', 0):g} en new ({change:+.0%})."
         )
+    lines += _tokens_summary(results)
     lines += ["", f"Respuestas y configuración: {out}", ""]
     return "\n".join(lines)
 
