@@ -33,4 +33,4 @@ Dependencias solo con `uv` (`uv add`), nunca `pip install`.
 - Portabilidad a Windows: rutas con `pathlib` u `os.path`, lecturas con `encoding="utf-8"` y escrituras con `newline=""`.
 - Un cambio que note quien usa episteme se anota en `CHANGELOG.md`, en «Sin publicar».
 - Si cambia un tool que nombran las skills, revisa sus `SKILL.md` (también `plugin-docs/skills/docs/SKILL.md`), `plugin/agents/extractor.md` y `plugin/rules/AGENTS.md`.
-- Commits y código en inglés, con Conventional Commits; `README.md` y `docs/` en español.
+- Commits y código en inglés, con Conventional Commits; `README.md` y `docs/` en español; `README.en.md` es la traducción del `README.md` y se actualiza en el mismo PR.
