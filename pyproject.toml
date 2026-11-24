@@ -5,7 +5,7 @@ description = "Agentic memory and knowledge vault: an MCP server that serves an 
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Benjamín C. Rossa" }]
+authors = [{ name = "Kenno" }]
 keywords = ["mcp", "claude-code", "obsidian", "markdown", "memory"]
 classifiers = [
     "Programming Language :: Python :: 3.14",

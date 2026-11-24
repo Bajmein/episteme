@@ -4,6 +4,14 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- `docs/desarrollo.md` publica el resultado de la medición de embeddings del 15-11-2026 (bge-m3, 147 consultas reales: solo 3 ganan un vecino nuevo claro) y por qué no se construye el módulo.
+
+### Cambiado
+
+- El autor firma como Kenno en `LICENSE`, `pyproject.toml`, el `README.md` y los manifiestos de los plugins y del marketplace; el `README.md` enlaza además a la página del proyecto en benjamincriado.dev.
+
 ## [0.21.0] - 2026-11-21
 
 ### Cambiado
@@ -106,7 +114,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 ### Cambiado
 
 - El módulo `serena-python` de `/episteme:scaffold` solo pasa al aviso de Serena (`serena-hooks remind`) las búsquedas y lecturas de Python; las de Markdown, JSON y demás ya no cuentan para la racha. El hook `python-serena.py` gana la acción `remind` y `serena-python.json` la usa en lugar de llamar a `serena-hooks` directamente.
-- Autor del paquete en `pyproject.toml` y titular de la licencia en `LICENSE` y en el `README.md`: Benjamín C. Rossa. `pyproject.toml` declara también Python 3.15 en sus clasificadores.
+- Autor del paquete en `pyproject.toml` y titular de la licencia en `LICENSE` y en el `README.md`: Kenno. `pyproject.toml` declara también Python 3.15 en sus clasificadores.
 - Diagramas del `README.md` al día con 0.15.0: la arquitectura muestra las 14 tools, agy y las zonas `sesiones/` y `planes/`; el de hooks cubre el día a día (con la copia del plan al aprobarlo) y dos nuevos explican el ciclo de una memoria y qué pasa al compactar o con `/clear`. `docs/hooks.md` incrusta también el de compactar.
 - `SECURITY.md` cuenta entre los riesgos aceptados el estado de sesión y las copias de planes, que `session` y `plan` guardan sin pedir permiso y vuelven al contexto.
 

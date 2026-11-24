@@ -246,4 +246,4 @@ El resto (el lint completo del CI, la revisión de calidad de cada PR con CodeSc
 
 ## Licencia
 
-[MIT](LICENSE), © 2026 Benjamín C. Rossa.
+[MIT](LICENSE), © 2026 Kenno ([benjamincriado.dev](https://benjamincriado.dev/episteme/)).
