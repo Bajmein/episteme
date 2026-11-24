@@ -44,7 +44,7 @@ CodeScene revisa además cada PR. El check de CodeScene del PR (quality gate «T
 
 - Un cambio que note quien usa episteme (tools, hooks, skills, scripts, instalación) se anota en `CHANGELOG.md`, en «Sin publicar».
 - Si cambia un tool, revisa también `README.md`, `docs/`, los `SKILL.md` de los dos plugins (`plugin/` y `plugin-docs/`), el agente (`plugin/agents/extractor.md`) y `plugin/rules/AGENTS.md`. Si cambian los hooks o los permisos, también `plugin/skills/setup/settings.json`.
-- `README.md` y `docs/` van en español; el código, los docstrings y los commits, en inglés.
+- `README.md` y `docs/` van en español; `README.en.md` es la traducción del `README.md` y se actualiza en el mismo PR; el código, los docstrings y los commits, en inglés.
 
 ## Licencia
 
