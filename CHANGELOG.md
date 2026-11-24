@@ -4,6 +4,10 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- `docs/desarrollo.md` publica el resultado de la medición de embeddings del 15-11-2026 (bge-m3, 147 consultas reales: solo 3 ganan un vecino nuevo claro) y por qué no se construye el módulo.
+
 ### Cambiado
 
 - El autor firma como Benjamín Criado en `LICENSE`, `pyproject.toml` y el `README.md`, que enlaza además a la página del proyecto en benjamincriado.dev.

@@ -114,6 +114,20 @@ Trae además las huérfanas (memorias activas sin enlaces, sin sesiones ni recor
 
 Criterio: construir el módulo solo si hay aciertos nuevos claros en español (vecinos nuevos que de verdad responden a la consulta, no ruido). Con bge-m3, los puntajes entre 0,5 y 0,65 traen sobre todo memorias sin relación, y entre los pares de 0,8 a 0,9 hay temas distintos: mira los claros.
 
+### Resultado (15-11-2026)
+
+Corrida con bge-m3 en Ollama 0.12.11, solo CPU, sobre 523 memorias y 147 consultas reales de `search` y `context`.
+
+| Resultado | Consultas |
+| --- | --- |
+| Sin vecinos nuevos | 48 |
+| Solo vecinos débiles (coseno < 0,65, casi todo ruido) | 96 |
+| Un vecino nuevo claro (coseno ≥ 0,65) | 3 |
+
+Latencia: 1,47 s por consulta y 620 s para vectorizar el vault. Pares de memorias: 338 con coseno ≥ 0,8 y ninguno ≥ 0,9.
+
+Conclusión: no se construye el módulo de embeddings: tres aciertos no compensan la dependencia de Ollama, el índice de vectores ni la latencia.
+
 ## Medir llamadas por ráfaga
 
 Para ver cuántas llamadas hace un agente al consultar el vault y cuánto ahorran los lotes (`search(match="any")` y `read(notes=[…])`), el script lee el registro de actividad. Es de solo lectura: abre `.index/activity.db` con `mode=ro` y trabaja sobre una copia temporal de las notas; el índice del vault real no se abre ni se crea.
