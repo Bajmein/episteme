@@ -4,6 +4,11 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Corregido
+
+- agy: la regla `plugin/rules/AGENTS.md` ya no lleva frontmatter, que agy inyectaba como texto (en `rules/AGENTS.md` no se usa).
+- `/episteme:agy` avisa de que un servidor `episteme` global de agy tapa al del proyecto (agy usa el global sin avisar), no da la activación por hecha mientras siga ahí y la comprueba con los tools `eager` del proyecto. Los permisos negados en `agy -p` se leen en `stderr`.
+
 ## [0.22.0] - 2026-11-24
 
 ### Añadido

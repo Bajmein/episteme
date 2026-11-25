@@ -10,14 +10,14 @@ Tarea: $ARGUMENTS
 
 Sin tarea, ve a «Activar». Con tarea, ve a «Delegar»; si falta `<ws>/.agents/mcp_config.json` con `episteme`, dilo y ofrece «Activar» antes: no lo actives sin que la persona lo pida.
 
-Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, bienvenida automática, los modos `surface` y `constraints` de `context`, extractor ni copia de planes: el contexto le llega por la regla `always_on` del plugin (`rules/AGENTS.md`).
+Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, bienvenida automática, los modos `surface` y `constraints` de `context`, extractor ni copia de planes: el contexto le llega por la regla del plugin (`rules/AGENTS.md`, siempre activa).
 
 ## Activar
 
 1. **Precondiciones.**
    - `agy --version` responde. Si no, indica el instalador (`curl -fsSL https://antigravity.google/cli/install.sh | bash`) y detente: no lo instales sin permiso.
    - El proyecto ya está conectado con `/episteme:setup`: `claude mcp get episteme` muestra el registro. Si no, pide correr `/episteme:setup` primero y detente. Anota su `command` y sus `args` tal cual (p. ej. `uvx --from git+https://github.com/Bajmein/episteme@<tag> episteme --project <p>`, o `git+ssh://…` si el registro usa SSH). No los inventes ni cambies el tag.
-2. **Plugin de agy** (es global). `agy plugin list`: si sale `episteme`, sigue. Si no, propón `agy plugin install ${CLAUDE_SKILL_DIR}/../..` (la copia del plugin que tiene Claude Code, de la misma versión) o `agy plugin install https://github.com/Bajmein/episteme`, e instálalo solo si la persona lo aprueba. `agy plugin validate` da 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy) y el resto carga. Si `agy plugin install` falla por ese error, dilo y detente, sin intentar arreglarlo.
+2. **Plugin de agy** (es global). `agy plugin list`: si sale `episteme`, sigue. Si no, propón `agy plugin install ${CLAUDE_SKILL_DIR}/../..` (la copia del plugin que tiene Claude Code, de la misma versión) o `agy plugin install https://github.com/Bajmein/episteme`, e instálalo solo si la persona lo aprueba. `agy plugin validate` da 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy) y el resto carga. También sale 1 aviso esperado, `hooks/hooks.json: never loaded`: son los hooks de Claude Code, y agy solo lee `hooks.json` en la raíz del plugin. Si `agy plugin install` falla por ese error, dilo y detente, sin intentar arreglarlo.
 3. **MCP del proyecto.** `agy mcp add` solo escribe en global, así que escribe a mano `<ws>/.agents/mcp_config.json`. Si existe, léelo y fusiona: conserva los demás servidores y reemplaza solo `episteme`.
 
    ```json
@@ -39,16 +39,16 @@ Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, b
    ```
 
    `eager` hace que agy muestre esos tools al modelo desde el principio; no evita el truncado de las respuestas largas.
-4. **Entrada global.** Lee `~/.gemini/config/mcp_config.json`. Si trae un servidor `episteme` (p. ej. `~/.local/bin/episteme` sin `--project`), explica que choca de nombre con el del proyecto y que sin `--project` escribe en otro proyecto. Propón quitarla con `agy mcp remove episteme` o editando el archivo, y hazlo solo si la persona lo aprueba.
+4. **Entrada global.** Lee `~/.gemini/config/mcp_config.json`. Si trae un servidor `episteme` (p. ej. `~/.local/bin/episteme` sin `--project`), agy usa ese e ignora el del proyecto sin avisar (comprobado con agy 1.5.16), y sin `--project` escribe en otro proyecto. La activación no queda hecha mientras siga ahí. Propón quitarlo (`agy mcp remove episteme`, con un respaldo antes del archivo) y hazlo solo con la aprobación de la persona. Si no lo aprueba, sigue con el paso 5, salta la comprobación del paso 6 y di en el informe que la activación quedó incompleta y por qué.
 5. **Git.** Pregunta si añadir `.agents/` a `.git/info/exclude` (la config es de la máquina, como `.mcp.json` en `setup`). Solo con un sí.
 6. **Comprobación.** `agy mcp list` no muestra el MCP de proyecto; usa una ejecución corta desde `<ws>`:
 
    ```bash
-   agy -p 'Llama a context(mode="welcome") de episteme y responde solo con el número de normas que trae' \
+   agy -p 'Di qué tools del servidor MCP episteme tienes como Eager y llama a context(mode="welcome") de episteme sin pasar project; responde solo con la lista de tools Eager y el número de normas' \
      --output-format json --mode plan --settings '{"permissions":{"allow":["mcp(episteme/*)"]}}'
    ```
 
-   Vale si devuelve `status: "SUCCESS"`, un número en `response` y `denied_actions` vacío. Si no, muestra la salida y el `stderr`.
+   Vale si la lista trae `context`, `search`, `read`, `remember` y `revise` (solo el servidor del proyecto los tiene como `eager`), `response` trae un número y el `stderr` no avisa de ningún permiso negado. Si `context` falla con `no project given`, respondió el global: vuelve al paso 4. Si no, muestra la salida y el `stderr`.
 7. **Informe.** Di qué escribiste y dónde, qué propuestas quedaron sin aprobar, y muestra las reglas que la persona puede poner en el `settings.json` global de agy para no pasar `--settings` (los permisos de proyecto no se aplican en agy). No lo toques:
 
    ```json
@@ -72,7 +72,7 @@ Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, b
    > Proyecto de episteme: `<p>`. Llama a `context(mode="task", task=…)` de episteme al empezar. No uses `remember` ni `revise`. Termina con tres secciones: «Resultado», «Memorias propuestas» (tipo, título y cuerpo de cada una) y «Tools de episteme usados».
 
 3. **Lectura** del JSON: `status`, `finished_reason`, `response`, `denied_actions` y `conversation_id`.
-   - Un permiso denegado no da error: sale `status: "SUCCESS"`, `response: ""` y `denied_actions` con contenido. Dilo y muestra qué se negó.
+   - Un permiso denegado no da error: la salida es 0, `status: "SUCCESS"`, y agy avisa en `stderr` qué tool negó y cómo permitirlo; `response` puede llegar vacío. Revisa siempre el `stderr` (y `denied_actions`, si viene en el JSON) y di qué se negó.
    - Una salida distinta de 0 o un `status` distinto de `SUCCESS`: informa con el `stderr` (`AGY_ERROR`).
    - Si «Tools de episteme usados» sale vacía, avisa de que agy pudo no tener acceso al vault.
 4. **Seguir.** Para continuar la misma conversación, repite el comando con `--conversation <conversation_id>`.

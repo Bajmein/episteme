@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 Si los tools de episteme no están disponibles en este workspace, ignora esta regla.
 
 # episteme: memoria y documentación del proyecto

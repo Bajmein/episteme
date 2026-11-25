@@ -64,12 +64,12 @@ def test_antigravity_manifest_is_valid_and_matches_package_version() -> None:
     assert "skills" not in manifest
 
 
-def test_agy_rule_has_a_valid_trigger_and_fits_the_size_cap() -> None:
+def test_agy_rule_has_no_frontmatter_and_fits_the_size_cap() -> None:
     path = PLUGIN / "rules" / "AGENTS.md"
 
-    meta = _frontmatter(path)
+    text = path.read_text(encoding="utf-8")
 
-    assert meta["trigger"] in {"always_on", "model_decision", "glob"}
+    assert not text.startswith("---")
     assert len(path.read_bytes()) < 24_000
 
 
