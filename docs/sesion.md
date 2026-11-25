@@ -65,8 +65,10 @@ El estado se guarda en tres momentos:
 | Momento | Quién | Cómo |
 | --- | --- | --- |
 | Mientras se trabaja | El agente | Las instrucciones del servidor le piden `session(action="save")` cuando se acuerda un plan, acaba una fase, cambia el enfoque, antes de un paso arriesgado y cuando la persona lo pide (`/episteme:sesion`) |
-| Al compactar (manual o automático) | Hooks `PreCompact` (`gate`) y `PostCompact` (`capture`) | `gate` le pide al resumen que termine con el estado al día entre `<estado-sesion>` y `</estado-sesion>` (un `# título` y las secciones de la plantilla, partiendo del último estado de la conversación). `capture` guarda ese bloque como el estado. Si lo último lo escribió el extractor, `gate` añade su cuerpo (o su ruta, si pasa de 7000 caracteres), porque no está en la conversación |
+| Al compactar (manual o automático) | Hooks `PreCompact` (`gate`) y `PostCompact` (`capture`) | `gate` le pide al resumen que termine con el estado al día entre `<estado-sesion>` y `</estado-sesion>` (un `# título` y las secciones de la plantilla, partiendo del último estado de la conversación). `capture` guarda ese bloque como el estado. Si lo último lo escribió el extractor, `gate` añade su cuerpo (o su ruta, si llega a 7000 caracteres), porque no está en la conversación |
 | Con `/clear` | Hooks `SessionEnd` y `SessionStart` | `end` recuerda el transcript que se cierra; `restore` devuelve el estado y pide lanzar el extractor sobre ese transcript |
+
+En agy y Copilot CLI no hay hooks al compactar ni con `/clear`, ni extractor: el estado lo guarda solo el agente, con `session(action="save")` o `/episteme:sesion`.
 
 Claude Code añade lo que devuelve un hook `PreCompact` a las instrucciones del resumen y se lo muestra a la persona (`PreCompact [...] completed successfully: …`); por eso son pocas líneas. Con `[session] compact_state = false`, `gate` no dice nada y `capture` guarda el resumen como antes.
 
@@ -82,7 +84,7 @@ episteme · extracción pendiente: lanza en segundo plano el agente episteme:ext
 
 El agente lanza el subagente `episteme:extractor` (del plugin, Sonnet con esfuerzo bajo), que corre `transcript_digest.py` de la skill `sesion` sobre el transcript desde `desde`, reescribe el estado con la plantilla (`origin="extractor"`) y guarda como mucho 3 memorias duraderas con el tag `origen/extractor`. El servidor no lee el transcript: lo lee el script, en la máquina de la persona.
 
-El extractor corre en segundo plano y no puede pedir permiso. El script no lleva regla de permiso: lo aprueba el hook `PreToolUse` (`Bash`) del plugin (`plugin/hooks/digest-allow.py`), solo dentro del agente `episteme:extractor` y solo con el comando exacto: el script de la versión instalada del plugin, el transcript `.jsonl` entre comillas simples, `--since` en ISO y `--max-chars`. Con cualquier otro comando el hook calla y Claude Code decide como siempre; una regla `deny` o `ask` que cubra el comando sigue mandando. Al actualizar el plugin no hay que tocar permisos, pero sí reiniciar Claude Code.
+El extractor corre en segundo plano y no puede pedir permiso. El script no lleva regla de permiso: lo aprueba el hook `PreToolUse` (`Bash`) del plugin (`plugin/hooks/digest-allow.py`), solo dentro del agente `episteme:extractor` y solo con el comando exacto: el script de la versión instalada del plugin, el transcript `.jsonl` entre comillas simples, `--since` en ISO (opcional) y `--max-chars`. Con cualquier otro comando el hook calla y Claude Code decide como siempre; una regla `deny` o `ask` que cubra el comando sigue mandando. Al actualizar el plugin no hay que tocar permisos, pero sí reiniciar Claude Code.
 
 - Tras `/compact` sin bloque, el transcript es el de la sesión en curso (`${transcript_path}` del `SessionStart`). Tras `/clear`, el que guardó `end` en el `SessionEnd`; se entrega una sola vez. Al retomar (`/episteme:sesion retomar`, en una sesión nueva), el `transcript` del estado, si es distinto del de la sesión que retoma: así se extrae lo que esa sesión dijo después del último guardado, aunque se cerrara sin compactar ni limpiar.
 - `desde` es el `saved_at` del estado: lo anterior ya está en él. `capture` sin bloque no lo mueve, para que la extracción tras compactar incluya lo que se habló antes. Si lo último fue un guardado del extractor, `desde` es su `extracted_until`.
@@ -98,8 +100,8 @@ El extractor corre en segundo plano y no puede pedir permiso. El script no lleva
 - El extractor cuesta tokens de Sonnet en cada `/clear` (y en un `/compact` sin bloque o al retomar otra sesión).
 - El bloque `<estado-sesion>` lo escribe el modelo que resume: si lo omite, `capture` guarda el resumen como antes y el extractor completa el estado.
 - Una sesión que se cerró sin compactar ni `/clear` no guarda nada al cerrarse: lo que dijo después del último guardado se recupera al retomar, si el estado tiene su `transcript`.
-- El extractor corre en segundo plano y no puede pedir permiso: `/episteme:setup` deja en `allow` el tool `session` y el script, pero no `remember`. Si nadie aprueba `remember`, guarda solo el estado y lo dice.
-- El permiso del script lleva su ruta absoluta en la caché del plugin, que cambia con cada versión: **tras actualizar el plugin, vuelve a correr `/episteme:setup`**. Si no, el extractor no puede correr el script y lo dice en su respuesta.
+- `/episteme:setup` deja en `allow` el tool `session`, pero no `remember`: si nadie aprueba `remember`, el extractor guarda solo el estado y lo dice.
+- Si el extractor dice «permiso del script denegado», reinicia Claude Code (tras actualizar el plugin hace falta) y quita las reglas `deny` o `ask` que cubran el comando.
 - `desde` solo lleva un `saved_at` con el formato que escribe `session` (`AAAA-MM-DDTHH:MM:SS`); si alguien lo editó a mano con otra cosa, la orden dice `desde=inicio`.
 - El contador de mensajes es del proceso: si el servidor se reinicia, el aviso (si está activo) empieza de cero.
 

@@ -22,9 +22,9 @@ Dependencias solo con `uv` (`uv add`), nunca `pip install`.
 - `server.py`: instrucciones, formato de errores y `build_server`.
 - `tools/`: los 9 tools MCP (`search`, `read`, `remember`, `revise`, `review`, `context`, `session`, `plan` y `docs`, este solo con zonas docs; `reading`, `memories`, `hooks`, `docs`, `session` y `plans`; `args.py` guarda las anotaciones compartidas); cada módulo define `register(server, engine…)`.
 - `memory/`, `index/`, `docs/`, `session/` y `plans/`: paquetes cuyo `__init__.py` reexporta lo que se usa desde fuera.
-- `vault.py`, `engine.py`, `activity.py`, `prompting.py`, `backup.py`, `maintenance.py`, `hookmode.py`: vault, motor, registro de actividad, inyección por mensaje, copias, mantención y modo hook. `worktree.py`: resolver `project_dir` y comparar el worktree de estados y planes.
+- `vault.py`, `engine.py`, `activity.py`, `prompting.py`, `backup.py`, `maintenance.py`, `hookmode.py`: vault, motor, registro de actividad, inyección por mensaje, copias, mantención y modo hook. `worktree.py`: resolver `project_dir` y comparar el worktree de estados y planes. `__main__.py` (arranque con `--vault` y `--project`), `errors.py` (errores de los tools), `filters.py` (filtros de `search`), `links.py` (wikilinks y grafo), `markdown.py` (frontmatter, encabezados y enlaces) y `perms.py` (permisos de `.index/`).
 
-`plugin/` es el plugin de Claude Code (y de agy y Copilot CLI): skills, el agente `extractor` y la regla `plugin/rules/AGENTS.md`. `plugin-docs/` es el plugin opcional `episteme-docs` (la skill `/episteme-docs:docs` y su `docs_check.py`). Ninguno trae el servidor.
+`plugin/` es el plugin de Claude Code (y de agy y Copilot CLI): skills, el agente `extractor`, sus hooks (`plugin/hooks/`) y la regla `plugin/rules/AGENTS.md`. `plugin-docs/` es el plugin opcional `episteme-docs` (la skill `/episteme-docs:docs` y su `docs_check.py`). Ninguno trae el servidor.
 
 ## Reglas
 

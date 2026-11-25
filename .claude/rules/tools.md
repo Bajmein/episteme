@@ -6,6 +6,7 @@ paths:
   - src/episteme/errors.py
   - src/episteme/prompting.py
   - src/episteme/activity.py
+  - src/episteme/docs/writing.py
 ---
 
 # Tools MCP

@@ -1,7 +1,7 @@
 {
   "name": "episteme",
   "version": "0.23.0",
-  "description": "Skills y agente de episteme: conectar un proyecto, guardar y retomar el estado de la sesión (con un extractor tras /compact o /clear), mantención de memorias, recordatorios, scaffolding (README, CLAUDE.md, CHANGELOG, .github y reglas) delegar tareas a agy, y activar agy y Copilot CLI con hooks de bienvenida y contexto por mensaje.",
+  "description": "Skills y agente de episteme: conectar un proyecto, guardar y retomar el estado de la sesión (con un extractor tras /compact o /clear), mantención de memorias, recordatorios, scaffolding (README, CLAUDE.md, CHANGELOG, .github y reglas), delegar tareas a agy, y activar agy y Copilot CLI con hooks de bienvenida y contexto por mensaje.",
   "author": { "name": "Kenno" },
   "license": "MIT",
   "homepage": "https://github.com/Bajmein/episteme",

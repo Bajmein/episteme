@@ -103,7 +103,7 @@ Una segunda corrida seguida tiene que dar 0 cambiadas.
 
 - **El servidor no tiene HTTP.** episteme solo lista hashes y escribe lo que recibe; las descargas son del script, en la máquina de la persona.
 - **La bandeja está dentro del vault**, en `.index/docs-inbox/<suite>/` (fuera de toda zona, sin indexar, fuera del backup). El único escritor fuera de los tools es `docs_check.py`; `docs(action="write")` solo lee y borra ahí, confinado a la bandeja y por nombre-hash. Cada cuerpo pesa como mucho 2 MiB (el tope de indexado); una página mayor no se escribe, porque episteme no la indexaría (`reference/cli.md` de uv, con 807 KB, cabe).
-- **`read` corta a 20.000 caracteres**: las páginas grandes de una suite se leen por `heading`.
+- **`read` corta a 20.000 caracteres**: las páginas grandes de una suite se leen por `heading` (una sección o un rango de líneas corta a 60.000).
 - **No se borra ni se mueve nada.** Una página que desaparece de la fuente queda como `deprecated`.
 - **El índice de la suite no se reescribe.** El cuerpo del `README.index.md` (la lista de páginas) es de la persona: las páginas nuevas se informan para enlazarlas a mano.
 
