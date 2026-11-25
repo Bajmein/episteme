@@ -28,6 +28,16 @@ El banner es `static/banner-episteme.jpg` (1600 px de ancho, JPEG progresivo). E
 
 Los diagramas del README y de `docs/` están en `static/diagrams/`: cada uno es un HTML (la fuente, hecho con el plugin diagram-design en su variante oscura) y el PNG que se incrusta, exportado del HTML a 2x. Si cambia el HTML, se vuelve a exportar el PNG.
 
+## Publicar una versión
+
+Con CI en verde, el PR de release (también pasa por PR) cambia:
+
+- `version` en `pyproject.toml` (luego `uv lock`), en `plugin/.claude-plugin/plugin.json`, en `plugin/.antigravity-plugin/plugin.json` y en `plugin-docs/.claude-plugin/plugin.json`. `tests/test_plugin.py` comprueba que coincidan: sin ese cambio, las skills no se actualizan.
+- En `README.md` y `README.en.md`, el badge de versión (estático), la línea «**Versión actual: vX.Y.Z.**» («**Current version: vX.Y.Z.**») y el tag de los ejemplos de instalación. En `docs/instalacion.md`, el tag de los ejemplos. El badge de cobertura no se toca.
+- En `CHANGELOG.md`, «Sin publicar» pasa a ser la versión con su fecha.
+
+Tras mezclarlo, el tag se crea en local (`git tag vX.Y.Z && git push --tags`); los proyectos fijan ese tag en su config. Los tags `v*` no se pueden mover ni borrar.
+
 ## Salud del código
 
 CodeScene Cloud analiza `main` cada día y revisa cada PR: el check «CodeScene Code Health Review (main)» aplica el perfil de quality gates «The Bare Minimum» y deja un comentario con el code health de cada archivo tocado, antes y después. Ese check tiene que pasar. El perfil está versionado en `.codescene/custom-quality-gates.json` (una regla `bare_minimum` para `**/*`; sin regla que coincida, CodeScene no aplica ningún gate) y la revisión de cada PR lee el archivo de su rama. Para que mande el archivo, en la configuración del proyecto en CodeScene (PR Integration) hay que elegir la opción de config-as-code; si se elige y falta el archivo, el análisis del PR da error. La meta es 9 o más por archivo de `src/` y `scripts/`; un archivo nuevo o tocado no baja de 9 ni baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué. Si el code health baja, se corrige en el mismo PR.

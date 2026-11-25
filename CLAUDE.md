@@ -1,51 +1,60 @@
 # CLAUDE.md
 
-Guía para Claude Code en este repo.
+Servidor MCP en Python que sirve un vault Markdown compatible con Obsidian (documentación y memoria de proyectos). El contrato de cada tool está en su docstring; el detalle para personas, en `docs/`.
 
-## Qué es
+## Comandos
 
-`episteme` es un servidor MCP en Python que sirve un vault Markdown compatible con Obsidian (documentación y memoria de proyectos). `README.md` es la presentación, en lenguaje simple; el detalle está en `docs/` (instalación, configuración, tools y memorias, suites de documentación, estado de sesión, planes, hooks, mantención, migración de OMEGA y desarrollo) y el contrato de cada tool, en sus docstrings.
+```sh
+uv sync                                  # dependencias solo con uv (uv add), nunca pip
+uv run ruff check && uv run pytest       # antes de cada commit
+uv run ty check                          # job lint del CI: si tocas tipos
+uv run bandit -c pyproject.toml -r src scripts plugin plugin-docs -q
+uv run vulture && uv run deptry .        # si borras código o cambias dependencias
+```
 
-- La interfaz es **solo tools MCP**: no hay CLI para el agente. Los scripts de `scripts/` son de la persona, en local (qué mide cada uno: en su docstring y en «Medir…» de `docs/desarrollo.md`). `plugin-docs/skills/docs/scripts/docs_check.py` es de la skill `/episteme-docs:docs`, no del servidor: descarga las páginas de las suites en la máquina de la persona (el servidor no tiene HTTP) y su `body_hash` es copia del de `episteme.docs`.
-- El repo es además un marketplace de Claude Code (`.claude-plugin/marketplace.json`) con dos plugins: `episteme`, en `plugin/`, y `episteme-docs`, en `plugin-docs/` (la skill `/episteme-docs:docs`, opcional; depende de `episteme`). `episteme` trae skills, un agente (`plugin/agents/extractor.md`, que pone al día el estado de la sesión con el transcript tras `/clear`, tras un `/compact` sin bloque de estado y al retomar) y dos hooks `command` en `plugin/hooks/`: `SessionStart` (`clear`, `extract-wake.py`, que despierta al modelo para lanzarlo) y `PreToolUse` (`Bash`, `digest-allow.py`, que aprueba solo el comando exacto del script del extractor). `digest-allow.py` es el único hook de episteme que devuelve `permissionDecision`: siempre `allow`, nunca `deny`. El plugin no trae el servidor. Instalación: «Los plugins» en `docs/instalacion.md`.
-- `plugin/skills/` trae cinco skills de uso diario, que no tocan el servidor: `sesion`, `mantencion`, `reminder`, `scaffold` y `agy` (`/episteme:sesion`…). agy (Google Antigravity CLI) también lee el plugin: su manifiesto en `plugin/.antigravity-plugin/`, la regla siempre activa `plugin/rules/AGENTS.md` y las skills. Para trabajar en este repo, agy lee `GEMINI.md`, que remite a este archivo: revísalo si cambian `.claude/rules/` o lo que aquí es solo de Claude Code. `reminder`, `mantencion` y `sesion` son neutras para los dos clientes (la carga con `ToolSearch` va precedida de «En Claude Code»). `plugin/skills/sesion/scripts/transcript_digest.py` es del extractor: lee el transcript en la máquina de la persona (el servidor no lee fuera del vault ni lanza procesos). Si cambia un tool que nombran (`context`, `read`, `remember`, `revise`, `review`, `search`, `session`, `docs`), revisa sus `SKILL.md` (también `plugin-docs/skills/docs/SKILL.md`), el agente y `plugin/rules/AGENTS.md`.
-- `plugin/skills/setup/` (`/episteme:setup`) es la skill que conecta un proyecto (registro con `claude mcp add`, permisos, hooks y `CLAUDE.md`), en Linux, macOS y Windows. Si cambian la instalación, los hooks, los permisos o los tools, actualiza a la vez `README.md`, el documento de `docs/` que corresponda, `SKILL.md` y su `settings.json`.
-- Alcance cerrado: los tools escriben fuera de `memory/` solo en zonas gestionadas por un tool propio (`docs` con `docs(action="write")`, `sesiones` con `session` y `planes` con `plan`); siguen sin existir mover, renombrar, borrar, sync, web, HTTP ni embeddings.
-- El código está en `src/episteme/`. `memory/`, `index/`, `docs/`, `session/` y `plans/` son paquetes cuyo `__init__.py` reexporta lo que se usa desde fuera (se importa `from episteme import memory`, no el módulo interno). Los tools viven en `tools/` (`reading`, `memories`, `hooks`, `docs`, `session` y `plans`; `args.py` guarda las anotaciones compartidas, `READ_ONLY` y el `ContextVar` `CLIENT`, el nombre del cliente MCP que `remember` escribe en `agent`), cada módulo con una función `register(server, engine…)` que llama a un `_register_<tool>(server, engine…)` por tool, en el orden de `list_tools`; cada uno define su tool dentro, porque el SDK saca nombre, descripción y esquema de la propia función. `server.py` solo tiene las instrucciones, el formato de errores, `EpistemeServer` (convierte los `ToolError`, fija `CLIENT` durante cada llamada y la registra en el registro de actividad) y `build_server`.
-- Los invariantes por módulo están en `.claude/rules/` (`hookmode`, `maintenance`, `memory`, `tools` y `vault`) y se cargan al tocar esos archivos. El porqué de las decisiones está en las memorias de episteme (`search` con `project="episteme"`).
+Python: el paquete pide `>=3.14` (`requires-python`, ruff `py314`); aquí y en el CI, 3.15 (`.python-version`).
 
-## Cómo se trabaja
+## Invariantes
 
-- Dependencias con `uv` (`uv sync`, `uv add`). Nada de `pip install` suelto.
-- Python: el paquete pide `>=3.14` (`requires-python`, ruff `py314`); aquí y en el CI se usa 3.15, fijado en `.python-version`.
-- Dependabot solo de seguridad e Imgbot una vez al mes: detalle en `docs/desarrollo.md`.
-- Antes de cada commit: `uv run ruff check` y `uv run pytest` en verde. El job `lint` del CI corre además `uv run ty check`, `uv run bandit -c pyproject.toml -r src scripts plugin plugin-docs -q`, `uv run vulture` y `uv run deptry .` (configurados en `pyproject.toml`); pásalos si tocaste tipos, dependencias o borraste código.
-- CodeScene analiza `main` cada día y revisa cada PR. Su check (quality gate «The Bare Minimum», en `.codescene/custom-quality-gates.json`) tiene que pasar. Meta: 9 o más por archivo de `src/` y `scripts/`; un archivo nuevo o tocado no baja de 9 ni baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué. Cómo bajar la complejidad y cifras: «Salud del código» de `docs/desarrollo.md`.
-- MCP de CodeScene (`codescene`; instalación en «MCP de CodeScene» de `docs/desarrollo.md`). Si está disponible: tras cambiar código, `code_health_review` de los archivos tocados; si baja, corregir y confirmar con `code_health_score`; antes de terminar, `pre_commit_code_health_safeguard` en verde. Si sus tools salen diferidas, cárgalas con ToolSearch; si falta el `login` o fallan, dilo en una línea y sigue con el check del PR. Sin el MCP, basta ese check.
-- El paquete se construye con `uv_build` (acotado a la serie menor de uv en `[build-system]`); al subir de serie se cambia la cota a mano.
-- SDK de MCP 2.x: la clase es `MCPServer` (antes `FastMCP`). `instructions=` se pasa siempre por keyword (por posición acaba en `title`). Dependencia fijada: `mcp>=2.3,<3`. Si algo no coincide con lo esperado, manda el código del SDK en `.venv`. Los tipos de `mcp.types` (que viene de `mcp_types`) son modelos pydantic con atributos en snake_case (`Tool.input_schema`, `CallToolResult.structured_content`, `is_error`, `InitializeResult.server_info`); el camelCase (`inputSchema`) es solo el alias del JSON, que sale con `model_dump(by_alias=True)`.
-- `tests/fixtures/vault/` es el vault de prueba (`docs/`, `memory/` y `episteme.toml` son sintéticos; las notas de `docs/claude-code/` son propias y breves). **No se modifica**: los tests lo copian a `tmp_path` antes de escribir. `tests/fixtures/omega-export/` sirve para `migrate_omega.py`.
-- Los tests de integración arrancan el servidor por stdio (`stdio_client` y `ClientSession` del SDK) y llaman a los tools como lo haría Claude Code.
-- CI: `ci.yml` (`lint`, `test` y `changes`, que salta `test` si solo cambia Markdown o `docs/`) y `ci-windows.yml`, en runners de GitHub; cobertura a Codecov por OIDC, informativa. Detalle en `docs/desarrollo.md`.
-- Código multiplataforma: en `src/`, rutas con `os.path` o `pathlib`, nunca comparando contra `"/"` fijo (así nació el bug de `project_relative` en 0.4.0); lecturas con `encoding="utf-8"` y escrituras con `newline=""`. Un test solo de POSIX lleva `skipif(sys.platform == "win32", reason=…)`; uno que reproduce Windows en Linux hace `monkeypatch.setattr(os, "path", ntpath)`. Los subprocesos de los tests heredan `os.environ` (sin `SYSTEMROOT` Python no arranca en Windows). `mcp_client` de `tests/conftest.py` pasa `COVERAGE_*` y `TZ`.
-- Las versiones se publican con un tag en local (`git tag vX && git push --tags`) con CI en verde; los proyectos fijan el tag en su config. En el release también se sube `version` en `plugin/.claude-plugin/plugin.json`, `plugin/.antigravity-plugin/plugin.json` y `plugin-docs/.claude-plugin/plugin.json` al número de `pyproject.toml` (`tests/test_plugin.py` lo comprueba; sin ese cambio las skills no se actualizan). Se cambian el badge de versión (estático) y el tag de los ejemplos de instalación en `README.md`, `README.en.md` y `docs/instalacion.md`; el badge de cobertura no se toca. En `CHANGELOG.md`, «Sin publicar» pasa a ser la versión con su fecha.
-- `CHANGELOG.md` va en español, con el formato de Keep a Changelog. Un cambio que nota quien usa episteme (tools, hooks, skill, scripts, instalación) se anota en «Sin publicar» en el mismo PR.
-- La cabecera del `README.md` (y la de `README.en.md`) es un bloque centrado con el banner (`static/banner-episteme.jpg`) y tres filas de badges en `style=for-the-badge` de shields.io: tecnologías (estáticos, con CodeScene), plataformas y, abajo, los dos con estado en vivo: CI (`github/actions/workflow/status`, rama `main`) y cobertura de Codecov (`codecov/c/github`, rama `main`).
-- El repo es público desde el 16-11-2026 (la historia anterior, con sus hashes y PR, está en `Bajmein/episteme-archive`, privado y archivado). Los rulesets hacen que `main` solo reciba cambios por PR (también el de release) y que los tags `v*` no se puedan mover ni borrar.
+- **Alcance cerrado.** Solo tools MCP, sin CLI para el agente; `scripts/` es de la persona, en local. Fuera de `memory/`, los tools escriben solo en zonas con tool propio (`docs`, `sesiones` con `session`, `planes` con `plan`). No hay mover, renombrar, borrar, sync, web, HTTP ni embeddings. Nada de tools, parámetros u opciones sin pedido.
+- **Paquetes.** `memory/`, `index/`, `docs/`, `session/` y `plans/` reexportan en `__init__.py`: `from episteme import memory`, no el módulo interno.
+- **SDK de MCP 2.x** (`mcp>=2.3,<3`). La clase es `MCPServer`; `instructions=` siempre por keyword (por posición acaba en `title`). Los tipos de `mcp.types` son pydantic en snake_case (`input_schema`, `structured_content`, `is_error`); el camelCase solo sale con `model_dump(by_alias=True)`. Si algo no cuadra, manda el código del SDK en `.venv`.
+- **Tests.** `tests/fixtures/vault/` no se modifica: los tests lo copian a `tmp_path`. Los de integración arrancan el servidor por stdio (`stdio_client`, `ClientSession`).
+- **Multiplataforma.**
+  - Rutas con `pathlib` u `os.path`, nunca comparando con `"/"`.
+  - Lee con `encoding="utf-8"`; escribe con `newline=""`.
+  - Test solo POSIX: `skipif(sys.platform == "win32", reason=…)`. Windows en Linux: `monkeypatch.setattr(os, "path", ntpath)`.
+  - Los subprocesos de los tests heredan `os.environ` (sin `SYSTEMROOT`, Python no arranca en Windows).
+- **Cambio de interfaz.** Si cambian un tool, la instalación, los hooks o los permisos, actualiza en el mismo PR `README.md`, `README.en.md`, su documento de `docs/` y lo que lo nombra en `plugin/` (regla `plugin.md`).
+- **`uv_build`** va acotado a la serie menor de uv en `[build-system]`: al subir de serie, cambia la cota a mano.
+
+## PR y calidad
+
+- `main` solo recibe cambios por PR, también el de release. Los tags `v*` no se mueven ni se borran.
+- CI: `ci.yml` (`lint`, `test` y `changes`, que salta `test` si solo cambian docs) y `ci-windows.yml`. Cobertura a Codecov, informativa.
+- CodeScene revisa cada PR y su check (gate «The Bare Minimum») tiene que pasar. En `src/` y `scripts/`: 9 o más por archivo, y un archivo tocado no baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué.
+- MCP `codescene`, si está: `code_health_review` de lo tocado → si baja, corrige y confirma con `code_health_score` → `pre_commit_code_health_safeguard` en verde. Si falta el login o falla, dilo en una línea: basta el check del PR.
+- `CHANGELOG.md` (español, Keep a Changelog): lo que nota quien usa episteme (tools, hooks, skills, scripts, instalación) va en «Sin publicar», en el mismo PR.
+- Release: tag en local con CI en verde. Qué archivos cambian: «Publicar una versión» en `docs/desarrollo.md`.
 
 ## Al cambiar código
 
-Las cuatro pautas del `CLAUDE.md` de `forrestchang/andrej-karpathy-skills` (a partir de lo que observó Karpathy de los LLM al programar), llevadas a este repo. En tareas triviales, manda el criterio.
-
-- **Pensar antes de programar.** Di los supuestos. Si el pedido o el issue admite varias lecturas, nómbralas; no elijas una en silencio. Antes de decidir algo que quizá ya se decidió, `search` en episteme con `project="episteme"`.
-- **Simplicidad primero.** El mínimo que resuelve la tarea: sin tools, parámetros ni opciones que nadie pidió (manda el alcance cerrado de «Qué es»), sin abstracciones de un solo uso y sin manejo de errores para casos imposibles.
-- **Cambios quirúrgicos.** Cada línea del diff responde a la tarea. No reformatees ni refactorices el código de al lado. El código muerto ajeno se menciona en el PR, no se borra; lo que tu cambio dejó huérfano, sí (`vulture` lo detecta). La única excepción es CodeScene: si un archivo tocado baja su code health, se refactoriza solo la función que lo hace bajar.
-- **Ejecución guiada por objetivos.** Un bug empieza por un test que lo reproduce; un cambio de tool, por un test de integración por stdio (`tests/conftest.py`); un refactor deja `uv run pytest` igual antes y después. En tareas de varios pasos, un plan con su `→ verify:` por paso. Terminado quiere decir los checks de «Cómo se trabaja» en verde.
+- **Piensa antes.** Di los supuestos; si el pedido admite varias lecturas, nómbralas. Antes de decidir algo que quizá ya se decidió: `search` en episteme con `project="episteme"`.
+- **Lo mínimo.** Sin abstracciones de un solo uso ni manejo de errores para casos imposibles.
+- **Quirúrgico.** Cada línea del diff responde a la tarea; no reformatees lo de al lado. El código muerto ajeno se menciona en el PR; lo que tu cambio dejó huérfano se borra (`vulture`). Única excepción: si CodeScene baja un archivo tocado, refactoriza solo esa función.
+- **Verificable.** Bug → test que lo reproduce. Cambio de tool → test de integración por stdio. Refactor → `pytest` igual antes y después.
 
 ## Convenciones
 
-- Código, identificadores y commits en inglés, con Conventional Commits (`feat: …`, `fix: …`, `docs: …`).
-- Docstrings y descripciones de tools en inglés, que es lo que lee el modelo. `README.md` y `docs/`, en español. `README.en.md` es la traducción del `README.md` y se actualiza en el mismo PR (los enlaces a `docs/` apuntan a los documentos en español).
-- El `README.md` lo tiene que entender alguien no técnico: frases cortas, tablas y tecnicismos al mínimo; estructura: qué es, cómo funciona, instalación, uso diario, herramientas, límites, documentación. Los parámetros, los umbrales y los casos límite van en `docs/`, no en el README.
-- Los diagramas están en `static/diagrams/`: el HTML es la fuente (plugin diagram-design, variante oscura) y el PNG, exportado a 2x, es lo que se incrusta. Si cambia el HTML, se vuelve a exportar.
-- Los errores de los tools siguen `<código>: <qué falló>. <qué hacer>`, por ejemplo: `ambiguous: note name "best-practices" matches 2 notes: a.md, b.md. Pass the full path.`
+- Código, identificadores, docstrings, descripciones de tools y commits en inglés (Conventional Commits: `feat:`, `fix:`, `docs:`).
+- `README.md` y `docs/` en español; `README.en.md` se traduce en el mismo PR. Estilo y cabecera: regla `readme.md`.
+
+## Dónde está el resto
+
+| Qué | Dónde |
+|---|---|
+| Invariantes por módulo (se cargan al tocar sus archivos) | `.claude/rules/`: `hookmode`, `maintenance`, `memory`, `plugin`, `readme`, `tools`, `vault` |
+| CI, cobertura, Dependabot, Imgbot, CodeScene, scripts de medición, release | [`docs/desarrollo.md`](docs/desarrollo.md) |
+| Plugins e instalación | [`docs/instalacion.md`](docs/instalacion.md) |
+| Por qué se decidió cada cosa | memorias de episteme (`search` con `project="episteme"`) |
+| Instrucciones para agy | `GEMINI.md`, que remite aquí: revísalo si cambian `.claude/rules/` o lo que aquí es solo de Claude Code |
