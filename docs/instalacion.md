@@ -122,23 +122,23 @@ Un tipo que no está en la tabla suma 1. El documento está vencido con 7 días 
 
 ### agy (opcional)
 
-El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravity-plugin/plugin.json`, las skills de `plugin/skills/` y la regla `plugin/rules/AGENTS.md` (`trigger: always_on`), que le da lo esencial de las instrucciones del servidor, porque en agy no llegan al modelo. El plugin de agy es global; la regla se ignora en los workspaces sin episteme. La skill de documentación está en el plugin `episteme-docs`, que no tiene manifiesto de agy: no carga en agy. `setup`, `scaffold` y `agy` cargan en agy, pero no hacen nada útil ahí. `agy plugin validate` informa 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy), y el resto carga.
+El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravity-plugin/plugin.json`, las skills de `plugin/skills/` y la regla `plugin/rules/AGENTS.md` (siempre activa, sin frontmatter), que le da lo esencial de las instrucciones del servidor, porque en agy no llegan al modelo. El plugin de agy es global; la regla se ignora en los workspaces sin episteme. La skill de documentación está en el plugin `episteme-docs`, que no tiene manifiesto de agy: no carga en agy. `setup`, `scaffold` y `agy` cargan en agy, pero no hacen nada útil ahí. `agy plugin validate` informa 1 error esperado: agy salta el agente `extractor` (`model: sonnet` no es un tier de agy), y el resto carga. También informa 1 aviso esperado, `hooks/hooks.json: never loaded`: esos son los hooks de Claude Code y agy solo lee `hooks.json` en la raíz del plugin.
 
 `/episteme:agy`, sin argumentos y desde Claude Code, activa agy en el proyecto ya conectado con `/episteme:setup`:
 
 1. Comprueba `agy --version` y lee el registro de Claude Code (`claude mcp get episteme`).
 2. Si falta, propone instalar el plugin en agy (`agy plugin install <ruta del plugin | URL del repo>`).
 3. Escribe o fusiona `<proyecto>/.agents/mcp_config.json` con los mismos `command` y `args` del registro de Claude Code y `eager: true` para `context`, `search`, `read`, `remember` y `revise` (`agy mcp add` solo escribe en global).
-4. Si `~/.gemini/config/mcp_config.json` trae una entrada global `episteme`, avisa de que choca de nombre con la del proyecto y propone quitarla.
+4. Si `~/.gemini/config/mcp_config.json` trae una entrada global `episteme`, explica que agy usa esa y no la del proyecto, y propone quitarla: sin eso la activación no queda hecha.
 5. Pregunta si añadir `.agents/` a `.git/info/exclude`.
-6. Lo comprueba con una ejecución corta de `agy -p … --mode plan` (`agy mcp list` no muestra el MCP de proyecto).
+6. Lo comprueba con una ejecución corta de `agy -p … --mode plan` que muestra los tools `eager` del proyecto (`agy mcp list` no muestra el MCP de proyecto).
 7. Muestra las reglas `mcp(episteme/*)` para el `settings.json` global de agy, sin tocarlo: agy no aplica permisos de proyecto.
 
 Todo lo que toca fuera del proyecto lo hace solo con la aprobación de la persona.
 
 **Qué no hay en agy.** Ni hooks ni bienvenida automática, ni los modos `surface` y `constraints` de `context`, el extractor tras compactar o la copia de planes. agy usa los tools cuando la regla o el prompt se lo piden. Las respuestas de más de ~10 KB llegan truncadas, así que la regla pide lecturas acotadas.
 
-**Delegar.** `/episteme:agy <tarea>` (o «pásale esto a agy») corre en segundo plano `agy -p '<prompt>' --output-format json --mode plan --print-timeout 15m --settings '{"permissions":{"allow":["mcp(episteme/*)"]}}'`; `--mode accept-edits` solo si se piden cambios, y nunca `--dangerously-skip-permissions`. agy no guarda memorias: termina con «Resultado», «Memorias propuestas» y «Tools de episteme usados», y Claude guarda con `remember` lo que valga, anotando «propuesto por agy». Un permiso denegado no da error: sale `status: SUCCESS` con `response` vacío y `denied_actions` con contenido. Para seguir la conversación, `--conversation <conversation_id>`.
+**Delegar.** `/episteme:agy <tarea>` (o «pásale esto a agy») corre en segundo plano `agy -p '<prompt>' --output-format json --mode plan --print-timeout 15m --settings '{"permissions":{"allow":["mcp(episteme/*)"]}}'`; `--mode accept-edits` solo si se piden cambios, y nunca `--dangerously-skip-permissions`. agy no guarda memorias: termina con «Resultado», «Memorias propuestas» y «Tools de episteme usados», y Claude guarda con `remember` lo que valga, anotando «propuesto por agy». Un permiso denegado no da error: sale 0 con `status: SUCCESS` y agy lo avisa en `stderr`. Para seguir la conversación, `--conversation <conversation_id>`.
 
 ## Uso
 
