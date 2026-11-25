@@ -43,7 +43,7 @@
 
 ## Qué es
 
-Claude Code y agy (Google Antigravity, con Gemini) comparten las mismas memorias con episteme. Un agente de IA es como un colega brillante que cada mañana llega sin recordar nada de ayer: empieza cada sesión sin saber qué pasó en la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que tus agentes consultan y completan mientras trabajan. Lo que uno aprende, lo encuentra el otro.
+Claude Code y agy (Google Antigravity, con Gemini) comparten las mismas memorias con episteme. Un agente de IA es como un colega brillante que cada mañana llega sin recordar nada de ayer: empieza cada sesión sin saber qué pasó en la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que tus agentes consultan y completan mientras trabajan. Lo que uno aprende, lo encuentra el otro, y cada memoria anota qué agente la guardó.
 
 | | Qué hace por ti |
 | :-- | :-- |
@@ -53,7 +53,7 @@ Claude Code y agy (Google Antigravity, con Gemini) comparten las mismas memorias
 | **Retoma** | Lleva una nota viva de en qué vas, la pone al día sola después de compactar o de `/clear` y la recupera al seguir |
 | **Guarda tus planes** | Copia cada plan que apruebas en plan mode y, si limpias el contexto al aprobarlo, le dice a Claude dónde está |
 | **Mantiene la documentación al día** | Con `/episteme-docs:docs`, baja las páginas de la documentación de terceros guardada en el vault y actualiza solo las que cambiaron |
-| **Cuida el orden** | Detecta duplicados, memorias vencidas, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
+| **Cuida el orden** | Detecta duplicados, memorias vencidas o viejas que ya nadie consulta, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
 
 Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
 
@@ -209,7 +209,7 @@ Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes
 | `read` | Leer una nota, una sección o varias notas a la vez, y ver qué notas enlazan con ella | |
 | `context` | Dar la bienvenida de la sesión, reunir lo relevante para una tarea y mostrar lo que se sabe de un archivo y las normas que le aplican | ● |
 | `remember` | Guardar una memoria nueva, con una descripción de una línea si quieres; puede enlazarla sola con las memorias parecidas y avisa si le faltan palabras clave o enlaces | ● |
-| `revise` | Corregir, reemplazar o archivar una nota | ● |
+| `revise` | Corregir, reemplazar o archivar una nota, sin perder cambios si dos sesiones la tocan a la vez | ● |
 | `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
 | `session` | Guardar y retomar el estado de la sesión (objetivo, lo hecho, el siguiente paso), con una plantilla | ● |
 | `plan` | Guardar una copia de cada plan de plan mode y señalarla tras «clear context» (la usan los hooks) | ● |
