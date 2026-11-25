@@ -180,6 +180,11 @@ def _call(tool: str, **tool_input: str) -> dict:
     return {"tool_name": tool, "tool_input": tool_input}
 
 
+def _make_project_dirs(root: Path) -> None:
+    for name in ("src", "tests", "scripts", "docs", "plugin", "plugin-docs", ".github"):
+        (root / name).mkdir()
+
+
 PYTHON_CALLS = [
     _call("mcp__serena__find_symbol", name_path="x"),
     _call("Read", file_path="/p/a.py"),
@@ -197,7 +202,9 @@ PYTHON_CALLS = [
     _call("Bash", command="rg -g '*.py' x"),
     _call("Bash", command="rg -t py x"),
     _call("Bash", command="rg --type=py x"),
-    _call("Bash", command="cat scripts/run.sh"),
+    _call("Bash", command="grep -rn x src tests"),
+    _call("Bash", command="grep -n x src/pkg/mod.py"),
+    _call("Bash", command="cat > a.py <<'EOF'\nx\nEOF"),
 ]
 OTHER_CALLS = [
     _call("Read", file_path="/p/README.md"),
@@ -210,16 +217,37 @@ OTHER_CALLS = [
     _call("Bash", command="ls docs"),
     _call("Bash", command="grep x notes.pyc"),
     _call("WebFetch", url="https://example.com/a.py"),
+    _call(
+        "Bash",
+        command="/usr/bin/grep -rn 'CLAUDE.md' --include=*.md "
+        "docs plugin plugin-docs tests src .github",
+    ),
+    _call(
+        "Bash",
+        command="/usr/bin/grep -rn 'CLAUDE\\.md' docs plugin plugin-docs tests src .github",
+    ),
+    _call("Bash", command="/usr/bin/grep -rln 'Al cambiar código\\|Cómo se trabaja' plugin tests"),
+    _call(
+        "Bash",
+        command="cat > body.md <<'EOF'\nsee hooks/python-serena.py and src/\nEOF\n"
+        "gh issue create -F body.md",
+    ),
+    _call("Bash", command='gh pr create --body "fix hooks/python-serena.py"'),
+    _call("Bash", command="cat tests/fixtures/vault/a.md"),
+    _call("Bash", command="grep -rnE 'a|include=\\*\\.py' '--include=*.md' docs"),
+    _call("Bash", command="cat scripts/run.sh"),
 ]
 
 
 @pytest.mark.parametrize("call", PYTHON_CALLS)
 def test_python_serena_counts_python_calls(call: dict, tmp_path: Path) -> None:
+    _make_project_dirs(tmp_path)
     assert _hook_module()["python_call"]({**call, "cwd": str(tmp_path)}) is True
 
 
 @pytest.mark.parametrize("call", OTHER_CALLS)
 def test_python_serena_ignores_other_calls(call: dict, tmp_path: Path) -> None:
+    _make_project_dirs(tmp_path)
     assert _hook_module()["python_call"]({**call, "cwd": str(tmp_path)}) is False
 
 

@@ -8,6 +8,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - `/episteme-docs:docs`: el `suggested_path` de una página nueva ya no sale como `.md` sin nombre (o `-apps.md`) cuando un `include` es una página exacta (`…/docs/hooks` para `…/docs/hooks.md`, o `…/docs/mcp` para `…/docs/mcp-apps.md`): el prefijo se corta en el último `/` y la página conserva su nombre.
 - `docs/instalacion.md` ya no dice que `episteme-docs` no carga en agy: `agy plugin install` lo convierte desde el manifiesto de Claude Code.
+- `/episteme:scaffold`, hook `python-serena.py remind`: las búsquedas y lecturas que no son de Python ya no cuentan para la racha de Serena. No cuentan un `.py` dentro de un heredoc o de un texto entre comillas, una búsqueda con `--include=*.md` (u otro tipo), una búsqueda que también abarca carpetas fuera de `src/`, `tests/` y `scripts/`, ni un archivo que no es Python dentro de ellas (#87).
 
 ## [0.22.1] - 2026-11-24
 
