@@ -4,18 +4,7 @@
 
 <a href="https://github.com/Bajmein/episteme/tags"><img alt="Version" src="https://img.shields.io/badge/version-v0.22.1-8B5CF6?style=for-the-badge"></a>
 <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/python-3.14+-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54"></a>
-<a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/uv-DE5FE9?style=for-the-badge&logo=uv&logoColor=white"></a>
-<a href="https://github.com/modelcontextprotocol/python-sdk"><img alt="MCP SDK" src="https://img.shields.io/badge/MCP_SDK-2.x-005571?style=for-the-badge&logo=modelcontextprotocol&logoColor=white"></a>
-<a href="https://www.sqlite.org/fts5.html"><img alt="SQLite FTS5" src="https://img.shields.io/badge/sqlite-FTS5-07405e?style=for-the-badge&logo=sqlite&logoColor=white"></a>
-<a href="https://obsidian.md/"><img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-483699?style=for-the-badge&logo=obsidian&logoColor=white"></a>
-<a href="https://www.markdownguide.org/"><img alt="Markdown" src="https://img.shields.io/badge/markdown-000000?style=for-the-badge&logo=markdown&logoColor=white"></a>
-<a href="https://codescene.io/projects/87754"><img alt="CodeScene" src="https://img.shields.io/badge/CodeScene-analyzed-5F46EB?style=for-the-badge"></a>
 <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge"></a>
-<br>
-<a href="#installation"><img alt="Linux" src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black"></a>
-<a href="#installation"><img alt="macOS" src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=macos&logoColor=F0F0F0"></a>
-<a href="#installation"><img alt="Windows" src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge"></a>
-<br>
 <a href="https://github.com/Bajmein/episteme/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Bajmein/episteme/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI"></a>
 <a href="https://codecov.io/gh/Bajmein/episteme"><img alt="Coverage" src="https://img.shields.io/codecov/c/github/Bajmein/episteme/main?style=for-the-badge&logo=codecov&logoColor=white&label=coverage"></a>
 
@@ -23,21 +12,9 @@
 
 **One curated project memory for all your agents.**
 
+<a href="README.md">Español</a> · <b>English</b>
+
 </div>
-
-<p align="center">
-  <a href="README.md">Español</a> · <b>English</b>
-</p>
-
-<p align="center">
-  <a href="#what-it-is">What it is</a> ·
-  <a href="#how-it-works">How it works</a> ·
-  <a href="#installation">Installation</a> ·
-  <a href="#daily-use">Daily use</a> ·
-  <a href="#the-9-tools">Tools</a> ·
-  <a href="#limits">Limits</a> ·
-  <a href="#documentation">Documentation</a>
-</p>
 
 ---
 
@@ -46,58 +23,51 @@
 
 ## What it is
 
-An AI agent is like a brilliant colleague who arrives every morning remembering nothing about yesterday. **episteme gives it a memory that lasts**: a folder of Markdown notes (the *vault*) that holds the decisions, lessons and documentation of your projects. Claude Code and agy (Google Antigravity, with Gemini) share the same memories, and each one records which agent saved it.
+An AI agent is like a brilliant colleague who arrives every morning remembering nothing about yesterday. **episteme gives it a memory that lasts**: a folder of Markdown notes (the *vault*) with the decisions, lessons and documentation of your projects. Claude Code and agy (Google Antigravity, with Gemini) share the same memories.
 
 | | What it does for you |
 | :-- | :-- |
-| **Remembers** | Saves decisions, lessons, errors and preferences, by project |
-| **Finds** | Searches the whole vault, in Spanish, ignoring case and accents |
+| **Remembers** | Decisions, lessons, errors and preferences, by project |
+| **Finds** | Searches the whole vault, ignoring case and accents |
 | **Warns in time** | Shows a file's rules before it is edited |
-| **Picks up where you left off** | Saves what you are working on and brings it back after compacting, `/clear` or when you continue |
-| **Saves your plans** | Copies every plan you approve in plan mode |
-| **Keeps the documentation current** | Updates third-party documentation with `/episteme-docs:docs` |
-| **Keeps things tidy** | Detects duplicates, expired memories and broken links; refuses passwords and tokens |
+| **Picks up** | Brings back what you were doing after compacting or `/clear` |
+| **Saves your plans** | Copies every plan you approve |
+| **Keeps things tidy** | Detects duplicates and expired memories; refuses passwords |
 
-**Your notes are your own Markdown files and never leave your machine** (open them with [Obsidian](https://obsidian.md/) or any editor). The only network use is the installation, from GitHub, and `/episteme-docs:docs`, if you use it.
+**Your notes are your own Markdown files and never leave your machine** (open them with [Obsidian](https://obsidian.md/) or any editor). It only uses the network to install and with `/episteme-docs:docs`, if you use it.
 
 > [!NOTE]
-> **Current version: v0.22.1.** Works on Linux, macOS and Windows. What is new in each version is in the [CHANGELOG](CHANGELOG.md) (in Spanish).
+> **Current version: v0.22.1.** Works on Linux, macOS and Windows. What is new, in the [CHANGELOG](CHANGELOG.md) (in Spanish).
 
-## How it works
+### How it works
 
 <p align="center">
   <img src="static/diagrams/arquitectura.png" alt="Claude Code (the agent and its hooks) and, if you enable it, agy call the episteme server, which reads and writes the vault's Markdown notes (memories, documentation, sessions and plans) and keeps a search index; Obsidian can open the same vault. The text inside the diagram is in Spanish." width="880">
 </p>
 
-1. **Claude Code** uses episteme's tools when it needs them, and its *hooks* call them automatically at fixed moments of the session. **agy** uses the same tools, without hooks.
-2. **episteme** is a small program that runs on your machine. It is the only door to the vault: it validates what is saved and keeps an index for fast search.
-3. **The vault** is a folder of Markdown notes, by default `~/.episteme`. You can read and edit it with Obsidian.
+episteme is a small program that runs on your machine and is the only door to the vault: it validates what is saved and indexes it for fast search. Agents use it through its tools; in Claude Code, *hooks* also call it automatically at fixed moments.
+
+| | Claude Code | agy | Other MCP client |
+| :-- | :-: | :-: | :-: |
+| Tools (search, read, save) | Yes | Yes | Yes |
+| Automations (hooks) | Yes | No | No |
 
 <details>
 <summary><b>Quick glossary</b></summary>
 
 | Term | What it means |
 | :-- | :-- |
-| **Vault** | The folder with all the notes. It is split into zones: memories, documentation, session state and plans |
-| **Memory** | A short note with something worth remembering: a decision, a lesson, a reminder |
-| **Tool** | An action Claude can ask episteme for: search, read, save |
+| **Vault** | The folder with all the notes: memories, documentation, sessions and plans |
+| **Memory** | A short note with something worth remembering |
+| **Tool** | An action Claude asks episteme for: search, read, save |
 | **Hook** | A Claude Code automation that calls a tool without anyone asking |
-| **MCP** | The standard protocol Claude Code uses to connect to programs like episteme |
+| **MCP** | The protocol Claude Code uses to connect to programs like episteme |
 
 </details>
 
-### Which agents it works with
-
-| | Claude Code | agy | Other MCP client |
-| :-- | :-: | :-: | :-: |
-| Tools (search, read, save) | Yes | Yes | Yes |
-| Automations: welcome, suggestions with each message, rules and notices when touching files, continuity after `/compact` and `/clear`, copy of plans | Yes | No | No |
-
-In agy and other clients, the agent uses the tools when you ask or when a rule tells it to.
-
 ## Installation
 
-**You need** [uv](https://docs.astral.sh/uv/) and git. uv gets Python for you if it is missing.
+**You need** [uv](https://docs.astral.sh/uv/) and git. uv gets Python if it is missing.
 
 ### Option A · With the skill (recommended)
 
@@ -108,23 +78,14 @@ claude plugin marketplace add Bajmein/episteme
 claude plugin install episteme@episteme
 ```
 
-Then, in each project you want to connect:
+Then, in each project:
 
 1. Restart Claude Code and open it at the project root.
 2. Type `/episteme:setup`.
-3. Approve the changes it shows you: it registers the server, sets up hooks and permissions, and adds the rule to `CLAUDE.md`.
+3. Approve the changes: it registers the server, sets up hooks and permissions, and adds the rule to `CLAUDE.md`.
 
-| Skill | What for |
-| :-- | :-- |
-| `/episteme:setup` | Connect the project: server, hooks, permissions and the `CLAUDE.md` rule |
-| `/episteme:sesion` | Save where you are (`guardar`) and pick it up (`retomar`) |
-| `/episteme:mantencion` | Review memories with you; `corta` does a quick round and `huerfanas` links the loose ones |
-| `/episteme:reminder <text>` | Leave a reminder that appears at the start of each session |
-| `/episteme:scaffold` | Create or review `README.md`, `CLAUDE.md`, `CHANGELOG.md` and `.gitignore`; with `auditar` it only reviews |
-| `/episteme:agy [task]` | Enable agy in the project and hand it tasks |
-| `/episteme-docs:docs [suite]` | Update the third-party documentation. Separate, optional plugin: `claude plugin install episteme-docs@episteme` |
-
-The skills also load in agy, including `/episteme-docs:docs`, but without hooks or an automatic welcome (see «agy» in [Installation](docs/instalacion.md#agy-opcional), in Spanish).
+> [!TIP]
+> `claude mcp list` should show `episteme` connected. The first time takes a while, because it downloads. To update, repeat the registration with the new tag.
 
 <details>
 <summary><b>Option B · By hand (without the skill)</b></summary>
@@ -148,9 +109,6 @@ The hooks, the permissions and the `CLAUDE.md` rule are still missing: they are 
 
 </details>
 
-> [!TIP]
-> To check it, `claude mcp list` should show `episteme` connected. The first time takes a while, because it downloads. To update, repeat the registration with the new tag.
-
 ## Daily use
 
 There are no commands to learn: you use it by talking to Claude.
@@ -161,14 +119,28 @@ There are no commands to learn: you use it by talking to Claude.
 
 | You | episteme |
 | :-- | :-- |
-| Start a session | Delivers the rules, the due reminders and the most important memories |
+| Start a session | Delivers the rules, the reminders and the key memories |
 | Write a message | Suggests the memories that are relevant |
-| Say «remember that…» | Saves a new memory, unless an almost identical one exists |
+| Say «remember that…» | Saves a memory, unless an almost identical one exists |
 | Ask «what did we decide about…?» | Claude searches the vault before answering |
 | Claude is about to edit a file | Shows it that file's rules |
-| Approve a plan in plan mode | Saves a copy and, if you clear the context, says where it is |
-| Compact or use `/clear` | Recovers the work state and updates it in the background |
-| Ask for `/episteme:mantencion` | Reviews duplicates, contradictions and expired memories with you |
+| Approve a plan | Saves a copy and says where it is after clearing the context |
+| Compact or use `/clear` | Recovers the work state |
+
+For some tasks there are shortcuts:
+
+| Shortcut | What for |
+| :-- | :-- |
+| `/episteme:sesion` | Save where you are (`guardar`) and pick it up (`retomar`) |
+| `/episteme:mantencion` | Review duplicates, contradictions and expired memories with you |
+| `/episteme:reminder <text>` | Leave a reminder for each session |
+| `/episteme:scaffold` | Create or review `README.md`, `CLAUDE.md` and `CHANGELOG.md` |
+| `/episteme:agy [task]` | Enable agy and hand it tasks |
+| `/episteme-docs:docs [suite]` | Update the third-party documentation (separate plugin: `claude plugin install episteme-docs@episteme`) |
+
+The skills also load in agy, but without hooks or an automatic welcome ([agy](docs/instalacion.md#agy-opcional), in Spanish).
+
+Under the hood, Claude uses 9 tools: search, read, save, correct, review and others. Each memory has a type (decision, rule, lesson…) and a priority from 1 to 5; priority-5 memories are the rules Claude sees at the start. Detail in [Tools and memories](docs/tools.md#memorias) (in Spanish).
 
 <details>
 <summary><b>What the hooks do in each session</b></summary>
@@ -183,50 +155,34 @@ Hooks never block Claude or decide for it: they only bring it context. Configura
   <img src="static/diagrams/compactar-clear.png" alt="Sequence showing how the work state survives /compact and /clear: when compacting, the summary writes the state up to date and episteme saves it; it brings it back with the welcome when starting again, and after /clear the extractor agent updates it in the background. The text inside the diagram is in Spanish." width="880">
 </p>
 
-When compacting you do not have to do anything: episteme saves the work state. A new session tells you it exists and you pick it up with `/episteme:sesion retomar`. Detail in [Session state](docs/sesion.md) (in Spanish).
+When compacting, episteme saves the work state; in a new session you pick it up with `/episteme:sesion retomar`. Detail in [Session state](docs/sesion.md) (in Spanish).
 
 </details>
 
-## The 9 tools
-
-| Tool | What it is for | Writes |
-| :-- | :-- | :-: |
-| `search` | Search the notes and memories | |
-| `read` | Read notes and see which other notes link to them | |
-| `context` | Give the welcome, gather what is relevant for a task and show a file's rules | ● |
-| `remember` | Save a new memory, linked to similar ones | ● |
-| `revise` | Correct, replace or archive a note without losing changes | ● |
-| `review` | Review the vault: duplicates, expired, broken links and loose memories | |
-| `session` | Save and pick up the session state | ● |
-| `plan` | Save a copy of each plan-mode plan (the hooks use it) | ● |
-| `docs` | See the documentation suites and save a page (used by `/episteme-docs:docs`) | ● |
-
-`docs` only appears if the vault has documentation suites; without them there are 8. Each memory has a type (decision, rule, lesson, error, preference, finding or reminder) and a priority from 1 to 5: priority-5 memories are the rules Claude sees at the start. Detail in [Tools and memories](docs/tools.md#memorias) (in Spanish).
-
 ## Limits
 
-- **Search by keywords, not by embeddings.** «marketing» does not find «mkt»: that is why each memory carries `keywords` with synonyms. With bge-m3 and 147 real queries, only 3 found anything new ([measurement](docs/desarrollo.md#medir-si-los-embeddings-aportan), in Spanish).
-- **It warns, it does not force.** The rules reach Claude in time, but nothing stops it from ignoring them.
-- **It does not tidy itself.** Merging and resolving contradictions is for you to approve, with `/episteme:mantencion`. It is worth enabling `archive_expired = true` ([Maintenance](docs/mantencion.md), in Spanish).
-- **The password filter knows the usual formats.** An unusual key may get through: do not dictate secrets.
+- **It searches by words, not by meaning.** «marketing» does not find «mkt»: that is why each memory carries `keywords` with synonyms. With bge-m3 and 147 real queries, only 3 found anything new ([measurement](docs/desarrollo.md#medir-si-los-embeddings-aportan), in Spanish).
+- **It warns, it does not force.** The rules arrive in time, but Claude can ignore them.
+- **It does not tidy itself.** Merging and resolving contradictions is for you to approve, with `/episteme:mantencion` ([Maintenance](docs/mantencion.md), in Spanish).
+- **The password filter is not perfect.** It knows the usual formats: do not dictate secrets.
 
 ## Documentation
 
+All in Spanish.
+
 | Document | Contents |
 | :-- | :-- |
-| [Installation](docs/instalacion.md) (in Spanish) | Manual steps on Linux, macOS and Windows, and the plugin |
-| [Configuration](docs/configuracion.md) (in Spanish) | Arguments, variables, `episteme.toml` and the activity log |
-| [Tools and memories](docs/tools.md) (in Spanish) | The 9 tools, the memory schema and the errors |
-| [Session state](docs/sesion.md) (in Spanish) | The live note of each thread of work in `sesiones/` |
-| [Plans](docs/planes.md) (in Spanish) | The copy of each plan and how it is recovered after «clear context» |
-| [Documentation suites](docs/documentacion.md) (in Spanish) | Third-party documentation in the vault and `/episteme-docs:docs` |
-| [Hooks](docs/hooks.md) (in Spanish) | The block for `settings.json` and the recommended permissions |
-| [Maintenance](docs/mantencion.md) (in Spanish) | Warnings, archiving, backup and the review cycle |
-| [OMEGA migration](docs/migracion-omega.md) (in Spanish) | How to bring over the OMEGA memories |
-| [Development](docs/desarrollo.md) (in Spanish) | Tests, lint, code health and measurement scripts |
-| [CHANGELOG](CHANGELOG.md) (in Spanish) | Changes in each version |
-
-Want to contribute? Tests and lint in [Development](docs/desarrollo.md) (in Spanish); the agents already have their instructions in [`CLAUDE.md`](CLAUDE.md) (Claude Code) and [`GEMINI.md`](GEMINI.md) (agy), in Spanish.
+| [Installation](docs/instalacion.md) | By hand, the plugin and agy |
+| [Configuration](docs/configuracion.md) | Arguments, variables and `episteme.toml` |
+| [Tools and memories](docs/tools.md) | The tools, the memories and the errors |
+| [Session state](docs/sesion.md) | Picking up the work after compacting or `/clear` |
+| [Plans](docs/planes.md) | The copy of each plan |
+| [Documentation suites](docs/documentacion.md) | Third-party documentation in the vault |
+| [Hooks](docs/hooks.md) | Configuration and permissions |
+| [Maintenance](docs/mantencion.md) | Archiving, backup and review |
+| [OMEGA migration](docs/migracion-omega.md) | Bringing over the OMEGA memories |
+| [Development](docs/desarrollo.md) | Tests, lint, CI and release |
+| [CHANGELOG](CHANGELOG.md) | Changes in each version |
 
 ## License
 
