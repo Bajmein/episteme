@@ -166,6 +166,6 @@ En cada proyecto conectado, vuelve a registrar `episteme` con el tag nuevo: `cla
 # Publicar una versión de episteme (mantenedor)
 
 1. CI en verde en `main` (`gh run list --branch main --limit 1`), en Ubuntu y en Windows.
-2. Sube `version` en `plugin/.claude-plugin/plugin.json` al mismo número que `pyproject.toml`.
+2. PR de release, mezclado con CI en verde: sube `version` en `pyproject.toml` (y `uv lock`) y en los tres `plugin.json` (`plugin/.claude-plugin`, `plugin/.antigravity-plugin`, `plugin-docs/.claude-plugin`), y cambia el badge, la línea «Versión actual» y los ejemplos de los README, los ejemplos de `docs/instalacion.md` y «Sin publicar» de `CHANGELOG.md`. La lista completa: «Publicar una versión» en `docs/desarrollo.md`.
 3. En local (el cloud no puede subir tags), desde el clone: `git tag vX.Y.Z && git push --tags`.
 4. Actualiza los proyectos conectados como en «Actualizar episteme».
