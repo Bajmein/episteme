@@ -8,6 +8,7 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 - agy: la regla `plugin/rules/AGENTS.md` ya no lleva frontmatter, que agy inyectaba como texto (en `rules/AGENTS.md` no se usa).
 - `/episteme:agy` avisa de que un servidor `episteme` global de agy tapa al del proyecto (agy usa el global sin avisar), no da la activación por hecha mientras siga ahí y la comprueba con los tools `eager` del proyecto. Los permisos negados en `agy -p` se leen en `stderr`.
+- `/episteme:agy` ya no copia una ruta absoluta en `.agents/mcp_config.json`. Si el registro de Claude Code usa `uv run --directory <raíz del proyecto>`, quita el `--directory`: agy no expande variables en esa config y lanza el servidor en la carpeta desde donde corre.
 
 ## [0.22.0] - 2026-11-24
 
