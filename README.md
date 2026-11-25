@@ -68,7 +68,7 @@ episteme es un programa pequeño que corre en tu máquina y es la única puerta 
 
 ### Opción A · Con la skill (recomendada)
 
-Una vez por máquina, igual en Linux, macOS y Windows ([más detalles](docs/instalacion.md#los-plugins)):
+Una vez por máquina (y por cuenta de Claude Code), igual en Linux, macOS y Windows ([más detalles](docs/instalacion.md#los-plugins)):
 
 ```bash
 claude plugin marketplace add Bajmein/episteme
