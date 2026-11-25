@@ -75,6 +75,7 @@ Los mismos comandos sirven en PowerShell. Después, reinicia Claude Code.
 | [`/episteme:scaffold`](../plugin/skills/scaffold/SKILL.md) | La persona; o Claude, cuando el hook `doc-review` avisa | Crea o audita `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/`, `.claude/rules/docs.md` y `.gitignore` desde plantillas, y ofrece módulos locales de desarrollo. No hace commits |
 | [`/episteme-docs:docs [suite]`](../plugin-docs/skills/docs/SKILL.md) | La persona, o Claude cuando se le pide poner al día la documentación | Revisa las suites de documentación de `docs/` del vault contra su fuente y escribe lo que cambió con `docs(action="write")` (ver [Suites de documentación](documentacion.md)) |
 | [`/episteme:agy [tarea]`](../plugin/skills/agy/SKILL.md) | La persona, o Claude cuando se le pide «pásale esto a agy» | Activa agy con episteme en el proyecto o le delega una tarea en modo headless (ver «agy (opcional)») |
+| [`/episteme:copilot`](../plugin/skills/copilot/SKILL.md) | La persona | Activa Copilot CLI con episteme en el proyecto: MCP, hooks y regla (ver «Copilot CLI (opcional)») |
 
 El plugin sigue a la versión del release y el servidor al tag fijado en cada proyecto: si actualizas uno, actualiza el otro (ver «Actualizar episteme» en `/episteme:setup`). Al pasar de una versión anterior a 0.20.0, vuelve a correr `/episteme:setup` en cada proyecto: los hooks llaman ahora a `context` con `mode`, y la skill quita del `allow` los tools que ya no existen (`surface`, `constraints`, `links` y `docs_status`).
 
@@ -129,16 +130,33 @@ El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravi
 1. Comprueba `agy --version` y lee el registro de Claude Code (`claude mcp get episteme`).
 2. Si falta, propone instalar el plugin en agy (`agy plugin install <ruta del plugin | URL del repo>`).
 3. Escribe o fusiona `<proyecto>/.agents/mcp_config.json` con los mismos `command` y `args` del registro de Claude Code (sin `--directory` cuando apunta a la raíz del proyecto: agy no expande variables en esa config y lanza el servidor desde la carpeta donde corre) y `eager: true` para `context`, `search`, `read`, `remember` y `revise` (`agy mcp add` solo escribe en global).
-4. Si `~/.gemini/config/mcp_config.json` trae una entrada global `episteme`, explica que agy usa esa y no la del proyecto, y propone quitarla: sin eso la activación no queda hecha.
-5. Pregunta si añadir `.agents/` a `.git/info/exclude`.
-6. Lo comprueba con una ejecución corta de `agy -p … --mode plan` que muestra los tools `eager` del proyecto (`agy mcp list` no muestra el MCP de proyecto).
-7. Muestra las reglas `mcp(episteme/*)` para el `settings.json` global de agy, sin tocarlo: agy no aplica permisos de proyecto.
+4. Copia `plugin/hooks/episteme-hook.py` a `<proyecto>/.agents/hooks/` y escribe o fusiona `<proyecto>/.agents/hooks.json` con la entrada `episteme` (`SessionStart` y `PreInvocation`, `uv run --quiet --script hooks/episteme-hook.py --client agy --event <evento>`). Si `~/.gemini/config/hooks.json` trae un hook `episteme`, propone quitarlo: duplicaría la bienvenida.
+5. Si `~/.gemini/config/mcp_config.json` trae una entrada global `episteme`, explica que agy usa esa y no la del proyecto, y propone quitarla: sin eso la activación no queda hecha.
+6. Pregunta si añadir `.agents/` a `.git/info/exclude`.
+7. Lo comprueba con una ejecución corta de `agy -p … --mode plan` que muestra los tools `eager` del proyecto (`agy mcp list` no muestra el MCP de proyecto), y `/hooks` en una sesión de agy muestra `episteme`.
+8. Muestra las reglas `mcp(episteme/*)` para el `settings.json` global de agy, sin tocarlo: agy no aplica permisos de proyecto.
 
 Todo lo que toca fuera del proyecto lo hace solo con la aprobación de la persona.
 
-**Qué no hay en agy.** Ni hooks ni bienvenida automática, ni los modos `surface` y `constraints` de `context`, el extractor tras compactar o la copia de planes. agy usa los tools cuando la regla o el prompt se lo piden. Las respuestas de más de ~10 KB llegan truncadas, así que la regla pide lecturas acotadas.
+**Qué no hay en agy.** Los hooks de `.agents/hooks.json` dan la bienvenida (`SessionStart`) y el contexto de cada mensaje (`PreInvocation`, solo en la primera llamada al modelo). No hay los modos `surface` y `constraints` de `context` (en agy, `PostToolUse` no inyecta nada), el extractor tras compactar ni la copia de planes: agy no tiene eventos de compactación ni de plan mode. Para lo demás, agy usa los tools cuando la regla o el prompt se lo piden. Las respuestas de más de ~10 KB llegan truncadas, así que la regla pide lecturas acotadas.
 
 **Delegar.** `/episteme:agy <tarea>` (o «pásale esto a agy») corre en segundo plano `agy -p '<prompt>' --output-format json --mode plan --print-timeout 15m --settings '{"permissions":{"allow":["mcp(episteme/*)"]}}'`; `--mode accept-edits` solo si se piden cambios, y nunca `--dangerously-skip-permissions`. agy no guarda memorias: termina con «Resultado», «Memorias propuestas» y «Tools de episteme usados», y Claude guarda con `remember` lo que valga, anotando «propuesto por agy». Un permiso denegado no da error: sale 0 con `status: SUCCESS` y agy lo avisa en `stderr`. Para seguir la conversación, `--conversation <conversation_id>`.
+
+### Copilot CLI (opcional)
+
+GitHub Copilot CLI usa episteme con su propia config de proyecto, que solo carga si la carpeta es de confianza. `/episteme:copilot`, desde Claude Code y en un proyecto ya conectado con `/episteme:setup`:
+
+1. Comprueba `copilot --version` y lee el registro de Claude Code (`claude mcp get episteme`).
+2. Escribe o fusiona `<proyecto>/.github/mcp.json` con `episteme` (`"type": "local"`, el mismo `command` y los mismos `args` del registro, `"tools": ["*"]`). Claude Code no lee ese archivo.
+3. Copia `plugin/hooks/episteme-hook.py` a `<proyecto>/.github/hooks/` y escribe `<proyecto>/.github/hooks/episteme.json` con `sessionStart` y `userPromptSubmitted` (`uv run --quiet --script "$COPILOT_PROJECT_DIR/.github/hooks/episteme-hook.py" --client copilot --event <evento>`).
+4. Escribe la regla `<proyecto>/.github/instructions/episteme.instructions.md` (`applyTo: "**"` y el cuerpo de `plugin/rules/AGENTS.md`).
+5. Pregunta si añadir esos archivos a `.git/info/exclude`.
+6. Lo comprueba con `copilot mcp list`; en una sesión de Copilot, `/env` lista el hook y el primer mensaje trae «episteme · welcome». El primer uso pide aprobar `episteme(*)`.
+7. Opcional y con aprobación (es global): `copilot plugin marketplace add Bajmein/episteme` y `copilot plugin install episteme@episteme`, para tener las skills.
+
+**Aviso esperado.** Copilot también lee `.claude/settings.local.json` y `.claude/settings.json` como «repository settings». Si tienen hooks de Claude Code de tipo `mcp_tool` (los de `/episteme:setup`), Copilot descarta ese archivo entero con `Invalid hook type`: no tiene `mcp_tool`. Los hooks de Claude Code siguen igual y Copilot usa los suyos de `.github/hooks/`.
+
+**Qué no hay en Copilot CLI.** Los modos `surface` y `constraints` de `context`, el extractor, la copia de planes ni el estado al compactar: Copilot no tiene `postCompact` y su `sessionStart` no trae `clear`.
 
 ## Uso
 

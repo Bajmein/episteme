@@ -10,7 +10,7 @@ Tarea: $ARGUMENTS
 
 Sin tarea, ve a «Activar». Con tarea, ve a «Delegar»; si falta `<ws>/.agents/mcp_config.json` con `episteme`, dilo y ofrece «Activar» antes: no lo actives sin que la persona lo pida.
 
-Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, bienvenida automática, los modos `surface` y `constraints` de `context`, extractor ni copia de planes: el contexto le llega por la regla del plugin (`rules/AGENTS.md`, siempre activa).
+Trabaja desde la raíz del proyecto (`<ws>`). Con «Activar», agy tiene hooks de bienvenida (`SessionStart`) y de contexto por mensaje (`PreInvocation`), más la regla del plugin (`rules/AGENTS.md`, siempre activa). No hay los modos `surface` y `constraints` de `context`, extractor ni copia de planes.
 
 ## Activar
 
@@ -39,17 +39,38 @@ Trabaja desde la raíz del proyecto (`<ws>`). En agy no hay hooks de episteme, b
    ```
 
    `eager` hace que agy muestre esos tools al modelo desde el principio; no evita el truncado de las respuestas largas.
-4. **Entrada global.** Lee `~/.gemini/config/mcp_config.json`. Si trae un servidor `episteme` (p. ej. `~/.local/bin/episteme` sin `--project`), agy usa ese e ignora el del proyecto sin avisar (comprobado con agy 1.5.16), y sin `--project` escribe en otro proyecto. La activación no queda hecha mientras siga ahí. Propón quitarlo (`agy mcp remove episteme`, con un respaldo antes del archivo) y hazlo solo con la aprobación de la persona. Si no lo aprueba, sigue con el paso 5, salta la comprobación del paso 6 y di en el informe que la activación quedó incompleta y por qué.
-5. **Git.** Pregunta si añadir `.agents/` a `.git/info/exclude` (la config es de la máquina, como `.mcp.json` en `setup`). Solo con un sí.
-6. **Comprobación.** `agy mcp list` no muestra el MCP de proyecto; usa una ejecución corta desde `<ws>`:
+4. **Hook del proyecto.**
+   - Copia `${CLAUDE_SKILL_DIR}/../../hooks/episteme-hook.py` a `<ws>/.agents/hooks/episteme-hook.py`. Para actualizarlo, vuelve a correr «Activar»: la copia sale de la versión instalada del plugin.
+   - Escribe `<ws>/.agents/hooks.json`. Si existe, léelo y fusiona: conserva los demás hooks y reemplaza solo `episteme`. La ruta es relativa porque agy corre el hook en `.agents/`.
+
+     ```json
+     {
+       "episteme": {
+         "SessionStart": [
+           { "type": "command", "command": "uv run --quiet --script hooks/episteme-hook.py --client agy --event SessionStart", "timeout": 30 }
+         ],
+         "PreInvocation": [
+           { "type": "command", "command": "uv run --quiet --script hooks/episteme-hook.py --client agy --event PreInvocation", "timeout": 30 }
+         ]
+       }
+     }
+     ```
+
+   - El script lee `.agents/mcp_config.json`, lanza el servidor, llama a `context` y devuelve `injectSteps`. Ante cualquier fallo devuelve `{}` y no frena a agy.
+   - Lee `~/.gemini/config/hooks.json`. Si trae un hook `episteme`, duplicaría la bienvenida y el contexto por mensaje. Propón quitar esa entrada (con un respaldo antes del archivo) y hazlo solo con la aprobación de la persona.
+5. **Entrada global.** Lee `~/.gemini/config/mcp_config.json`. Si trae un servidor `episteme` (p. ej. `~/.local/bin/episteme` sin `--project`), agy usa ese e ignora el del proyecto sin avisar (comprobado con agy 1.5.16), y sin `--project` escribe en otro proyecto. La activación no queda hecha mientras siga ahí. Propón quitarlo (`agy mcp remove episteme`, con un respaldo antes del archivo) y hazlo solo con la aprobación de la persona. Si no lo aprueba, sigue con el paso 6, salta la comprobación del paso 7 y di en el informe que la activación quedó incompleta y por qué.
+6. **Git.** Pregunta si añadir `.agents/` a `.git/info/exclude` (la config es de la máquina, como `.mcp.json` en `setup`). Solo con un sí.
+7. **Comprobación.** `agy mcp list` no muestra el MCP de proyecto; usa una ejecución corta desde `<ws>`:
 
    ```bash
    agy -p 'Di qué tools del servidor MCP episteme tienes como Eager y llama a context(mode="welcome") de episteme sin pasar project; responde solo con la lista de tools Eager y el número de normas' \
      --output-format json --mode plan --settings '{"permissions":{"allow":["mcp(episteme/*)"]}}'
    ```
 
-   Vale si la lista trae `context`, `search`, `read`, `remember` y `revise` (solo el servidor del proyecto los tiene como `eager`), `response` trae un número y el `stderr` no avisa de ningún permiso negado. Si `context` falla con `no project given`, respondió el global: vuelve al paso 4. Si no, muestra la salida y el `stderr`.
-7. **Informe.** Di qué escribiste y dónde, qué propuestas quedaron sin aprobar, y muestra las reglas que la persona puede poner en el `settings.json` global de agy para no pasar `--settings` (los permisos de proyecto no se aplican en agy). No lo toques:
+   Vale si la lista trae `context`, `search`, `read`, `remember` y `revise` (solo el servidor del proyecto los tiene como `eager`), `response` trae un número y el `stderr` no avisa de ningún permiso negado. Si `context` falla con `no project given`, respondió el global: vuelve al paso 5. Si no, muestra la salida y el `stderr`.
+
+   Para los hooks, pide a la persona abrir `agy` en el proyecto: `/hooks` muestra `episteme` (de `.agents/hooks.json`) y la bienvenida llega una sola vez.
+8. **Informe.** Di qué escribiste y dónde, qué propuestas quedaron sin aprobar, y muestra las reglas que la persona puede poner en el `settings.json` global de agy para no pasar `--settings` (los permisos de proyecto no se aplican en agy). No lo toques:
 
    ```json
    { "permissions": { "allow": ["mcp(episteme/*)"] } }

@@ -24,7 +24,7 @@ Dependencias solo con `uv` (`uv add`), nunca `pip install`.
 - `memory/`, `index/`, `docs/`, `session/` y `plans/`: paquetes cuyo `__init__.py` reexporta lo que se usa desde fuera.
 - `vault.py`, `engine.py`, `activity.py`, `prompting.py`, `backup.py`, `maintenance.py`, `hookmode.py`: vault, motor, registro de actividad, inyección por mensaje, copias, mantención y modo hook. `worktree.py`: resolver `project_dir` y comparar el worktree de estados y planes.
 
-`plugin/` es el plugin de Claude Code (y de agy): skills, el agente `extractor` y la regla `plugin/rules/AGENTS.md`. `plugin-docs/` es el plugin opcional `episteme-docs` (la skill `/episteme-docs:docs` y su `docs_check.py`). Ninguno trae el servidor.
+`plugin/` es el plugin de Claude Code (y de agy y Copilot CLI): skills, el agente `extractor` y la regla `plugin/rules/AGENTS.md`. `plugin-docs/` es el plugin opcional `episteme-docs` (la skill `/episteme-docs:docs` y su `docs_check.py`). Ninguno trae el servidor.
 
 ## Reglas
 

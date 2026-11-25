@@ -83,7 +83,7 @@ def test_shared_skills_load_tools_with_toolsearch_only_in_claude_code(skill: str
     assert all("En Claude Code" in line for line in toolsearch)
 
 
-SKILL_NAMES = ["setup", "sesion", "mantencion", "reminder", "scaffold", "agy"]
+SKILL_NAMES = ["setup", "sesion", "mantencion", "reminder", "scaffold", "agy", "copilot"]
 
 
 def test_skill_folders() -> None:
