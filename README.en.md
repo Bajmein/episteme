@@ -23,7 +23,7 @@
 
 ## What it is
 
-An AI agent is like a brilliant colleague who arrives every morning remembering nothing about yesterday. **episteme gives it a memory that lasts**: a folder of Markdown notes (the *vault*) with the decisions, lessons and documentation of your projects. Claude Code and agy (Google Antigravity, with Gemini) share the same memories.
+An AI agent is like a brilliant colleague who arrives every morning remembering nothing about yesterday. **episteme gives it a memory that lasts**: a folder of Markdown notes (the *vault*) with the decisions, lessons and documentation of your projects. Claude Code, agy (Google Antigravity, with Gemini) and GitHub Copilot CLI share the same memories.
 
 | | What it does for you |
 | :-- | :-- |
@@ -45,12 +45,12 @@ An AI agent is like a brilliant colleague who arrives every morning remembering 
   <img src="static/diagrams/arquitectura.png" alt="Claude Code (the agent and its hooks) and, if you enable it, agy call the episteme server, which reads and writes the vault's Markdown notes (memories, documentation, sessions and plans) and keeps a search index; Obsidian can open the same vault. The text inside the diagram is in Spanish." width="880">
 </p>
 
-episteme is a small program that runs on your machine and is the only door to the vault: it validates what is saved and indexes it for fast search. Agents use it through its tools; in Claude Code, *hooks* also call it automatically at fixed moments.
+episteme is a small program that runs on your machine and is the only door to the vault: it validates what is saved and indexes it for fast search. Agents use it through its tools; in Claude Code, *hooks* also call it automatically at fixed moments, and in agy and Copilot CLI at start and on each message.
 
-| | Claude Code | agy | Other MCP client |
-| :-- | :-: | :-: | :-: |
-| Tools (search, read, save) | Yes | Yes | Yes |
-| Automations (hooks) | Yes | No | No |
+| | Claude Code | agy | Copilot CLI | Other MCP client |
+| :-- | :-: | :-: | :-: | :-: |
+| Tools (search, read, save) | Yes | Yes | Yes | Yes |
+| Automations (hooks) | Yes | Partial: welcome and per-message context | Partial: welcome and per-message context | No |
 
 <details>
 <summary><b>Quick glossary</b></summary>
@@ -136,9 +136,10 @@ For some tasks there are shortcuts:
 | `/episteme:reminder <text>` | Leave a reminder for each session |
 | `/episteme:scaffold` | Create or review `README.md`, `CLAUDE.md` and `CHANGELOG.md` |
 | `/episteme:agy [task]` | Enable agy and hand it tasks |
+| `/episteme:copilot` | Enable Copilot CLI in the project |
 | `/episteme-docs:docs [suite]` | Update the third-party documentation (separate plugin: `claude plugin install episteme-docs@episteme`) |
 
-The skills also load in agy, but without hooks or an automatic welcome ([agy](docs/instalacion.md#agy-opcional), in Spanish).
+The skills also load in agy. `/episteme:agy` and `/episteme:copilot` leave welcome and per-message context hooks in the project, without the other automations ([agy](docs/instalacion.md#agy-opcional), [Copilot CLI](docs/instalacion.md#copilot-cli-opcional), in Spanish).
 
 Under the hood, Claude uses 9 tools: search, read, save, correct, review and others. Each memory has a type (decision, rule, lesson…) and a priority from 1 to 5; priority-5 memories are the rules Claude sees at the start. Detail in [Tools and memories](docs/tools.md#memorias) (in Spanish).
 
@@ -172,7 +173,7 @@ All in Spanish.
 
 | Document | Contents |
 | :-- | :-- |
-| [Installation](docs/instalacion.md) | By hand, the plugin and agy |
+| [Installation](docs/instalacion.md) | By hand, the plugin, agy and Copilot CLI |
 | [Configuration](docs/configuracion.md) | Arguments, variables and `episteme.toml` |
 | [Tools and memories](docs/tools.md) | The tools, the memories and the errors |
 | [Session state](docs/sesion.md) | Picking up the work after compacting or `/clear` |

@@ -4,6 +4,11 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Añadido
+
+- `/episteme:copilot`: activa GitHub Copilot CLI con episteme en el proyecto (`.github/mcp.json`, hooks en `.github/hooks/` y la regla en `.github/instructions/`), con bienvenida al empezar y contexto por mensaje (#88).
+- `/episteme:agy` deja en el proyecto hooks de agy (`.agents/hooks.json`): bienvenida al empezar y contexto de cada mensaje. Los dos clientes usan `plugin/hooks/episteme-hook.py`, un cliente MCP de un solo uso que llama a `context` (#88).
+
 ### Corregido
 
 - `/episteme-docs:docs`: el `suggested_path` de una página nueva ya no sale como `.md` sin nombre (o `-apps.md`) cuando un `include` es una página exacta (`…/docs/hooks` para `…/docs/hooks.md`, o `…/docs/mcp` para `…/docs/mcp-apps.md`): el prefijo se corta en el último `/` y la página conserva su nombre.
