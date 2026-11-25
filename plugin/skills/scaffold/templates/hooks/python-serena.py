@@ -56,6 +56,11 @@ PY_DIRS = ("src", "tests", "scripts")
 FILE_TOOLS = ("Read", "Edit", "MultiEdit", "Write", "NotebookEdit")
 PY_TOKEN = re.compile(r"\.pyi?(?=$|[\s'\"`:;|)&,])")
 PY_FILTER = re.compile(r"--include=['\"]?\*\.pyi?|-g\s+['\"]?\*\.pyi?|-t\s*py\b|--type[= ]py\b")
+# Run after PY_FILTER: any inclusion filter left is for another file type.
+OTHER_FILTER = re.compile(r"--include=|-g\s|-t\s*\w|--type[= ]\w")
+HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1([^\n]*)\n.*?^[ \t]*\2[ \t]*$", re.S | re.M)
+# A token with whitespace, a backslash or a pipe is a pattern or text, not a path.
+NOT_A_PATH = re.compile(r"[\s\\|]")
 
 READ_HINT = (
     "Python file {rel}: prefer Serena over a whole-file Read. Start with "
@@ -213,18 +218,41 @@ def grep_is_python(tool_input: dict, root: Path) -> bool:
     return bool(path) and under_py_dir(path, root)
 
 
+def strip_heredocs(command: str) -> str:
+    """Drop heredoc bodies, keeping the rest of their marker line."""
+    return HEREDOC.sub(r"\3", command)
+
+
 def bash_operands(command: str) -> list[str]:
     try:
         tokens = shlex.split(command)
     except ValueError:
         tokens = command.split()
-    return [t for t in tokens if t and not t.startswith("-")]
+    return [t for t in tokens if t and not t.startswith("-") and not NOT_A_PATH.search(t)]
+
+
+def _exists(token: str, root: Path) -> bool:
+    path = Path(token)
+    return (path if path.is_absolute() else root / path).exists()
+
+
+def searches_only_py_dirs(operands: list[str], root: Path) -> bool:
+    py_dirs = [t for t in operands if under_py_dir(t, root) and not Path(t.strip("'\"")).suffix]
+    outside = [t for t in operands if not under_py_dir(t, root) and _exists(t, root)]
+    return bool(py_dirs) and not outside
 
 
 def bash_is_python(command: str, root: Path) -> bool:
-    if PY_TOKEN.search(command) or PY_FILTER.search(command):
+    """Python if it names .py/.pyi or filters on them, or searches only Python folders."""
+    cmd = strip_heredocs(command)
+    if PY_FILTER.search(cmd):
         return True
-    return any(under_py_dir(t, root) for t in bash_operands(command))
+    operands = bash_operands(cmd)
+    if any(PY_TOKEN.search(t) for t in operands):
+        return True
+    if OTHER_FILTER.search(cmd):
+        return False
+    return searches_only_py_dirs(operands, root)
 
 
 def python_call(data: dict) -> bool:
