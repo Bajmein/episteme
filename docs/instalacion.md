@@ -128,7 +128,7 @@ El mismo plugin sirve a agy (Google Antigravity CLI): agy lee `plugin/.antigravi
 
 1. Comprueba `agy --version` y lee el registro de Claude Code (`claude mcp get episteme`).
 2. Si falta, propone instalar el plugin en agy (`agy plugin install <ruta del plugin | URL del repo>`).
-3. Escribe o fusiona `<proyecto>/.agents/mcp_config.json` con los mismos `command` y `args` del registro de Claude Code y `eager: true` para `context`, `search`, `read`, `remember` y `revise` (`agy mcp add` solo escribe en global).
+3. Escribe o fusiona `<proyecto>/.agents/mcp_config.json` con los mismos `command` y `args` del registro de Claude Code (sin `--directory` cuando apunta a la raíz del proyecto: agy no expande variables en esa config y lanza el servidor desde la carpeta donde corre) y `eager: true` para `context`, `search`, `read`, `remember` y `revise` (`agy mcp add` solo escribe en global).
 4. Si `~/.gemini/config/mcp_config.json` trae una entrada global `episteme`, explica que agy usa esa y no la del proyecto, y propone quitarla: sin eso la activación no queda hecha.
 5. Pregunta si añadir `.agents/` a `.git/info/exclude`.
 6. Lo comprueba con una ejecución corta de `agy -p … --mode plan` que muestra los tools `eager` del proyecto (`agy mcp list` no muestra el MCP de proyecto).
