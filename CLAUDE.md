@@ -10,6 +10,7 @@ uv run ruff check && uv run pytest       # antes de cada commit
 uv run ty check                          # job lint del CI: si tocas tipos
 uv run bandit -c pyproject.toml -r src scripts plugin plugin-docs -q
 uv run vulture && uv run deptry .        # si borras código o cambias dependencias
+uv run zizmor .github/workflows          # si tocas .github/workflows
 ```
 
 Python: el paquete pide `>=3.14` (`requires-python`, ruff `py314`); aquí y en el CI, 3.15 (`.python-version`).
@@ -31,7 +32,7 @@ Python: el paquete pide `>=3.14` (`requires-python`, ruff `py314`); aquí y en e
 ## PR y calidad
 
 - `main` solo recibe cambios por PR, también el de release. Los tags `v*` no se mueven ni se borran.
-- CI: `ci.yml` (`lint`, `test` y `changes`, que salta `test` si solo cambian docs) y `ci-windows.yml`. Cobertura a Codecov, informativa.
+- CI: `ci.yml` (`lint`, `test` y `changes`, que salta `test` si solo cambian docs), `ci-windows.yml` y `dependency-review.yml` (revisa las dependencias de cada PR). Cobertura a Codecov, informativa.
 - CodeScene revisa cada PR y su check (gate «The Bare Minimum») tiene que pasar. En `src/` y `scripts/`: 9 o más por archivo, y un archivo tocado no baja su code health. `@CodeScene(disable:"<regla>")` solo con una línea que diga por qué.
 - MCP `codescene`, si está: `code_health_review` de lo tocado → si baja, corrige y confirma con `code_health_score` → `pre_commit_code_health_safeguard` en verde. Si falta el login o falla, dilo en una línea: basta el check del PR.
 - `CHANGELOG.md` (español, Keep a Changelog): lo que nota quien usa episteme (tools, hooks, skills, scripts, instalación) va en «Sin publicar», en el mismo PR.
@@ -58,3 +59,5 @@ Python: el paquete pide `>=3.14` (`requires-python`, ruff `py314`); aquí y en e
 | Plugins e instalación | [`docs/instalacion.md`](docs/instalacion.md) |
 | Por qué se decidió cada cosa | memorias de episteme (`search` con `project="episteme"`) |
 | Instrucciones para agy | `GEMINI.md`, que remite aquí: revísalo si cambian `.claude/rules/` o lo que aquí es solo de Claude Code |
+| Ramas, commits y cómo se mezcla un PR | [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) |
+| Instrucciones para Copilot | `.github/copilot-instructions.md`, que remite aquí: revísalo si cambia lo que nombra |
