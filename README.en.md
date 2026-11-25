@@ -46,7 +46,7 @@
 
 ## What it is
 
-Claude Code and agy (Google Antigravity, with Gemini) share the same memories through episteme. An AI agent is like a brilliant colleague who arrives every morning remembering nothing about yesterday: it starts each session without knowing what happened in the last one. **episteme gives it a memory that lasts**: a folder of Markdown notes (the *vault*) that holds the decisions, lessons and documentation of your projects, and that your agents read and add to as they work. What one learns, the other finds.
+Claude Code and agy (Google Antigravity, with Gemini) share the same memories through episteme. An AI agent is like a brilliant colleague who arrives every morning remembering nothing about yesterday: it starts each session without knowing what happened in the last one. **episteme gives it a memory that lasts**: a folder of Markdown notes (the *vault*) that holds the decisions, lessons and documentation of your projects, and that your agents read and add to as they work. What one learns, the other finds, and each memory records which agent saved it.
 
 | | What it does for you |
 | :-- | :-- |
@@ -56,7 +56,7 @@ Claude Code and agy (Google Antigravity, with Gemini) share the same memories th
 | **Picks up where you left off** | Keeps a live note of what you are working on, updates it by itself after compacting or `/clear`, and brings it back when you continue |
 | **Saves your plans** | Copies every plan you approve in plan mode and, if you clear the context when approving it, tells Claude where it is |
 | **Keeps the documentation current** | With `/episteme-docs:docs`, downloads the pages of the third-party documentation stored in the vault and updates only those that changed |
-| **Keeps things tidy** | Detects duplicates, expired memories, broken links and unlinked memories; refuses to save passwords and tokens |
+| **Keeps things tidy** | Detects duplicates, expired memories or old ones nobody looks at anymore, broken links and unlinked memories; refuses to save passwords and tokens |
 
 The notes are your own text files: open them with [Obsidian](https://obsidian.md/) or any editor. They do not depend on any external service.
 
@@ -212,7 +212,7 @@ Saving a memory is always Claude's decision: no hook copies what you write. epis
 | `read` | Read a note, a section or several notes at once, and see which notes link to it | |
 | `context` | Give the session welcome, gather what is relevant for a task and show what is known about a file and the rules that apply to it | ● |
 | `remember` | Save a new memory, with a one-line description if you like; can link it by itself to similar memories and warns if keywords or links are missing | ● |
-| `revise` | Correct, replace or archive a note | ● |
+| `revise` | Correct, replace or archive a note, without losing changes if two sessions touch it at once | ● |
 | `review` | Review the vault: duplicates, expired, broken links and loose memories, with suggestions of what to link them to | |
 | `session` | Save and pick up the session state (goal, what is done, next step), with a template | ● |
 | `plan` | Save a copy of each plan-mode plan and point to it after «clear context» (the hooks use it) | ● |
