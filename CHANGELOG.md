@@ -4,6 +4,8 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+## [0.22.1] - 2026-11-24
+
 ### Corregido
 
 - agy: la regla `plugin/rules/AGENTS.md` ya no lleva frontmatter, que agy inyectaba como texto (en `rules/AGENTS.md` no se usa).
@@ -459,7 +461,8 @@ Sin tag propio: salió dentro de `v0.3.3`.
 - Tools `search`, `read` y `links`; `remember` y `revise` con validación del esquema; `review` y `context`; los tools para hooks.
 - `scripts/migrate_omega.py` para migrar un export de OMEGA.
 
-[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.22.0...HEAD
+[Sin publicar]: https://github.com/Bajmein/episteme/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/Bajmein/episteme/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/Bajmein/episteme/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Bajmein/episteme/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Bajmein/episteme/compare/v0.19.0...v0.20.0
