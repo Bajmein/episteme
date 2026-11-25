@@ -4,138 +4,88 @@
 
 <a href="https://github.com/Bajmein/episteme/tags"><img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-v0.22.1-8B5CF6?style=for-the-badge"></a>
 <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/python-3.14+-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54"></a>
-<a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/uv-DE5FE9?style=for-the-badge&logo=uv&logoColor=white"></a>
-<a href="https://github.com/modelcontextprotocol/python-sdk"><img alt="MCP SDK" src="https://img.shields.io/badge/MCP_SDK-2.x-005571?style=for-the-badge&logo=modelcontextprotocol&logoColor=white"></a>
-<a href="https://www.sqlite.org/fts5.html"><img alt="SQLite FTS5" src="https://img.shields.io/badge/sqlite-FTS5-07405e?style=for-the-badge&logo=sqlite&logoColor=white"></a>
-<a href="https://obsidian.md/"><img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-483699?style=for-the-badge&logo=obsidian&logoColor=white"></a>
-<a href="https://www.markdownguide.org/"><img alt="Markdown" src="https://img.shields.io/badge/markdown-000000?style=for-the-badge&logo=markdown&logoColor=white"></a>
-<a href="https://codescene.io/projects/87754"><img alt="CodeScene" src="https://img.shields.io/badge/CodeScene-analyzed-5F46EB?style=for-the-badge"></a>
 <a href="LICENSE"><img alt="Licencia MIT" src="https://img.shields.io/badge/licencia-MIT-yellow?style=for-the-badge"></a>
-<br>
-<a href="#instalación"><img alt="Linux" src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black"></a>
-<a href="#instalación"><img alt="macOS" src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=macos&logoColor=F0F0F0"></a>
-<a href="#instalación"><img alt="Windows" src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge"></a>
-<br>
 <a href="https://github.com/Bajmein/episteme/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Bajmein/episteme/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI"></a>
+<a href="https://codecov.io/gh/Bajmein/episteme"><img alt="Cobertura" src="https://img.shields.io/codecov/c/github/Bajmein/episteme/main?style=for-the-badge&logo=codecov&logoColor=white&label=cobertura"></a>
 
 # episteme
 
 **Una sola memoria de proyecto, curada, para todos tus agentes.**
 
+<b>Español</b> · <a href="README.en.md">English</a>
+
 </div>
-
-<p align="center">
-  <b>Español</b> · <a href="README.en.md">English</a>
-</p>
-
-<p align="center">
-  <a href="#qué-es">Qué es</a> ·
-  <a href="#cómo-funciona">Cómo funciona</a> ·
-  <a href="#con-qué-agentes-funciona">Agentes</a> ·
-  <a href="#instalación">Instalación</a> ·
-  <a href="#uso-diario">Uso diario</a> ·
-  <a href="#las-9-herramientas">Herramientas</a> ·
-  <a href="#límites">Límites</a> ·
-  <a href="#documentación">Documentación</a>
-</p>
 
 ---
 
 ## Qué es
 
-Claude Code y agy (Google Antigravity, con Gemini) comparten las mismas memorias con episteme. Un agente de IA es como un colega brillante que cada mañana llega sin recordar nada de ayer: empieza cada sesión sin saber qué pasó en la anterior. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) donde quedan las decisiones, las lecciones y la documentación de tus proyectos, y que tus agentes consultan y completan mientras trabajan. Lo que uno aprende, lo encuentra el otro, y cada memoria anota qué agente la guardó.
+Un agente de IA es como un colega brillante que cada mañana llega sin recordar nada de ayer. **episteme le da una memoria que dura**: una carpeta de notas en Markdown (el *vault*) con las decisiones, las lecciones y la documentación de tus proyectos. Claude Code y agy (Google Antigravity, con Gemini) comparten las mismas memorias.
 
 | | Qué hace por ti |
 | :-- | :-- |
-| **Recuerda** | Guarda decisiones, lecciones, errores y preferencias como notas ordenadas por proyecto |
-| **Encuentra** | Busca en todo el vault, en español, sin distinguir mayúsculas ni tildes |
-| **Avisa a tiempo** | Antes de editar un archivo, muestra las normas que le aplican; después, lo que ya se sabe de él |
-| **Retoma** | Lleva una nota viva de en qué vas, la pone al día sola después de compactar o de `/clear` y la recupera al seguir |
-| **Guarda tus planes** | Copia cada plan que apruebas en plan mode y, si limpias el contexto al aprobarlo, le dice a Claude dónde está |
-| **Mantiene la documentación al día** | Con `/episteme-docs:docs`, baja las páginas de la documentación de terceros guardada en el vault y actualiza solo las que cambiaron |
-| **Cuida el orden** | Detecta duplicados, memorias vencidas o viejas que ya nadie consulta, enlaces rotos y memorias sin enlazar; rechaza guardar contraseñas y tokens |
+| **Recuerda** | Decisiones, lecciones, errores y preferencias, por proyecto |
+| **Encuentra** | Busca en todo el vault, sin importar mayúsculas ni tildes |
+| **Avisa a tiempo** | Muestra las normas de un archivo antes de editarlo |
+| **Retoma** | Recupera en qué ibas tras compactar o `/clear` |
+| **Guarda tus planes** | Copia cada plan que apruebas |
+| **Cuida el orden** | Detecta duplicados y vencidas; rechaza contraseñas |
 
-Las notas son archivos de texto tuyos: se abren con [Obsidian](https://obsidian.md/) o con cualquier editor, y no dependen de ningún servicio externo.
-
-**Tu información no sale de tu máquina.** Las memorias, el índice y el registro viven en tu equipo y el servidor no se conecta a la red. La única red es la instalación (se descarga desde GitHub) y `/episteme-docs:docs`, si la usas.
+**Tus notas son archivos Markdown tuyos y no salen de tu máquina** (se abren con [Obsidian](https://obsidian.md/) o cualquier editor). Solo usa la red al instalar y con `/episteme-docs:docs`, si la usas.
 
 > [!NOTE]
-> **Versión actual: v0.22.1.** Funciona en Linux, macOS y Windows. Las novedades de cada versión están en el [CHANGELOG](CHANGELOG.md).
+> **Versión actual: v0.22.1.** Funciona en Linux, macOS y Windows. Las novedades, en el [CHANGELOG](CHANGELOG.md).
 
-## Cómo funciona
+### Cómo funciona
 
 <p align="center">
   <img src="static/diagrams/arquitectura.png" alt="Claude Code (el agente y sus hooks) y, si lo activas, agy llaman al servidor episteme, que lee y escribe las notas Markdown del vault (memorias, documentación, sesiones y planes) y mantiene un índice de búsqueda; Obsidian puede abrir el mismo vault" width="880">
 </p>
 
-1. **Claude Code** habla con episteme de dos formas: el agente usa sus herramientas cuando las necesita, y los *hooks* las llaman solos en momentos fijos de la sesión. **agy** (Google Antigravity CLI) usa las mismas herramientas y las mismas memorias, pero sin hooks.
-2. **episteme** es un programa pequeño que corre en tu máquina. Es la única puerta al vault: valida lo que se guarda y mantiene un índice para buscar rápido.
-3. **El vault** es una carpeta de notas Markdown, por defecto `~/.episteme`. Tú puedes leerlo y editarlo con Obsidian.
+episteme es un programa pequeño que corre en tu máquina y es la única puerta al vault: valida lo que se guarda y lo indexa para buscar rápido. Los agentes lo usan con sus herramientas; en Claude Code, además, los *hooks* lo llaman solos en momentos fijos.
+
+| | Claude Code | agy | Otro cliente MCP |
+| :-- | :-: | :-: | :-: |
+| Herramientas (buscar, leer, guardar) | Sí | Sí | Sí |
+| Automatismos (hooks) | Sí | No | No |
 
 <details>
 <summary><b>Glosario rápido</b></summary>
 
 | Término | Qué significa |
 | :-- | :-- |
-| **Vault** | La carpeta con todas las notas. Se divide en zonas: memorias, documentación, estado de las sesiones y planes |
-| **Memoria** | Una nota corta con algo que vale la pena recordar: una decisión, una lección, un recordatorio |
-| **Herramienta (tool)** | Una acción que Claude puede pedirle a episteme: buscar, leer, guardar |
+| **Vault** | La carpeta con todas las notas: memorias, documentación, sesiones y planes |
+| **Memoria** | Una nota corta con algo que vale la pena recordar |
+| **Herramienta (tool)** | Una acción que Claude le pide a episteme: buscar, leer, guardar |
 | **Hook** | Un automatismo de Claude Code que llama a una herramienta sin que nadie lo pida |
-| **MCP** | El protocolo estándar con el que Claude Code se conecta a programas como episteme |
+| **MCP** | El protocolo con el que Claude Code se conecta a programas como episteme |
 
 </details>
 
-## Con qué agentes funciona
-
-Las herramientas funcionan con cualquier cliente MCP. Los automatismos (los hooks) son de Claude Code.
-
-| | Claude Code | agy | Otro cliente MCP |
-| :-- | :-: | :-: | :-: |
-| Herramientas (buscar, leer, guardar) | Sí | Sí | Sí |
-| Bienvenida al empezar la sesión | Sí | No | No |
-| Sugerencias de memorias con cada mensaje | Sí | No | No |
-| Normas antes de editar un archivo | Sí | No | No |
-| Avisos después de leer o editar un archivo | Sí | No | No |
-| Continuidad tras `/compact` y `/clear` | Sí | No | No |
-| Copia de los planes | Sí | No | No |
-
-En agy y en otros clientes, el agente usa las herramientas cuando se lo pides o cuando una regla se lo indica. No se prometen otros agentes, como Codex o Copilot.
-
 ## Instalación
 
-**Necesitas** [uv](https://docs.astral.sh/uv/) y git. uv consigue Python por ti si falta.
+**Necesitas** [uv](https://docs.astral.sh/uv/) y git. uv consigue Python si falta.
 
 ### Opción A · Con la skill (recomendada)
 
-Las skills vienen en un plugin de Claude Code. Se instala una vez por máquina, con dos comandos (igual en Linux, macOS y Windows):
+Una vez por máquina, igual en Linux, macOS y Windows ([más detalles](docs/instalacion.md#los-plugins)):
 
 ```bash
 claude plugin marketplace add Bajmein/episteme
 claude plugin install episteme@episteme
 ```
 
-Más detalles (actualizar, quitar) en la [guía de instalación](docs/instalacion.md#los-plugins).
-
-Después, en cada proyecto que quieras conectar:
+Después, en cada proyecto:
 
 1. Reinicia Claude Code y ábrelo en la raíz del proyecto.
 2. Escribe `/episteme:setup`.
-3. Aprueba los cambios que te muestra. La skill registra el servidor, configura los hooks y los permisos, y añade la regla al `CLAUDE.md`.
+3. Aprueba los cambios: registra el servidor, configura hooks y permisos, y añade la regla al `CLAUDE.md`.
 
-El plugin trae además estas skills:
+> [!TIP]
+> `claude mcp list` debe mostrar `episteme` conectado. La primera vez tarda, porque se descarga. Para actualizar, repite el registro con el tag nuevo.
 
-| Skill | Para qué |
-| :-- | :-- |
-| `/episteme:sesion` | Guardar en qué estás (`guardar`) y retomarlo después (`retomar`) |
-| `/episteme:mantencion` | Revisar las memorias contigo: unificar las repetidas, resolver contradicciones y archivar lo vencido. Con `corta` hace una ronda rápida de 3 casos; con `huerfanas`, enlaza las memorias que quedaron sueltas |
-| `/episteme:reminder <texto>` | Dejar un recordatorio que sale al empezar cada sesión del proyecto |
-| `/episteme:scaffold` | Crear o revisar la base del proyecto: `README.md`, `CLAUDE.md`, `CHANGELOG.md`, las reglas para contribuir y el `.gitignore`. Con `auditar` solo revisa, sin cambiar nada. También avisa cuando el README o el `CLAUDE.md` llevan tiempo sin revisar |
-| `/episteme-docs:docs [suite]` | Poner al día la documentación de terceros guardada en `docs/` del vault (todas las suites, o solo la que nombres, como `claude code`): baja las páginas, muestra qué cambió y lo guarda. Viene en un plugin aparte, opcional: `claude plugin install episteme-docs@episteme` |
-| `/episteme:agy [tarea]` | Activar agy (Google Antigravity CLI) en el proyecto y pasarle tareas. Claude revisa lo que agy propone recordar |
-
-El plugin también funciona con agy, sin los automatismos: ni hooks ni bienvenida automática (ver «agy» en [Instalación](docs/instalacion.md#agy-opcional)).
-
-### Opción B · A mano
+<details>
+<summary><b>Opción B · A mano (sin la skill)</b></summary>
 
 Un solo comando registra el servidor. Cambia `<proyecto>` por el nombre del tuyo.
 
@@ -152,14 +102,13 @@ claude mcp add --scope local episteme -- \
 claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.22.1 episteme --project <proyecto>
 ```
 
-Luego faltan los hooks, los permisos y la regla del `CLAUDE.md`: los pasos están en la [guía de instalación](docs/instalacion.md#después-de-registrar).
+Faltan los hooks, los permisos y la regla del `CLAUDE.md`: están en la [guía de instalación](docs/instalacion.md#después-de-registrar).
 
-> [!TIP]
-> Para comprobar que quedó bien, `claude mcp list` debe mostrar `episteme` conectado. La primera vez tarda un poco, porque se descarga. Para actualizar, repite el registro con el tag nuevo.
+</details>
 
 ## Uso diario
 
-No hay comandos que aprender: se usa conversando con Claude. Cada memoria pasa por un ciclo: se guarda, se encuentra cuando hace falta, avisa a tiempo y, cuando queda vieja, se corrige o se ordena.
+No hay comandos que aprender: se usa conversando con Claude.
 
 <p align="center">
   <img src="static/diagrams/ciclo-memoria.png" alt="Ciclo de una memoria en episteme, alrededor del vault: guardar con remember, encontrar con search y read, avisar a tiempo con context, corregir con revise y ordenar con /episteme:mantencion" width="720">
@@ -167,105 +116,68 @@ No hay comandos que aprender: se usa conversando con Claude. Cada memoria pasa p
 
 | Tú | episteme |
 | :-- | :-- |
-| Empiezas una sesión | Le entrega a Claude las normas del proyecto, los recordatorios vencidos y las memorias más importantes |
+| Empiezas una sesión | Entrega las normas, los recordatorios y las memorias clave |
 | Escribes un mensaje | Sugiere las memorias que vienen al caso |
-| Dices «recuerda que…» | Guarda una memoria nueva, salvo que ya exista una casi igual |
+| Dices «recuerda que…» | Guarda una memoria, salvo que ya exista una casi igual |
 | Preguntas «¿qué decidimos sobre…?» | Claude busca en el vault antes de responder |
-| Claude va a editar un archivo | Le muestra las normas que aplican a ese archivo |
-| Apruebas un plan en plan mode | Guarda una copia del plan; si eliges limpiar el contexto, le dice a Claude dónde quedó |
-| La conversación se compacta o la limpias con `/clear` | Recupera el estado del trabajo y lo pone al día en segundo plano con lo que se habló. Si vas a compactar a mano sin haberlo guardado, te avisa una vez |
+| Claude va a editar un archivo | Le muestra las normas de ese archivo |
+| Apruebas un plan | Guarda una copia y dice dónde quedó tras limpiar el contexto |
+| Compactas o usas `/clear` | Recupera el estado del trabajo |
 
-### Lo que pasa solo en cada sesión
+Para algunas tareas hay atajos:
+
+| Atajo | Para qué |
+| :-- | :-- |
+| `/episteme:sesion` | Guardar en qué estás (`guardar`) y retomarlo (`retomar`) |
+| `/episteme:mantencion` | Revisar contigo duplicados, contradicciones y vencidas |
+| `/episteme:reminder <texto>` | Dejar un recordatorio para cada sesión |
+| `/episteme:scaffold` | Crear o revisar `README.md`, `CLAUDE.md` y `CHANGELOG.md` |
+| `/episteme:agy [tarea]` | Activar agy y pasarle tareas |
+| `/episteme-docs:docs [suite]` | Poner al día la documentación de terceros (plugin aparte: `claude plugin install episteme-docs@episteme`) |
+
+Las skills también cargan en agy, pero sin hooks ni bienvenida automática ([agy](docs/instalacion.md#agy-opcional)).
+
+Por dentro, Claude usa 9 herramientas: buscar, leer, guardar, corregir, revisar y otras. Cada memoria tiene un tipo (decisión, norma, lección…) y una prioridad del 1 al 5; las de 5 son las normas que Claude ve al empezar. Detalle en [Tools y memorias](docs/tools.md#memorias).
+
+<details>
+<summary><b>Qué hacen los hooks en cada sesión</b></summary>
 
 <p align="center">
   <img src="static/diagrams/hooks-sesion.png" alt="Secuencia del día a día: con cada mensaje, antes y después de usar un archivo y al aprobar un plan, un hook de Claude Code llama a una herramienta de episteme, que responde con la bienvenida, memorias o normas, o guarda una copia del plan en el vault" width="880">
 </p>
 
-Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. Funcionan como un semáforo, no como un muro: Claude puede leer la norma y aun así equivocarse. La configuración está en [Hooks](docs/hooks.md).
-
-#### Al compactar o con `/clear`
+Los hooks nunca bloquean a Claude ni deciden por él: solo le acercan contexto. Configuración en [Hooks](docs/hooks.md).
 
 <p align="center">
   <img src="static/diagrams/compactar-clear.png" alt="Secuencia de cómo el estado del trabajo sobrevive a /compact y a /clear: al compactar, el resumen escribe el estado al día y episteme lo guarda; lo devuelve con la bienvenida al volver a empezar y, tras /clear, el agente extractor lo pone al día en segundo plano" width="880">
 </p>
 
-Al compactar no tienes que hacer nada: el resumen que escribe Claude termina con el estado del trabajo y episteme lo guarda. Una sesión nueva no carga el trabajo de la anterior: te avisa en una línea de que existe y lo retomas con `/episteme:sesion retomar`. El detalle está en [Estado de la sesión](docs/sesion.md).
+Al compactar, episteme guarda el estado del trabajo; en una sesión nueva lo retomas con `/episteme:sesion retomar`. Detalle en [Estado de la sesión](docs/sesion.md).
 
-#### El resto: quién hace qué
-
-| Cuándo | Quién | Qué pasa |
-| :-- | :-- | :-- |
-| En la primera bienvenida, como mucho una vez por periodo | episteme | Avisa de lo pendiente de revisar y propone una ronda corta; si lo activas, archiva lo vencido y hace un backup |
-| Cuando lo necesita | Claude | Busca, lee, guarda («recuerda que…») y corrige memorias |
-| Cuando tú lo pides | tú | `/episteme:mantencion` para revisar y ordenar |
-
-Guardar una memoria siempre lo decide Claude: ningún hook copia lo que escribes. episteme no revisa el vault en segundo plano: la revisión corre cuando alguien la pide.
-
-## Las 9 herramientas
-
-| Herramienta | Para qué sirve | Escribe |
-| :-- | :-- | :-: |
-| `search` | Buscar en las notas y las memorias | |
-| `read` | Leer una nota, una sección o varias notas a la vez, y ver qué notas enlazan con ella | |
-| `context` | Dar la bienvenida de la sesión, reunir lo relevante para una tarea y mostrar lo que se sabe de un archivo y las normas que le aplican | ● |
-| `remember` | Guardar una memoria nueva, con una descripción de una línea si quieres; puede enlazarla sola con las memorias parecidas y avisa si le faltan palabras clave o enlaces | ● |
-| `revise` | Corregir, reemplazar o archivar una nota, sin perder cambios si dos sesiones la tocan a la vez | ● |
-| `review` | Revisar el vault: duplicados, vencidas, enlaces rotos y memorias sueltas, con sugerencias de a qué enlazarlas | |
-| `session` | Guardar y retomar el estado de la sesión (objetivo, lo hecho, el siguiente paso), con una plantilla | ● |
-| `plan` | Guardar una copia de cada plan de plan mode y señalarla tras «clear context» (la usan los hooks) | ● |
-| `docs` | Ver las suites de documentación y guardar una página descargada (lo usa `/episteme-docs:docs`) | ● |
-
-`docs` solo aparece si el vault tiene suites de documentación; sin ellas son 8. Los parámetros y el comportamiento exacto de cada una están en [Tools y memorias](docs/tools.md).
-
-### Tipos de memoria
-
-| Tipo | Qué guarda |
-| :-- | :-- |
-| `decision` | Algo que se decidió y por qué |
-| `constraint` | Una norma que hay que respetar al tocar ciertos archivos |
-| `lesson` | Algo aprendido que conviene repetir o evitar |
-| `error` | Un fallo y cómo se resolvió |
-| `preference` | Cómo le gusta trabajar a la persona |
-| `insight` | Un hallazgo o una conclusión |
-| `reminder` | Algo pendiente, con fecha |
-| `session` | El estado del trabajo: guardarlo, recuperarlo y lo que hacen los hooks al compactar |
-
-Cada memoria lleva una prioridad del 1 al 5: las de prioridad 5 son las normas que Claude ve al empezar cada sesión.
+</details>
 
 ## Límites
 
-- **Búsqueda por palabras clave curadas, no por embeddings.** «marketing» no encuentra una nota que solo dice «mkt»: por eso cada memoria lleva `keywords` con sinónimos y siglas, que Claude añade al guardar. Se probó un modelo de embeddings (bge-m3) con 147 consultas reales y solo 3 encontraron algo nuevo; la medición está en [Desarrollo](docs/desarrollo.md#medir-si-los-embeddings-aportan).
-- **Avisa, no obliga.** Las normas llegan a Claude a tiempo, pero nada le impide ignorarlas.
-- **No se ordena solo.** Unificar memorias repetidas y resolver contradicciones lo apruebas tú, con `/episteme:mantencion`. Conviene activar `archive_expired = true` (ver [Mantención](docs/mantencion.md)).
-- **El filtro de contraseñas conoce los formatos habituales.** Una clave con un formato raro puede pasar: no dictes secretos.
+- **Busca por palabras, no por significado.** «marketing» no encuentra «mkt»: por eso cada memoria lleva `keywords` con sinónimos. Con bge-m3 y 147 consultas reales, solo 3 encontraron algo nuevo ([medición](docs/desarrollo.md#medir-si-los-embeddings-aportan)).
+- **Avisa, no obliga.** Las normas llegan a tiempo, pero Claude puede ignorarlas.
+- **No se ordena solo.** Unificar y resolver contradicciones lo apruebas tú, con `/episteme:mantencion` ([Mantención](docs/mantencion.md)).
+- **El filtro de contraseñas no es perfecto.** Conoce los formatos habituales: no dictes secretos.
 
 ## Documentación
 
-El detalle técnico vive en [`docs/`](docs/):
-
 | Documento | Contenido |
 | :-- | :-- |
-| [Instalación](docs/instalacion.md) | Pasos a mano en Linux, macOS y Windows, y el plugin con las skills |
-| [Configuración](docs/configuracion.md) | Argumentos del servidor, variables, `episteme.toml`, zonas y registro de actividad |
-| [Tools y memorias](docs/tools.md) | Las 9 herramientas con sus parámetros, el esquema de las memorias y los errores |
-| [Estado de la sesión](docs/sesion.md) | La nota viva de cada hilo de trabajo en `sesiones/`, su plantilla y cuándo se archiva |
-| [Planes](docs/planes.md) | La copia de cada plan de plan mode en `planes/`, cómo se recupera tras «clear context» y cuándo se archiva |
-| [Suites de documentación](docs/documentacion.md) | La documentación de terceros en `docs/` del vault y cómo se mantiene al día con `/episteme-docs:docs` |
-| [Hooks](docs/hooks.md) | El bloque para `settings.json`, los permisos recomendados y cómo comprobar que funcionan |
-| [Mantención](docs/mantencion.md) | Avisos, archivado de memorias vencidas, backup y el ciclo de revisión |
-| [Migración de OMEGA](docs/migracion-omega.md) | Cómo traer las memorias de OMEGA |
-| [Desarrollo](docs/desarrollo.md) | Tests, lint, salud del código y scripts de medición |
+| [Instalación](docs/instalacion.md) | A mano, el plugin y agy |
+| [Configuración](docs/configuracion.md) | Argumentos, variables y `episteme.toml` |
+| [Tools y memorias](docs/tools.md) | Las herramientas, las memorias y los errores |
+| [Estado de la sesión](docs/sesion.md) | Retomar el trabajo tras compactar o `/clear` |
+| [Planes](docs/planes.md) | La copia de cada plan |
+| [Suites de documentación](docs/documentacion.md) | Documentación de terceros en el vault |
+| [Hooks](docs/hooks.md) | Configuración y permisos |
+| [Mantención](docs/mantencion.md) | Archivado, backup y revisión |
+| [Migración de OMEGA](docs/migracion-omega.md) | Traer las memorias de OMEGA |
+| [Desarrollo](docs/desarrollo.md) | Tests, lint, CI y release |
 | [CHANGELOG](CHANGELOG.md) | Cambios de cada versión |
-
-## Desarrollo
-
-```bash
-uv sync            # instala las dependencias
-uv run ruff check  # lint
-uv run pytest      # tests
-```
-
-El resto (el lint completo del CI, la revisión de calidad de cada PR con CodeScene y los scripts de medición) está en [Desarrollo](docs/desarrollo.md).
 
 ## Licencia
 

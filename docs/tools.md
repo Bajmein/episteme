@@ -53,6 +53,19 @@ due:                    # obligatorio en reminder
 flagged: false
 ```
 
+**Tipos.**
+
+| Tipo | Qué guarda |
+| :-- | :-- |
+| `decision` | Algo que se decidió y por qué |
+| `constraint` | Una norma que hay que respetar al tocar ciertos archivos |
+| `lesson` | Algo aprendido que conviene repetir o evitar |
+| `error` | Un fallo y cómo se resolvió |
+| `preference` | Cómo le gusta trabajar a la persona |
+| `insight` | Un hallazgo o una conclusión |
+| `reminder` | Algo pendiente, con fecha |
+| `session` | Tipo antiguo, el de `/episteme:pausa`. El estado del trabajo ya no se guarda como memoria, sino con el tool `session` en `sesiones/` (ver [Estado de la sesión](sesion.md)). Las memorias `session` que quedan caducan solas |
+
 **Credenciales.** `remember` rechaza (`invalid_argument`, sin repetir el valor) un `title`, `body`, `description`, `keywords` o `source` que parezca una credencial: bloque PEM de clave privada, claves AWS (`AKIA`/`ASIA`), tokens de GitHub, Anthropic, `sk-`, Stripe, npm, Hugging Face, Slack, Google, JWT y URL con `usuario:clave@`, `Bearer …` y asignaciones tipo `password=…`, `api_key: …`, `"password": "…"` o `AWS_SECRET_ACCESS_KEY=…` (sin distinguir mayúsculas; se normaliza el texto y se ignoran los caracteres de ancho cero). En una asignación, el valor tiene que tener al menos un dígito y no llevar corchetes ni paréntesis: así «token: identificador» o `token=get_token(user)` no bloquean, a cambio de dejar pasar una clave sin dígitos. También se revisan `project`, `tags`, `files` y los valores anidados de `fields`. Son patrones de alta precisión con longitud mínima, así que mencionar un prefijo («empieza por `ghp_`») no dispara. El filtro es de mejor esfuerzo: cubre los formatos comunes, no todos los proveedores. `revise` revisa solo el texto que entra (`new`, `text`, valores de `fields`), no el cuerpo final: una nota con un falso positivo sigue siendo editable mientras el texto nuevo no añada más credenciales que el reemplazado. `files` rechaza `*`, `**`, `**/*` y `*.*`; `project` solo admite letras, dígitos, `_`, `.` y `-` (hasta 64, sin empezar por punto ni guion). No se redacta en silencio; se dice dónde está guardado el secreto.
 
 **Descripción.** `description` es opcional: una línea de hasta 160 caracteres, sin saltos de línea, que dice para qué sirve la memoria. Se muestra en la bienvenida, el contexto de tarea, las sugeridas y las filas de `search` (`"description"`) para decidir si hace falta `read`. Si falta, se muestra la primera frase del cuerpo y **no se guarda**; `remember` devuelve un `description_hint`. Una `description` con salto de línea o de más de 160 caracteres devuelve `invalid_schema`, también en `revise(action="set")`. No hay migración: las memorias viejas se ven con la primera frase.
