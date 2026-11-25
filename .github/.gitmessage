@@ -4,8 +4,9 @@
 #
 # Tipos: feat, fix, perf, refactor, docs, test, ci, build, chore
 # Alcances en uso: scripts, memory, index, search, read, remember, tools,
-#   review, hooks, context, session, plans, prompting, server, skill, setup,
-#   plugin, agy, security, ci, readme, changelog, release, deps
+#   review, hooks, context, session, plans, prompting, server, engine,
+#   markdown, activity, docs, skill, setup, scaffold, plugin, agy, copilot,
+#   migrate, security, ci, readme, changelog, release, deps
 #
 # Cuerpo (opcional, en inglés): qué cambia y por qué, no cómo.
 # Referencias al final: "Closes #N" o "Part of #N".

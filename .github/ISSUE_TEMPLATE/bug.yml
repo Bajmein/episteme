@@ -43,7 +43,7 @@ body:
     id: cliente
     attributes:
       label: Cliente y versión
-      placeholder: Claude Code 2.1.x o agy (Google Antigravity CLI)
+      placeholder: Claude Code 2.1.x, agy (Google Antigravity CLI) o Copilot CLI
   - type: input
     id: uv
     attributes:
