@@ -3,6 +3,7 @@ paths:
   - src/episteme/vault.py
   - src/episteme/index/**
   - src/episteme/__main__.py
+  - src/episteme/docs/inbox.py
 ---
 
 # Vault e índice
