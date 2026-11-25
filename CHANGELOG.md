@@ -4,6 +4,11 @@ Cambios de cada versión de `episteme`. El formato sigue [Keep a Changelog](http
 
 ## [Sin publicar]
 
+### Corregido
+
+- `/episteme-docs:docs`: el `suggested_path` de una página nueva ya no sale como `.md` sin nombre (o `-apps.md`) cuando un `include` es una página exacta (`…/docs/hooks` para `…/docs/hooks.md`, o `…/docs/mcp` para `…/docs/mcp-apps.md`): el prefijo se corta en el último `/` y la página conserva su nombre.
+- `docs/instalacion.md` ya no dice que `episteme-docs` no carga en agy: `agy plugin install` lo convierte desde el manifiesto de Claude Code.
+
 ## [0.22.1] - 2026-11-24
 
 ### Corregido

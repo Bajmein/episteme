@@ -219,10 +219,16 @@ def prepare_inbox(inbox: Path) -> None:
 
 
 def suggested_path(url: str, include: Iterable[str]) -> str:
-    """The URL without its include prefix, with ``/index.md`` turned into ``.md``."""
+    """The URL without its include prefix, with ``/index.md`` turned into ``.md``.
+
+    A prefix that ends inside a path segment (``…/docs/hooks`` for ``…/docs/hooks.md``
+    or ``…/docs/mcp-apps.md``) is cut back to its last ``/``, so the page keeps its name.
+    """
     parts = urllib.parse.urlsplit(url)
     clean = parts._replace(query="", fragment="").geturl()
     prefix = max((p for p in include if clean.startswith(p)), key=len, default=None)
+    if prefix and not prefix.endswith("/") and not clean[len(prefix) :].startswith("/"):
+        prefix = prefix.rsplit("/", 1)[0] + "/"
     rest = clean.removeprefix(prefix) if prefix else parts.path  # no prefix: drop the host
     rest = "/".join(p for p in rest.split("/") if p) or "index.md"
     if rest.endswith("/index.md"):

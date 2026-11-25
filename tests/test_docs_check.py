@@ -219,6 +219,22 @@ def test_suggested_path_drops_the_include_prefix(
     assert check.suggested_path(url, ["https://d.io/", "https://d.io/uv/"]) == expected
 
 
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://d.io/docs/hooks.md", "hooks.md"),
+        ("https://d.io/docs/mcp-apps.md", "mcp-apps.md"),
+        ("https://d.io/docs/hooks/events.md", "events.md"),
+    ],
+)
+def test_suggested_path_keeps_the_name_when_the_include_is_a_page(
+    check: ModuleType, url: str, expected: str
+) -> None:
+    include = ["https://d.io/docs/hooks", "https://d.io/docs/mcp"]
+
+    assert check.suggested_path(url, include) == expected
+
+
 def test_suggested_path_without_a_matching_prefix_drops_the_host(check: ModuleType) -> None:
     assert check.suggested_path("https://d.io//guide/x/index.md", []) == "guide/x.md"
 
