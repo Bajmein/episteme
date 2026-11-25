@@ -32,6 +32,15 @@ Guía para Claude Code en este repo.
 - La cabecera del `README.md` es un bloque centrado con el banner (`static/banner-episteme.jpg`) y tres filas de badges, todas en `style=for-the-badge` de shields.io (como los de markdown-badges): tecnologías (con CodeScene, estático), plataformas y, abajo, el de CI, el único con estado en vivo (`github/actions/workflow/status`, rama `main`).
 - El repo es público desde el 16-11-2026 (la historia anterior, con sus hashes y PR, está en `Bajmein/episteme-archive`, privado y archivado). Los rulesets hacen que `main` solo reciba cambios por PR (también el de release) y que los tags `v*` no se puedan mover ni borrar.
 
+## Al cambiar código
+
+Las cuatro pautas del `CLAUDE.md` de `forrestchang/andrej-karpathy-skills` (a partir de lo que observó Karpathy de los LLM al programar), llevadas a este repo. En tareas triviales, manda el criterio.
+
+- **Pensar antes de programar.** Di los supuestos. Si el pedido o el issue admite varias lecturas, nómbralas; no elijas una en silencio. Antes de decidir algo que quizá ya se decidió, `search` en episteme con `project="episteme"`.
+- **Simplicidad primero.** El mínimo que resuelve la tarea: sin tools, parámetros ni opciones que nadie pidió (manda el alcance cerrado de «Qué es»), sin abstracciones de un solo uso y sin manejo de errores para casos imposibles.
+- **Cambios quirúrgicos.** Cada línea del diff responde a la tarea. No reformatees ni refactorices el código de al lado. El código muerto ajeno se menciona en el PR, no se borra; lo que tu cambio dejó huérfano, sí (`vulture` lo detecta). La única excepción es CodeScene: si un archivo tocado baja su code health, se refactoriza solo la función que lo hace bajar.
+- **Ejecución guiada por objetivos.** Un bug empieza por un test que lo reproduce; un cambio de tool, por un test de integración por stdio (`tests/conftest.py`); un refactor deja `uv run pytest` igual antes y después. En tareas de varios pasos, un plan con su `→ verify:` por paso. Terminado quiere decir los checks de «Cómo se trabaja» en verde.
+
 ## Convenciones
 
 - Código, identificadores y commits en inglés, con Conventional Commits (`feat: …`, `fix: …`, `docs: …`).
