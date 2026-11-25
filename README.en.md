@@ -270,6 +270,13 @@ uv run pytest      # tests
 
 The rest (the full CI lint, the quality review of each PR with CodeScene and the measurement scripts) is in [Development](docs/desarrollo.md) (in Spanish).
 
+If you work on the repo with an agent, its instructions are already written (in Spanish):
+
+| Agent | Reads | What it brings |
+| :-- | :-- | :-- |
+| Claude Code | [`CLAUDE.md`](CLAUDE.md) | How the work is done, the conventions and four guidelines for changing code: think first, keep it simple, keep changes narrow and finish with the tests green |
+| agy | [`GEMINI.md`](GEMINI.md) | Tells it to read `CLAUDE.md` and explains what is different in agy |
+
 ## License
 
 [MIT](LICENSE), © 2026 Kenno ([benjamincriado.dev](https://benjamincriado.dev/episteme/)).
