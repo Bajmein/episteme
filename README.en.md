@@ -42,7 +42,7 @@ An AI agent is like a brilliant colleague who arrives every morning remembering 
 ### How it works
 
 <p align="center">
-  <img src="static/diagrams/arquitectura.png" alt="Claude Code (the agent and its hooks) and, if you enable it, agy call the episteme server, which reads and writes the vault's Markdown notes (memories, documentation, sessions and plans) and keeps a search index; Obsidian can open the same vault. The text inside the diagram is in Spanish." width="880">
+  <img src="static/diagrams/arquitectura.png" alt="Claude Code (the agent and its hooks) and, if you enable them, agy and Copilot CLI call the episteme server, which reads and writes the vault's Markdown notes (memories, documentation, sessions and plans) and keeps a search index; Obsidian can open the same vault. The text inside the diagram is in Spanish." width="880">
 </p>
 
 episteme is a small program that runs on your machine and is the only door to the vault: it validates what is saved and indexes it for fast search. Agents use it through its tools; in Claude Code, *hooks* also call it automatically at fixed moments, and in agy and Copilot CLI at start and on each message.

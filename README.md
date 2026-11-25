@@ -39,7 +39,7 @@ Un agente de IA es como un colega brillante que cada mañana llega sin recordar 
 ### Cómo funciona
 
 <p align="center">
-  <img src="static/diagrams/arquitectura.png" alt="Claude Code (el agente y sus hooks) y, si lo activas, agy llaman al servidor episteme, que lee y escribe las notas Markdown del vault (memorias, documentación, sesiones y planes) y mantiene un índice de búsqueda; Obsidian puede abrir el mismo vault" width="880">
+  <img src="static/diagrams/arquitectura.png" alt="Claude Code (el agente y sus hooks) y, si los activas, agy y Copilot CLI llaman al servidor episteme, que lee y escribe las notas Markdown del vault (memorias, documentación, sesiones y planes) y mantiene un índice de búsqueda; Obsidian puede abrir el mismo vault" width="880">
 </p>
 
 episteme es un programa pequeño que corre en tu máquina y es la única puerta al vault: valida lo que se guarda y lo indexa para buscar rápido. Los agentes lo usan con sus herramientas; en Claude Code, además, los *hooks* lo llaman solos en momentos fijos, y en agy y Copilot CLI al empezar y en cada mensaje.
