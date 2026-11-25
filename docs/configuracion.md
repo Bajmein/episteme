@@ -12,7 +12,7 @@
 Variables:
 
 - `EPISTEME_TODAY=AAAA-MM-DD` fija la fecha de hoy (por defecto, la fecha local). Existe para los tests.
-- `EPISTEME_ACTIVITY=0` desactiva el registro de actividad (no se crea `activity.db`).
+- `EPISTEME_ACTIVITY=0` desactiva el registro de actividad (no se crea `activity.db`). Sin registro, `review` marca las memorias viejas solo por antigüedad: no sabe si se leyeron.
 
 Cada llamada a un tool deja una fila en `<vault>/.index/activity.db`: tool, hook y sesión, proyecto, argumentos de orientación (consulta, ruta, modo; nunca el cuerpo de las notas ni los mensajes), rutas de las notas que devolvió (en `read`, solo las que abrió: ni las vecinas de `links` ni los enlaces del cuerpo), tamaño de la respuesta, milisegundos, si fue bien y el cliente MCP (`client`: el `clientInfo.name` del `initialize` o, si no lo hubo, del `_meta` de la petición). Cuando la llamada no trae `session`, la sesión sale del `_meta` `antigravity.google/root_conversation_id` (agy). Un `activity.db` del esquema 1 gana la columna `client` sin perder filas. Si un argumento parece una credencial, se guarda `[redacted: <tipo>]` en su lugar (filtro de mejor esfuerzo). Sirve para diagnosticar y como señal de uso. No se borra al reconstruir el índice, y se descartan las filas de más de 180 días.
 
@@ -21,7 +21,7 @@ sqlite3 <vault>/.index/activity.db "select at, tool, hook_event, ok, ms from cal
 sqlite3 <vault>/.index/activity.db "select tool, count(*) from calls where at >= date('now') group by tool"
 ```
 
-El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Junto a él, `.index/maintenance.db` guarda cuándo corrió cada tarea de mantención y qué cambió (no se reconstruye). En Linux y macOS, `.index/` se crea con permisos 0700 y sus bases con 0600 (en Windows no aplica). Añade `.index/` al `.gitignore` del vault. Dentro está también `.index/docs-inbox/<suite>/`, la bandeja donde `docs_check.py` deja las páginas descargadas hasta que `docs(action="write")` las toma con `body_ref`; no es caché del índice.
+El índice vive en `<vault>/.index/index.db`: es una caché que se reconstruye sola. Junto a él, `.index/maintenance.db` guarda cuándo corrió cada tarea de mantención y qué cambió (no se reconstruye). En Linux y macOS, `.index/` se crea con permisos 0700 y sus bases con 0600 (en Windows no aplica). Añade `.index/` al `.gitignore` del vault. Dentro está también `.index/docs-inbox/<suite>/`, la bandeja donde `docs_check.py` deja las páginas descargadas hasta que `docs(action="write")` las toma con `body_ref`; no es caché del índice. `revise` toma un bloqueo en `.index/write.lock`, que tampoco es caché.
 
 ## `episteme.toml`
 
