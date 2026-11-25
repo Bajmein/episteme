@@ -2,7 +2,7 @@
 
 ![episteme: Agentic Memory & Knowledge Vault. Persistent Knowledge Engine for AI Workflows.](static/banner-episteme.jpg)
 
-<a href="https://github.com/Bajmein/episteme/tags"><img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-v0.22.1-8B5CF6?style=for-the-badge"></a>
+<a href="https://github.com/Bajmein/episteme/tags"><img alt="Versión" src="https://img.shields.io/badge/versi%C3%B3n-v0.23.0-8B5CF6?style=for-the-badge"></a>
 <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/python-3.14+-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54"></a>
 <a href="LICENSE"><img alt="Licencia MIT" src="https://img.shields.io/badge/licencia-MIT-yellow?style=for-the-badge"></a>
 <a href="https://github.com/Bajmein/episteme/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Bajmein/episteme/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI"></a>
@@ -34,7 +34,7 @@ Un agente de IA es como un colega brillante que cada mañana llega sin recordar 
 **Tus notas son archivos Markdown tuyos y no salen de tu máquina** (se abren con [Obsidian](https://obsidian.md/) o cualquier editor). Solo usa la red al instalar y con `/episteme-docs:docs`, si la usas.
 
 > [!NOTE]
-> **Versión actual: v0.22.1.** Funciona en Linux, macOS y Windows. Las novedades, en el [CHANGELOG](CHANGELOG.md).
+> **Versión actual: v0.23.0.** Funciona en Linux, macOS y Windows. Las novedades, en el [CHANGELOG](CHANGELOG.md).
 
 ### Cómo funciona
 
@@ -57,8 +57,8 @@ episteme es un programa pequeño que corre en tu máquina y es la única puerta 
 | **Vault** | La carpeta con todas las notas: memorias, documentación, sesiones y planes |
 | **Memoria** | Una nota corta con algo que vale la pena recordar |
 | **Herramienta (tool)** | Una acción que Claude le pide a episteme: buscar, leer, guardar |
-| **Hook** | Un automatismo de Claude Code que llama a una herramienta sin que nadie lo pida |
-| **MCP** | El protocolo con el que Claude Code se conecta a programas como episteme |
+| **Hook** | Un automatismo del agente (Claude Code, agy o Copilot CLI) que llama a una herramienta sin que nadie lo pida |
+| **MCP** | El protocolo con el que los agentes se conectan a programas como episteme |
 
 </details>
 
@@ -93,13 +93,13 @@ Un solo comando registra el servidor. Cambia `<proyecto>` por el nombre del tuyo
 
 ```bash
 claude mcp add --scope local episteme -- \
-  uvx --from git+https://github.com/Bajmein/episteme@v0.22.1 episteme --project <proyecto>
+  uvx --from git+https://github.com/Bajmein/episteme@v0.23.0 episteme --project <proyecto>
 ```
 
 **Windows** (PowerShell, en una sola línea)
 
 ```powershell
-claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.22.1 episteme --project <proyecto>
+claude mcp add --scope local episteme -- uvx --from git+https://github.com/Bajmein/episteme@v0.23.0 episteme --project <proyecto>
 ```
 
 Faltan los hooks, los permisos y la regla del `CLAUDE.md`: están en la [guía de instalación](docs/instalacion.md#después-de-registrar).
@@ -131,7 +131,7 @@ Para algunas tareas hay atajos:
 | `/episteme:sesion` | Guardar en qué estás (`guardar`) y retomarlo (`retomar`) |
 | `/episteme:mantencion` | Revisar contigo duplicados, contradicciones y vencidas |
 | `/episteme:reminder <texto>` | Dejar un recordatorio para cada sesión |
-| `/episteme:scaffold` | Crear o revisar `README.md`, `CLAUDE.md` y `CHANGELOG.md` |
+| `/episteme:scaffold` | Crear o revisar `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `.github/`, las reglas y `.gitignore` |
 | `/episteme:agy [tarea]` | Activar agy y pasarle tareas |
 | `/episteme:copilot` | Activar Copilot CLI en el proyecto |
 | `/episteme-docs:docs [suite]` | Poner al día la documentación de terceros (plugin aparte: `claude plugin install episteme-docs@episteme`) |

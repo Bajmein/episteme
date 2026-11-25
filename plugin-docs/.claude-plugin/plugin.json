@@ -1,6 +1,6 @@
 {
   "name": "episteme-docs",
-  "version": "0.22.1",
+  "version": "0.23.0",
   "description": "Skill de episteme para poner al día las suites de documentación de terceros en docs/ del vault (el tool docs y un script que descarga las páginas). Requiere el plugin episteme.",
   "author": { "name": "Kenno" },
   "license": "MIT",
